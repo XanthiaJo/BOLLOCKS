@@ -6,7 +6,9 @@
 </head>
 <body>
 <aside id="rsidebar">
-  <h3>Characters</h3>
+  <h3>Chat</h3>
+  <div id="rchat"></div>
+  <h3 style="margin-top:14px">Characters</h3>
   <div id="rcards"></div>
 </aside>
 <div id="content">
@@ -34,11 +36,13 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const ROOM=Number(localStorage.mp_room||1);
 let cardId=0,cardName='';
 
+let roomName='';
 async function load(){
-  const {cards}=await get('cards');
-  $('rcards').innerHTML=
-    `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'This chat')"><div class="n">This chat</div><div class="m">shared memories</div></div>`+
-    (cards||[]).map(c=>
+  const [{cards},{rooms}]=await Promise.all([get('cards'),get('rooms')]);
+  roomName=(rooms||[]).find(r=>r.id===ROOM)?.name||'Chat';
+  $('rchat').innerHTML=
+    `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div>`;
+  $('rcards').innerHTML=(cards||[]).map(c=>
       `<div class="rprof${c.id===cardId?' on':''}" onclick="pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')"><div class="n">${esc(c.name)}</div></div>`
     ).join('')||'<small>None</small>';
   if(!cardId){$('list').innerHTML='';return}
