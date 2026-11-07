@@ -11,6 +11,10 @@
 .tabs{display:flex;gap:6px;margin:8px 0}
 .tab{background:#2a2b2e;border:1px solid #3a3b3e;color:#9ab;padding:5px 14px;border-radius:4px;cursor:pointer;width:auto;font-size:.85em}
 .tab.on{background:#3a5ccc;color:#fff;border-color:#3a5ccc}
+#setpanel h4{color:#789;margin:16px 0 4px;font-size:.85em;text-transform:uppercase;letter-spacing:.04em}
+#setpanel .lbl{font-size:.8em;color:#789;margin:6px 0 2px}
+#setpanel .ph{opacity:.45;pointer-events:none;margin-top:4px}
+#setpanel input[type=number]{display:inline-block}
 </style>
 </head>
 <body>
@@ -38,28 +42,135 @@
   <div class="panel" id="setpanel">
     <h3>Memory settings</h3>
     <label class="cb"><input type="checkbox" id="set_auto" onchange="saveSet()"> Enable Smart Memory</label>
-    <h4 style="margin:12px 0 4px;color:#789">Memory LLM</h4>
-    <div style="font-size:.8em;color:#789">Extraction profile (default = active)</div>
+    <div style="opacity:.45;pointer-events:none"><label class="cb"><input type="checkbox" disabled> Read-only mode — protect memories</label></div>
+
+    <h4>Memory LLM</h4>
+    <div class="lbl">Extraction profile (default = active)</div>
     <select id="set_profile" onchange="saveSet()" style="width:220px"></select>
-    <h4 style="margin:12px 0 4px;color:#789">Extraction</h4>
-    <div style="font-size:.8em;color:#789">Extract after every</div>
-    <input type="number" id="set_every" min="2" max="100" onchange="saveSet()" style="width:80px;display:inline-block"> <span style="font-size:.8em;color:#789">new messages</span>
-    <div style="font-size:.8em;color:#789">Max stored smart memories</div>
+    <div class="ph">
+      <div class="lbl">Generation budget (tokens)</div><input value="8192" disabled style="width:80px;display:inline-block">
+      <label class="cb"><input type="checkbox" disabled> Unlimited (-1)</label>
+      <label class="cb"><input type="checkbox" disabled> Advanced mode</label>
+      <label class="cb"><input type="checkbox" disabled> Show activity indicator</label>
+      <label class="cb"><input type="checkbox" disabled> Unified injection</label>
+      <label class="cb"><input type="checkbox" disabled> Generate contextual triggers</label>
+      <label class="cb"><input type="checkbox" disabled> Auto-tune budgets</label>
+      <div class="lbl">Injection refresh every N AI messages</div><input value="1" disabled style="width:80px">
+      <div class="lbl">Hardware profile</div><input placeholder="Profile B: hosted / high-performance" disabled>
+    </div>
+
+    <h4>Extraction</h4>
+    <div class="lbl">Extract after every</div>
+    <input type="number" id="set_every" min="2" max="100" onchange="saveSet()" style="width:80px;display:inline-block"> <span class="lbl" style="display:inline">new messages</span>
+    <div class="lbl">Max stored smart memories</div>
     <input type="number" id="set_max" min="5" max="500" onchange="saveSet()" style="width:80px;display:inline-block">
-    <h4 style="margin:12px 0 4px;color:#789">Injection</h4>
-    <div style="font-size:.8em;color:#789">Injection token budget</div>
+    <div class="ph">
+      <div class="lbl">Extraction prompt template</div>
+      <textarea placeholder="(default extraction prompt)" disabled style="min-height:60px"></textarea>
+      <div class="lbl">Context threshold (%)</div><input value="80" disabled style="width:80px">
+      <div class="lbl">Response length (tokens)</div><input value="2000" disabled style="width:80px">
+    </div>
+
+    <h4>Injection</h4>
+    <div class="lbl">Token budget</div>
     <input type="number" id="set_budget" min="50" max="4000" onchange="saveSet()" style="width:80px;display:inline-block">
-    <div style="opacity:.45;pointer-events:none;margin-top:8px">
-      <div style="font-size:.8em;color:#789">Injection position</div>
+    <div class="ph">
+      <div class="lbl">Injection position</div>
       <label class="cb"><input type="radio" name="pos" checked disabled> Before main prompt</label>
+      <label class="cb"><input type="radio" name="pos" disabled> After main prompt</label>
       <label class="cb"><input type="radio" name="pos" disabled> In-chat @ depth</label>
-      <div style="font-size:.8em;color:#789">Extraction prompt template</div>
-      <input placeholder="(default extraction prompt)" disabled>
-      <label class="cb"><input type="checkbox" disabled> Read-only mode — protect memories from AI edits</label>
-      <label class="cb"><input type="checkbox" disabled> Consolidate similar memories</label>
-      <label class="cb"><input type="checkbox" disabled> Deduplicate semantically (embeddings)</label>
-      <div style="font-size:.8em;color:#789">Trigger keywords (inject only when mentioned)</div>
+      <div class="lbl">Triggered memories: in-chat depth</div><input value="0" disabled style="width:80px">
+      <div class="lbl">Injection template</div>
+      <textarea placeholder="(default template)" disabled style="min-height:60px"></textarea>
+      <div class="lbl">Trigger keywords (inject only when mentioned)</div>
       <input placeholder="comma-separated triggers" disabled>
+    </div>
+
+    <h4>Session Memory</h4>
+    <div class="ph">
+      <div class="lbl">Extract after every N AI messages</div><input value="10" disabled style="width:80px">
+      <div class="lbl">Max session memories</div><input value="30" disabled style="width:80px">
+      <div class="lbl">Session injection budget</div><input value="400" disabled style="width:80px">
+    </div>
+
+    <h4>Current Summary</h4>
+    <div class="ph">
+      <div class="lbl">Context threshold (%)</div><input value="80" disabled style="width:80px">
+      <div class="lbl">Response length (tokens)</div><input value="2000" disabled style="width:80px">
+      <div class="lbl">Summary injection budget</div><input value="500" disabled style="width:80px">
+      <div class="lbl">Summary template</div>
+      <textarea disabled style="min-height:50px"></textarea>
+    </div>
+
+    <h4>Scene History</h4>
+    <div class="ph">
+      <label class="cb"><input type="checkbox" disabled> Use AI scene detection</label>
+      <div class="lbl">Keep last N scenes</div><input value="5" disabled style="width:80px">
+      <div class="lbl">Scene injection budget</div><input value="300" disabled style="width:80px">
+    </div>
+
+    <h4>Active Threads</h4>
+    <div class="ph">
+      <div class="lbl">Max tracked arcs</div><input value="10" disabled style="width:80px">
+      <div class="lbl">Thread injection budget</div><input value="700" disabled style="width:80px">
+    </div>
+
+    <h4>Consolidation</h4>
+    <div class="ph">
+      <div class="lbl">Consolidate [fact] after N unprocessed</div><input value="4" disabled style="width:80px">
+      <div class="lbl">Consolidate [relationship] after N</div><input value="3" disabled style="width:80px">
+      <div class="lbl">Consolidate [preference] after N</div><input value="3" disabled style="width:80px">
+      <div class="lbl">Consolidate [event] after N</div><input value="4" disabled style="width:80px">
+      <div class="lbl">Consolidate [scene] after N</div><input value="3" disabled style="width:80px">
+      <div class="lbl">Consolidate [revelation] after N</div><input value="3" disabled style="width:80px">
+      <div class="lbl">Consolidate [development] after N</div><input value="3" disabled style="width:80px">
+      <div class="lbl">Consolidate [detail] after N</div><input value="3" disabled style="width:80px">
+    </div>
+
+    <h4>Canon</h4>
+    <div class="ph">
+      <div class="lbl">Canon injection budget</div><input value="800" disabled style="width:80px">
+      <div class="lbl">Canon template</div><textarea disabled style="min-height:50px"></textarea>
+    </div>
+
+    <h4>Profiles</h4>
+    <div class="ph">
+      <div class="lbl">Regenerate when older than</div><input value="30m" disabled style="width:80px">
+      <div class="lbl">Also regenerate every N msgs</div><input value="20" disabled style="width:80px">
+      <div class="lbl">Profile injection budget</div><input value="400" disabled style="width:80px">
+    </div>
+
+    <h4>Pairs (relationships)</h4>
+    <div class="ph">
+      <div class="lbl">Pairs injection budget</div><input value="250" disabled style="width:80px">
+    </div>
+
+    <h4>Perspective</h4>
+    <div class="ph">
+      <label class="cb"><input type="checkbox" disabled> Inject "does not know" entries</label>
+      <label class="cb"><input type="checkbox" disabled> Frame secondhand long-term memories</label>
+      <div class="lbl">Perspective injection budget</div><input value="200" disabled style="width:80px">
+    </div>
+
+    <h4>Recap</h4>
+    <div class="ph">
+      <div class="lbl">Generate recap after</div><input value="4h" disabled style="width:80px">
+      <div class="lbl">Recap injection budget</div><input value="200" disabled style="width:80px">
+    </div>
+
+    <h4>State cards</h4>
+    <div class="ph">
+      <label class="cb"><input type="checkbox" disabled> Auto-check after each response</label>
+      <label class="cb"><input type="checkbox" disabled> Auto-repair contradictions</label>
+    </div>
+
+    <h4>Deduplication</h4>
+    <div class="ph">
+      <label class="cb"><input type="checkbox" disabled> Use semantic embeddings</label>
+      <div class="lbl">Embedding source</div><input placeholder="ollama / openai" disabled>
+      <div class="lbl">Embedding URL</div><input disabled>
+      <div class="lbl">Embedding model</div><input placeholder="nomic-embed-text" disabled>
+      <label class="cb"><input type="checkbox" disabled> Keep model in memory</label>
     </div>
   </div>
 </main>
