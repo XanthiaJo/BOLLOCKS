@@ -44,8 +44,9 @@ const router = {
     },
     'GET /api/me': async (req, res, u) => send(res, 200, { handle: u.handle }),
     'GET /api/world/books': async (req, res, u) => {
-        const books = db.prepare(`SELECT b.*, u.handle owner FROM world_books b
-            LEFT JOIN users u ON u.id=b.owner_id ORDER BY b.id`).all();
+        const books = db.prepare(`SELECT b.*, u.handle owner,
+            (SELECT COUNT(*) FROM world_entries WHERE book_id=b.id) cnt
+            FROM world_books b LEFT JOIN users u ON u.id=b.owner_id ORDER BY b.id`).all();
         const rooms = db.prepare('SELECT id,name,world_book_id FROM rooms').all();
         send(res, 200, { books, rooms });
     },

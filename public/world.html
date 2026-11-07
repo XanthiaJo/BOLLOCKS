@@ -3,55 +3,16 @@
 <head>
 <meta charset="utf-8"><title>RP · World</title>
 <link rel="stylesheet" href="layout.css">
-<style>
-#content{padding:0}
-main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
-.bookbar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
-.bookbar select{flex:1;min-width:200px;padding:8px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:4px}
-.bookbar button,.bookbar .imp{width:auto;white-space:nowrap}
-.linkinfo{color:#789;font-size:.85em;margin-bottom:14px}
-.ent{display:grid;grid-template-columns:1fr auto;gap:10px;padding:12px;border:1px solid #2a2b2e;border-radius:6px;margin-bottom:10px;background:#141517}
-.ent.off{opacity:.5}
-.ent .keys{color:#7ac;font-size:.85em;font-weight:600}
-.ent .comment{color:#dab;font-size:.85em;font-weight:600}
-.ent .txt{color:#abc;font-size:.9em;white-space:pre-wrap;margin-top:4px}
-.ent .meta{color:#567;font-size:.8em;margin-top:4px}
-.ent .btns{display:flex;flex-direction:column;gap:6px}
-.ent button{width:auto}
-button.del{background:#7c3a3a}
-textarea{min-height:80px;font-family:inherit;width:100%}
-#editor{border:1px solid #2b3a5e;border-radius:6px;padding:14px;margin-bottom:18px;background:#191b24;display:none}
-#editor h3{margin-top:0}
-#editor input{width:100%}
-label.cb{display:flex;gap:8px;align-items:center;margin:8px 0;font-size:.9em;width:fit-content;cursor:pointer}
-label.cb input{width:auto;margin:0;cursor:pointer}
-</style>
 </head>
 <body>
 <div id="content">
 <main>
-  <div class="bookbar">
-    <select id="booksel" onchange="pickBook(this.value)"></select>
-    <button onclick="newBook()">+ Book</button>
-    <button class="del" onclick="delBook()">Delete book</button>
-    <button class="imp" onclick="document.getElementById('imp').click()">Import ST book…</button>
+  <div class="panel">
+    <h3>New book</h3>
+    <input id="newname" placeholder="Book name">
+    <button onclick="newBook()">Create</button>
+    <button onclick="document.getElementById('imp').click()" style="background:#5a4a7c">Import ST book…</button>
     <input type="file" id="imp" accept=".json" style="display:none" onchange="importBook(this)">
-    <button id="linkbtn" onclick="linkBook()">Link to current chat</button>
-  </div>
-  <div class="linkinfo" id="linkinfo"></div>
-  <button onclick="newEntry()" style="margin-bottom:12px">+ New entry</button>
-  <div id="editor">
-    <h3 id="edtitle">New entry</h3>
-    <input type="hidden" id="ed_id">
-    <input id="ed_comment" placeholder="Title / comment (for your reference)">
-    <input id="ed_keys" placeholder="Keywords — comma separated (any match triggers)">
-    <input id="ed_keys2" placeholder="Secondary keywords — comma separated (ALL must also match)">
-    <textarea id="ed_content" placeholder="Content — lore, location details, rules of the world"></textarea>
-    <label class="cb"><input type="checkbox" id="ed_const"> Always active (no keyword needed)</label>
-    <label class="cb"><input type="checkbox" id="ed_enabled" checked> Enabled</label>
-    <input id="ed_ord" type="number" placeholder="Order (0 = first)" value="0">
-    <button onclick="saveEnt()">Save</button>
-    <button onclick="document.getElementById('editor').style.display='none'" style="background:#444">Close</button>
   </div>
   <div id="list"></div>
 </main>
@@ -65,73 +26,43 @@ const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.json());
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const ROOM=Number(localStorage.mp_room||1);
-let bookId=Number(localStorage.mp_book||0), rooms=[];
+let me='';
 
-async function loadBooks(){
-  const {books,rooms:rs}=await get('world/books');
-  rooms=rs;
+async function load(){
+  const [{books,rooms},who]=await Promise.all([get('world/books'),get('me')]);
+  me=who.handle;
   const room=rooms.find(r=>r.id===ROOM);
-  $('booksel').innerHTML='<option value="0">— pick a book —</option>'+
-    (books||[]).map(b=>`<option value="${b.id}"${b.id===bookId?' selected':''}>${esc(b.name)}${b.owner?` (${esc(b.owner)})`:''}${room?.world_book_id===b.id?' 🔗':''}</option>`).join('');
-  $('linkinfo').textContent=room?.world_book_id
-    ? `Current chat uses: ${esc((books||[]).find(b=>b.id===room.world_book_id)?.name||'#'+room.world_book_id)}`
-    : 'Current chat has no book linked — generation uses no lore.';
+  $('list').innerHTML=(books||[]).map(b=>{
+    const linked=room?.world_book_id===b.id;
+    const mine=!b.owner||b.owner===me;
+    return `
+    <div class="card">
+      <div>
+        <div class="name">${esc(b.name)}${linked?'<span class="badge">in this chat</span>':''}</div>
+        <div class="meta">#${b.id} · ${b.cnt||0} entries · ${esc(b.owner||'shared')}</div>
+      </div>
+      <div class="btns">
+        <button onclick="location='/world-edit.html?id=${b.id}${AS?'&as='+AS:''}'">Open</button>
+        ${mine?`<button class="del" onclick="delBook(${b.id})">Delete</button>`:''}
+      </div>
+    </div>`;
+  }).join('')||'<small>No books yet — create one above or import an ST export.</small>';
 }
-function pickBook(id){bookId=Number(id);localStorage.mp_book=id;loadBooks();load()}
 
 async function newBook(){
-  const name=prompt('Book name?');if(!name)return;
+  const name=$('newname').value.trim();if(!name)return;
+  $('newname').value='';
   const r=await api('world/books',{name});
-  if(r.id)pickBook(r.id);
+  if(r.id)location='/world-edit.html?id='+r.id+(AS?'&as='+AS:'');
 }
-async function delBook(){
-  if(!bookId||!confirm('Delete this book and all its entries?'))return;
-  await api('world/books/delete',{id:bookId});pickBook(0);
-}
-async function linkBook(){
-  if(!bookId)return alert('pick a book first');
-  await api('world/link',{room:ROOM,book:bookId});loadBooks();
-}
+async function delBook(id){if(confirm('Delete this book and all its entries?')){await api('world/books/delete',{id});load()}}
 async function importBook(input){
   const f=input.files[0];input.value='';if(!f)return;
   const r=await api('world/import',{room:ROOM,book:await f.text(),name:f.name.replace(/\.json$/,'')});
   if(r.error)return alert(r.error);
-  alert(`imported ${r.count} entries`);pickBook(r.id);
+  location='/world-edit.html?id='+r.id+(AS?'&as='+AS:'');
 }
-
-async function load(){
-  if(!bookId){$('list').innerHTML='<small>Pick or create a book.</small>';return}
-  const {entries}=await get('world?book='+bookId);
-  $('list').innerHTML=(entries||[]).map(e=>`
-    <div class="ent${e.enabled?'':' off'}">
-      <div>
-        ${e.comment?`<div class="comment">${esc(e.comment)}</div>`:''}
-        <div class="keys">${e.constant?'⚡ always':esc(JSON.parse(e.keys||'[]').join(', ')||'(no keys)')}${JSON.parse(e.keysecondary||'[]').length?' + '+esc(JSON.parse(e.keysecondary||'[]').join(', ')):''}</div>
-        <div class="txt">${esc(e.content)}</div>
-        <div class="meta">#${e.id} · order ${e.ord}</div>
-      </div>
-      <div class="btns">
-        <button onclick='edit(${JSON.stringify(e).replace(/'/g,"&#39;")})'>Edit</button>
-        <button onclick="toggle(${e.id},${e.enabled?0:1})">${e.enabled?'Disable':'Enable'}</button>
-        <button class="del" onclick="del(${e.id})">Delete</button>
-      </div>
-    </div>`).join('')||'<small>No entries.</small>';
-}
-function newEntry(){clearEd();$('editor').style.display='block'}
-function edit(e){$('edtitle').textContent='Edit entry #'+e.id;$('ed_id').value=e.id;$('ed_comment').value=e.comment||'';$('ed_keys').value=JSON.parse(e.keys||'[]').join(', ');$('ed_keys2').value=JSON.parse(e.keysecondary||'[]').join(', ');$('ed_content').value=e.content;$('ed_const').checked=!!e.constant;$('ed_enabled').checked=!!e.enabled;$('ed_ord').value=e.ord;$('editor').style.display='block';scrollTo(0,0)}
-function clearEd(){$('edtitle').textContent='New entry';['ed_id','ed_comment','ed_keys','ed_keys2','ed_content'].forEach(i=>$(i).value='');$('ed_const').checked=false;$('ed_enabled').checked=true;$('ed_ord').value=0}
-
-async function saveEnt(){
-  const id=$('ed_id').value;
-  const b={room:ROOM,book:bookId,comment:$('ed_comment').value.trim(),keys:$('ed_keys').value,keysecondary:$('ed_keys2').value,content:$('ed_content').value,constant:$('ed_const').checked,enabled:$('ed_enabled').checked,ord:Number($('ed_ord').value)||0};
-  if(!b.content.trim())return alert('needs content');
-  if(id)await api('world/update',{id:Number(id),...b});
-  else await api('world',b);
-  $('editor').style.display='none';load();
-}
-async function toggle(id,en){await api('world/update',{id,enabled:!!en});load()}
-async function del(id){if(confirm('Delete this entry?')){await api('world/delete',{id});load()}}
-loadBooks().then(load);
+load();
 </script>
 </body>
 </html>

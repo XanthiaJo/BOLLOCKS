@@ -54,6 +54,7 @@ async function loadRoom() {
         if (d.type === 'message' && d.message.room_id === room) addMsg(d.message);
     };
     renderRooms();
+    renderWorld();
 }
 
 async function renderRooms() {
@@ -63,6 +64,16 @@ async function renderRooms() {
         .join('');
 }
 function pick(id) { room = id; localStorage.mp_room = id; loadRoom(); }
+
+async function renderWorld() {
+    const { books, rooms } = await get('world/books');
+    const r = rooms.find(x => x.id === room);
+    $('worldsel').innerHTML = '<option value="0">— no world —</option>' +
+        (books || []).map(b => `<option value="${b.id}"${r?.world_book_id === b.id ? ' selected' : ''}>${b.name}</option>`).join('');
+}
+async function setWorld(bookId) {
+    await api('world/link', { room, book: Number(bookId) || null });
+}
 
 async function newRoom() {
     const name = $('newroom').value.trim();
