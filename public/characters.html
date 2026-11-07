@@ -39,7 +39,7 @@ button.del{background:#7c3a3a}
     <textarea id="ed_sysp" placeholder="System prompt override — optional" style="min-height:60px"></textarea>
     <textarea id="ed_phi" placeholder="Post-history instructions — optional" style="min-height:60px"></textarea>
     <input id="ed_tags" placeholder="Tags — comma separated">
-    <input id="ed_creator" placeholder="Creator">
+    <input type="hidden" id="ed_creator">
     <label>API profile <small>— uses default unless changed</small><br>
       <select id="ed_profile" style="width:100%;padding:8px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:4px"></select>
     </label>
@@ -93,7 +93,7 @@ function clearEd(){$('edtitle').textContent='New character';['ed_id','ed_name','
 
 async function saveCard(){
   const id=$('ed_id').value;
-  const b={name:$('ed_name').value.trim(),description:$('ed_desc').value,personality:$('ed_personality').value,scenario:$('ed_scenario').value,first_message:$('ed_first').value,mes_example:$('ed_mesex').value,system_prompt:$('ed_sysp').value,post_history_instructions:$('ed_phi').value,tags:$('ed_tags').value,creator:$('ed_creator').value.trim(),profileId:Number($('ed_profile').value)||null};
+  const b={name:$('ed_name').value.trim(),description:$('ed_desc').value,personality:$('ed_personality').value,scenario:$('ed_scenario').value,first_message:$('ed_first').value,mes_example:$('ed_mesex').value,system_prompt:$('ed_sysp').value,post_history_instructions:$('ed_phi').value,tags:$('ed_tags').value,creator:me,profileId:Number($('ed_profile').value)||null};
   if(!b.name)return alert('needs a name');
   if(id)await api('cards/update',{id:Number(id),...b});
   else await api('cards',b);
