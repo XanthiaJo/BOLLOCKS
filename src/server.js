@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db, seed, login, userForToken, createUser, activeProfile, migrateProfiles, migrateSchema } from './db.js';
-import { generateReply, genStats } from './generate.js';
+import { generateReply, genStats, maybeSummarize } from './generate.js';
 import { extractCardJson, normalizeCard } from './pngcard.js';
 
 const PUB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -244,7 +244,7 @@ const router = {
         send(res, 200, { ok: true });
     },
     'GET /api/rooms': async (req, res, u) => {
-        const rooms = db.prepare(`SELECT r.id, r.name FROM rooms r
+        const rooms = db.prepare(`SELECT r.id, r.name, r.ai_trigger, r.auto_mem, r.mem_every FROM rooms r
             JOIN members m ON m.room_id=r.id WHERE m.user_id=? ORDER BY r.id`).all(u.id);
         send(res, 200, { rooms });
     },
@@ -334,10 +334,17 @@ const router = {
                     })
                     .catch(e => console.error('[gen]', e.message));
         }
+        maybeSummarize(msg.room_id).catch(e => console.error('[mem]', e.message));
     },
     'POST /api/room/trigger': async (req, res, u) => {
         const b = await readBody(req);
         db.prepare('UPDATE rooms SET ai_trigger=? WHERE id=?').run(b.mode || 'manual', b.room || 1);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/room/memsettings': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('UPDATE rooms SET auto_mem=COALESCE(?,auto_mem), mem_every=COALESCE(?,mem_every) WHERE id=?')
+            .run(b.auto === undefined ? null : (b.auto ? 1 : 0), b.every, b.room || 1);
         send(res, 200, { ok: true });
     },
     'POST /api/members/talkativeness': async (req, res, u) => {

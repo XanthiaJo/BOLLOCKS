@@ -136,6 +136,9 @@ export function migrateSchema() {
     const rcols = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);
     if (!rcols.includes('world_book_id')) db.exec('ALTER TABLE rooms ADD COLUMN world_book_id INTEGER REFERENCES world_books(id)');
     if (!rcols.includes('ai_trigger')) db.exec("ALTER TABLE rooms ADD COLUMN ai_trigger TEXT DEFAULT 'manual'");
+    if (!rcols.includes('auto_mem')) db.exec('ALTER TABLE rooms ADD COLUMN auto_mem INTEGER DEFAULT 0');
+    if (!rcols.includes('mem_every')) db.exec('ALTER TABLE rooms ADD COLUMN mem_every INTEGER DEFAULT 10');
+    if (!rcols.includes('mem_last_id')) db.exec('ALTER TABLE rooms ADD COLUMN mem_last_id INTEGER DEFAULT 0');
     const pcols = db.prepare('PRAGMA table_info(api_profiles)').all().map(c => c.name);
     if (!pcols.includes('strip_prefix')) db.exec('ALTER TABLE api_profiles ADD COLUMN strip_prefix INTEGER DEFAULT 1');
     // Legacy: entries keyed by room become a default book linked to that room.

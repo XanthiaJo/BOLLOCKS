@@ -10,6 +10,11 @@
   <div id="rchat"></div>
   <h3 style="margin-top:14px">Characters</h3>
   <div id="rcards"></div>
+  <h3 style="margin-top:14px">Settings</h3>
+  <label class="cb"><input type="checkbox" id="set_auto" onchange="saveSet()"> Smart memories</label>
+  <div style="font-size:.8em;color:#789">Summarize every</div>
+  <input type="number" id="set_every" min="2" max="100" onchange="saveSet()">
+  <div style="font-size:.75em;color:#567;margin-top:4px">new messages into shared memories</div>
 </aside>
 <div id="content">
 <main>
@@ -39,7 +44,9 @@ let cardId=-1,cardName='';
 let roomName='';
 async function load(){
   const [{cards},{rooms}]=await Promise.all([get('cards'),get('rooms')]);
-  roomName=(rooms||[]).find(r=>r.id===ROOM)?.name||'Chat';
+  const rm=(rooms||[]).find(r=>r.id===ROOM);
+  roomName=rm?.name||'Chat';
+  $('set_auto').checked=!!rm?.auto_mem;$('set_every').value=rm?.mem_every||10;
   $('rchat').innerHTML=
     `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div>`;
   $('rcards').innerHTML=(cards||[]).map(c=>
@@ -58,6 +65,7 @@ async function load(){
 function pick(id,name){cardId=id;cardName=name;load()}
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
+async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10})}
 load();
 </script>
 </body>

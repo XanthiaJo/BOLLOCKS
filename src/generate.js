@@ -137,3 +137,42 @@ export async function generateReply(roomId, card) {
     }
     return text;
 }
+
+/**
+ * Smart memories: ask the model to distill an excerpt into bullet facts,
+ * stored as shared room memories. Runs after every N messages per room.
+ */
+export async function maybeSummarize(roomId) {
+    const room = db.prepare('SELECT auto_mem, mem_every, mem_last_id FROM rooms WHERE id=?').get(roomId);
+    if (!room?.auto_mem) return;
+    const lastId = db.prepare('SELECT MAX(id) m FROM messages WHERE room_id=?').get(roomId).m || 0;
+    if (lastId - room.mem_last_id < (room.mem_every || 10)) return;
+    const owner = db.prepare(`SELECT u.id FROM members m JOIN users u ON u.id=m.user_id
+        WHERE m.room_id=? AND m.kind='human' ORDER BY m.user_id LIMIT 1`).get(roomId);
+    const conn = activeProfile(owner?.id);
+    if (!conn?.apiUrl) return;
+    const excerpt = db.prepare(
+        'SELECT name,text FROM messages WHERE room_id=? AND id>? ORDER BY id LIMIT 30')
+        .all(roomId, room.mem_last_id);
+    if (!excerpt.length) return;
+    db.prepare('UPDATE rooms SET mem_last_id=? WHERE id=?').run(lastId, roomId);
+    const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}) },
+        body: JSON.stringify({
+            model: conn.model || 'local',
+            messages: [
+                { role: 'system', content: 'You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix): relationships formed, events that happened, promises made, changes to the world or characters. No narration, no opinions.' },
+                { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
+            ],
+            temperature: 0.3, max_tokens: 400,
+        }),
+    });
+    if (!resp.ok) return;
+    const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
+    const ins = db.prepare('INSERT INTO memories (card_id,room_id,content) VALUES (NULL,?,?)');
+    for (const line of text.split('\n')) {
+        const fact = line.replace(/^\s*[-*•]\s*/, '').trim();
+        if (fact.length > 10) ins.run(roomId, fact);
+    }
+}
