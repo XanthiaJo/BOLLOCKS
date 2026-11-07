@@ -255,9 +255,16 @@ const router = {
         else if (b.userId) db.prepare('DELETE FROM members WHERE room_id=? AND user_id=? AND card_id IS NULL').run(b.room || 1, b.userId);
         send(res, 200, { ok: true });
     },
-    'POST /api/members/remove': async (req, res, u) => {
+    'POST /api/users/delete': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('DELETE FROM members WHERE card_id=? AND room_id=?').run(b.cardId, b.room || 1);
+        const target = b.handle
+            ? db.prepare('SELECT id FROM users WHERE handle=? COLLATE NOCASE').get(b.handle)?.id
+            : b.id;
+        if (!target || target === u.id) return send(res, 400, { error: 'no such user' });
+        db.prepare('DELETE FROM sessions WHERE user_id=?').run(target);
+        db.prepare('DELETE FROM members WHERE user_id=?').run(target);
+        db.prepare('UPDATE messages SET sender_user_id=NULL WHERE sender_user_id=?').run(target);
+        db.prepare('DELETE FROM users WHERE id=?').run(target);
         send(res, 200, { ok: true });
     },
     'GET /api/rooms': async (req, res, u) => {
