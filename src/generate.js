@@ -106,8 +106,10 @@ export async function generateReply(roomId, card) {
         const overhead = Object.entries(parts).filter(([k]) => k !== 'Chat History')
             .reduce((a, [, v]) => a + v, 0);
         let histTok = parts['Chat History'];
-        while (history.length > 1 && overhead + histTok > maxCtx) {
-            const m = history.shift();
+        // ST-style: keep the opening message (greeting anchors the scene),
+        // trim the middle, keep the recent tail.
+        while (history.length > 2 && overhead + histTok > maxCtx) {
+            const m = history.splice(1, 1)[0];
             histTok -= tok(m.name + ' ' + m.text);
         }
         parts['Chat History'] = histTok;
