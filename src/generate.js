@@ -13,7 +13,7 @@ export async function generateReply(roomId, card) {
     const p = card.profile_id
         ? db.prepare('SELECT * FROM api_profiles WHERE id=?').get(card.profile_id)
         : null;
-    const conn = p ? { apiUrl: p.api_url, model: p.model, key: p.key, strip: !!p.strip_prefix } : { ...activeProfile(owner?.id), strip: true };
+    const conn = p ? { apiUrl: p.api_url, model: p.model, key: p.key } : activeProfile(owner?.id);
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(
@@ -94,8 +94,9 @@ export async function generateReply(roomId, card) {
     const data = await resp.json();
     let text = data?.choices?.[0]?.message?.content?.trim();
     if (!text) throw new Error('empty AI response');
-    // Profile option: drop a leading "Name:" / "**Name:**" / "[Name]" tag.
-    if (conn.strip) {
+    // Always drop a leading "Name:" / "**Name:**" / "[Name]" speaker tag —
+    // the UI already labels messages; the tag only exists for steering.
+    {
         const esc = card.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         text = text.replace(new RegExp(`^\\**\\[?${esc}\\]?\\**\\s*:\\s*`, 'i'), '').trimStart();
     }
