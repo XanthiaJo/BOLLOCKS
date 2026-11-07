@@ -90,7 +90,7 @@ export function createUser(handle, password) {
         .run(handle, h, salt).lastInsertRowid;
 }
 export function login(handle, password) {
-    const u = db.prepare('SELECT * FROM users WHERE handle = ?').get(handle);
+    const u = db.prepare('SELECT * FROM users WHERE handle = ? COLLATE NOCASE').get(handle);
     if (!u || !verify(password, u.salt, u.password_hash)) return null;
     const token = crypto.randomBytes(24).toString('hex');
     db.prepare('INSERT INTO sessions (token,user_id) VALUES (?,?)').run(token, u.id);
