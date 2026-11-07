@@ -38,6 +38,42 @@ const router = {
         catch { send(res, 409, { error: 'handle taken' }); }
     },
     'GET /api/me': async (req, res, u) => send(res, 200, { handle: u.handle }),
+    'GET /api/cards': async (req, res, u) => {
+        const cards = db.prepare(`SELECT c.*, u.handle owner FROM cards c
+            LEFT JOIN users u ON u.id=c.owner_id ORDER BY c.name`).all();
+        send(res, 200, { cards });
+    },
+    'POST /api/cards': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!b.name) return send(res, 400, { error: 'name required' });
+        const id = db.prepare('INSERT INTO cards (owner_id,name,description,first_message) VALUES (?,?,?,?)')
+            .run(u.id, b.name, b.description || '', b.first_message || '').lastInsertRowid;
+        send(res, 200, { id });
+    },
+    'POST /api/cards/update': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare(`UPDATE cards SET name=COALESCE(?,name), description=COALESCE(?,description),
+            first_message=COALESCE(?,first_message) WHERE id=? AND owner_id=?`)
+            .run(b.name, b.description, b.first_message, b.id, u.id);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/cards/delete': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('DELETE FROM cards WHERE id=? AND owner_id=?').run(b.id, u.id);
+        db.prepare('DELETE FROM members WHERE card_id=?').run(b.id);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/members': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('INSERT OR IGNORE INTO members (room_id,card_id,kind) VALUES (?,?,?)')
+            .run(b.room || 1, b.cardId, b.kind || 'ai');
+        send(res, 200, { ok: true });
+    },
+    'POST /api/members/remove': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('DELETE FROM members WHERE card_id=? AND room_id=?').run(b.cardId, b.room || 1);
+        send(res, 200, { ok: true });
+    },
     'GET /api/rooms': async (req, res, u) => {
         const rooms = db.prepare(`SELECT r.id, r.name FROM rooms r
             JOIN members m ON m.room_id=r.id WHERE m.user_id=? ORDER BY r.id`).all(u.id);
