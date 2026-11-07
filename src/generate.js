@@ -58,9 +58,12 @@ export async function generateReply(roomId, card) {
         : null;
 
     // Long-term memories: shared room facts + this character's own.
-    const roomMems = db.prepare('SELECT content FROM memories WHERE room_id=? AND card_id IS NULL ORDER BY id').all(roomId);
-    const mems = db.prepare('SELECT content FROM memories WHERE card_id=? AND room_id=? ORDER BY id')
-        .all(card.id, roomId);
+    // Capped at the room's injection token budget (chars/4 estimate).
+    const budget = db.prepare('SELECT mem_budget FROM rooms WHERE id=?').get(roomId)?.mem_budget ?? 500;
+    const cap = (rows, acc) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= budget); };
+    const roomMems = cap(db.prepare('SELECT content FROM memories WHERE room_id=? AND card_id IS NULL ORDER BY id DESC').all(roomId).reverse(), 0);
+    const mems = cap(db.prepare('SELECT content FROM memories WHERE card_id=? AND room_id=? ORDER BY id DESC')
+        .all(card.id, roomId).reverse(), roomMems.reduce((a, r) => a + tok(r.content), 0));
     const memText = (roomMems.length || mems.length)
         ? [
             roomMems.length && 'What happened here:\n' + roomMems.map(m => '- ' + m.content).join('\n'),
@@ -162,7 +165,7 @@ export async function maybeSummarize(roomId) {
         body: JSON.stringify({
             model: conn.model || 'local',
             messages: [
-                { role: 'system', content: 'You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix): relationships formed, events that happened, promises made, changes to the world or characters. No narration, no opinions.' },
+                { role: 'system', content: 'You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Tag each with [fact], [event], [relationship] or [preference]. No narration, no opinions.' },
                 { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
             ],
             temperature: 0.3, max_tokens: 400,
@@ -170,9 +173,12 @@ export async function maybeSummarize(roomId) {
     });
     if (!resp.ok) return;
     const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
-    const ins = db.prepare('INSERT INTO memories (card_id,room_id,content) VALUES (NULL,?,?)');
+    const ins = db.prepare('INSERT INTO memories (card_id,room_id,content,type) VALUES (NULL,?,?,?)');
     for (const line of text.split('\n')) {
-        const fact = line.replace(/^\s*[-*•]\s*/, '').trim();
-        if (fact.length > 10) ins.run(roomId, fact);
+        let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
+        const tag = fact.match(/^\[(fact|event|relationship|preference)\]\s*/i);
+        const type = tag ? tag[1].toLowerCase() : 'fact';
+        if (tag) fact = fact.slice(tag[0].length);
+        if (fact.length > 10) ins.run(roomId, fact, type);
     }
 }

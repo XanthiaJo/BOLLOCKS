@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8"><title>RP · Memories</title>
 <link rel="stylesheet" href="layout.css">
+<style>
+.mtag{display:inline-block;font-size:.7em;font-weight:700;padding:1px 6px;border-radius:3px;background:#3a3f4a;color:#9ab;margin-right:4px}
+.mtag.mevent{background:#3a4a3e;color:#9c9}
+.mtag.mrelationship{background:#4a3a5e;color:#c9c}
+.mtag.mpreference{background:#5e4a3a;color:#dc9}
+</style>
 </head>
 <body>
 <aside id="rsidebar">
@@ -24,11 +30,22 @@
   </div>
   <div id="list"></div>
   <div class="panel">
-    <h3>Settings</h3>
-    <label class="cb"><input type="checkbox" id="set_auto" onchange="saveSet()"> Smart memories</label>
-    <div style="font-size:.8em;color:#789">Summarize every</div>
-    <input type="number" id="set_every" min="2" max="100" onchange="saveSet()" style="width:80px">
-    <div style="font-size:.75em;color:#567;margin-top:4px">new messages into shared memories</div>
+    <h3>Memory settings</h3>
+    <label class="cb"><input type="checkbox" id="set_auto" onchange="saveSet()"> Enable Smart Memory</label>
+    <h4 style="margin:12px 0 4px;color:#789">Extraction</h4>
+    <div style="font-size:.8em;color:#789">Extract after every</div>
+    <input type="number" id="set_every" min="2" max="100" onchange="saveSet()" style="width:80px;display:inline-block"> <span style="font-size:.8em;color:#789">new messages</span>
+    <h4 style="margin:12px 0 4px;color:#789">Injection</h4>
+    <div style="font-size:.8em;color:#789">Injection token budget</div>
+    <input type="number" id="set_budget" min="50" max="4000" onchange="saveSet()" style="width:80px;display:inline-block">
+    <div style="opacity:.45;pointer-events:none;margin-top:8px">
+      <div style="font-size:.8em;color:#789">Injection position</div>
+      <label class="cb"><input type="radio" name="pos" checked disabled> Before main prompt</label>
+      <label class="cb"><input type="radio" name="pos" disabled> In-chat @ depth</label>
+      <label class="cb"><input type="checkbox" disabled> Read-only mode</label>
+      <div style="font-size:.8em;color:#789">Max stored memories per character</div>
+      <input type="number" value="50" disabled style="width:80px">
+    </div>
   </div>
 </main>
 </div>
@@ -48,7 +65,7 @@ async function load(){
   const [{cards},{rooms}]=await Promise.all([get('cards'),get('rooms')]);
   const rm=(rooms||[]).find(r=>r.id===ROOM);
   roomName=rm?.name||'Chat';
-  $('set_auto').checked=!!rm?.auto_mem;$('set_every').value=rm?.mem_every||10;
+  $('set_auto').checked=!!rm?.auto_mem;$('set_every').value=rm?.mem_every||10;$('set_budget').value=rm?.mem_budget||500;
   $('rchat').innerHTML=
     `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div>`;
   $('rcards').innerHTML=(cards||[]).map(c=>
@@ -60,14 +77,14 @@ async function load(){
   $('pickmsg').style.display='none';$('addbox').style.display='block';
   $('list').innerHTML=(memories||[]).map(m=>`
     <div class="card">
-      <div><div class="desc">${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''}</div></div>
+      <div><div class="desc"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''}</div></div>
       <div class="btns"><button class="del" onclick="del(${m.id})">Delete</button></div>
     </div>`).join('')||'<small>No memories yet.</small>';
 }
 function pick(id,name){cardId=id;cardName=name;load()}
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
-async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10})}
+async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500})}
 load();
 </script>
 </body>
