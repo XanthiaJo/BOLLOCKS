@@ -36,6 +36,22 @@ button.act{background:#4a7c3a}
     <input id="ed_model" placeholder="Model e.g. openrouter/free">
     <input id="ed_key" type="password" placeholder="API key (blank keeps existing)">
     <label class="cb"><input type="checkbox" id="ed_strip" checked> Strip "Name:" speaker tags from replies</label>
+    <h4 style="margin:14px 0 4px;color:#789">Sampling <small>(coming soon)</small></h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px;opacity:.45;pointer-events:none">
+      <input placeholder="Context size (tokens)" disabled>
+      <input placeholder="Max tokens (response)" disabled>
+      <input placeholder="Temperature" disabled>
+      <input placeholder="Top P" disabled>
+      <input placeholder="Top K" disabled>
+      <input placeholder="Min P" disabled>
+      <input placeholder="Repetition penalty" disabled>
+      <input placeholder="Frequency penalty" disabled>
+      <input placeholder="Presence penalty" disabled>
+    </div>
+    <div style="opacity:.45;pointer-events:none">
+      <label class="cb"><input type="checkbox" disabled> Streaming</label>
+      <input placeholder="Instruct template" disabled>
+    </div>
     <button onclick="saveProf()">Save</button>
     <button onclick="clearEd()" style="background:#444">Clear</button>
   </div>
@@ -54,13 +70,13 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 async function load(){
   const {profiles}=await get('profiles');
   $('list').innerHTML=(profiles||[]).map(p=>`
-    <div class="prof${p.active?' on':''}">
+    <div class="prof${p.active?' on':''}" style="cursor:pointer" onclick='edit(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
       <div>
         <div class="name">${esc(p.name)}${p.active?'<span class="badge">active</span>':''}</div>
         <div class="url">${esc(p.api_url)}</div>
         <div class="meta">${esc(p.model)} · ${p.has_key?'key set':'no key'}</div>
       </div>
-      <div class="btns">
+      <div class="btns" onclick="event.stopPropagation()">
         ${p.active?'':`<button class="act" onclick="activate(${p.id})">Make active</button>`}
         <button onclick='edit(${JSON.stringify(p).replace(/'/g,"&#39;")})'>Edit</button>
         <button class="del" onclick="del(${p.id})">Delete</button>
