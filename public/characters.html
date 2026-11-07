@@ -112,9 +112,9 @@ function pickAvatar(inp){
     const MAX=512,s=Math.min(1,MAX/Math.max(img.width,img.height));
     const cv=document.createElement('canvas');cv.width=img.width*s;cv.height=img.height*s;
     cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
-    const url=cv.toDataURL('image/png'),b64=url.split(',')[1];
-    if(EDIT_ID){const r=await api('cards/avatar',{id:EDIT_ID,png_b64:b64});
-      if(r.error)alert(r.error);else $('ed_av').src='/api/avatar?id='+EDIT_ID+'&t='+Date.now();}
+    const url=cv.toDataURL('image/png'),b64=url.split(',')[1],id=$('ed_id').value;
+    if(id){const r=await api('cards/avatar',{id:Number(id),png_b64:b64});
+      if(r.error)alert(r.error);else $('ed_av').src='/api/avatar?id='+id+'&t='+Date.now();}
     else{$('ed_av').src=url;$('ed_av').dataset.pending=b64;}
   };
   img.src=URL.createObjectURL(f);
