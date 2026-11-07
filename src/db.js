@@ -61,6 +61,13 @@ CREATE TABLE IF NOT EXISTS world_entries (
     enabled INTEGER DEFAULT 1,
     ord INTEGER DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id INTEGER NOT NULL REFERENCES cards(id),
+    room_id INTEGER NOT NULL REFERENCES rooms(id),
+    content TEXT NOT NULL,
+    created TEXT DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS api_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),

@@ -43,6 +43,26 @@ const router = {
         catch { send(res, 409, { error: 'handle taken' }); }
     },
     'GET /api/me': async (req, res, u) => send(res, 200, { handle: u.handle }),
+    'GET /api/memories': async (req, res, u) => {
+        const q = new URL(req.url, 'http://x').searchParams;
+        const rows = db.prepare(`SELECT m.*, c.name card_name, r.name room_name FROM memories m
+            JOIN cards c ON c.id=m.card_id JOIN rooms r ON r.id=m.room_id
+            WHERE (?=0 OR m.card_id=?) AND (?=0 OR m.room_id=?) ORDER BY m.id`).all(
+            Number(q.get('card') || 0), Number(q.get('card') || 0),
+            Number(q.get('room') || 0), Number(q.get('room') || 0));
+        send(res, 200, { memories: rows });
+    },
+    'POST /api/memories': async (req, res, u) => {
+        const b = await readBody(req);
+        const id = db.prepare('INSERT INTO memories (card_id,room_id,content) VALUES (?,?,?)')
+            .run(b.cardId, b.room || 1, b.content || '').lastInsertRowid;
+        send(res, 200, { id });
+    },
+    'POST /api/memories/delete': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('DELETE FROM memories WHERE id=?').run(b.id);
+        send(res, 200, { ok: true });
+    },
     'GET /api/genstats': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room') || 1);
         send(res, 200, { stats: genStats[roomId] || null });

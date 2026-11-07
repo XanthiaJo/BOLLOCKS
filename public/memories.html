@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"><title>RP · Memories</title>
+<link rel="stylesheet" href="layout.css">
+</head>
+<body>
+<aside id="rsidebar">
+  <h3>Characters</h3>
+  <div id="rcards"></div>
+</aside>
+<div id="content">
+<main>
+  <div class="panel">
+    <h3 id="title">Memories</h3>
+    <p style="color:#789;font-size:.9em">Facts a character remembers in this chat — injected into every generation.</p>
+    <div id="addbox" style="display:none">
+      <textarea id="newmem" placeholder="e.g. Fig hates the colour green" style="min-height:60px;width:100%"></textarea>
+      <button onclick="add()">Add memory</button>
+    </div>
+    <small id="pickmsg">Pick a character on the right to see their memories.</small>
+  </div>
+  <div id="list"></div>
+</main>
+</div>
+<script src="layout.js"></script>
+<script>
+const AS=new URLSearchParams(location.search).get('as')||'';
+const H=()=>({'Content-Type':'application/json',...(AS?{'X-As-User':AS}:{})});
+const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.json());
+const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.json());
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ROOM=Number(localStorage.mp_room||1);
+let cardId=0,cardName='';
+
+async function load(){
+  const {cards}=await get('cards');
+  $('rcards').innerHTML=(cards||[]).map(c=>
+    `<div class="rprof${c.id===cardId?' on':''}" onclick="pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')"><div class="n">${esc(c.name)}</div></div>`
+  ).join('')||'<small>None</small>';
+  if(!cardId){$('list').innerHTML='';return}
+  const {memories}=await get(`memories?card=${cardId}&room=${ROOM}`);
+  $('title').textContent=`${cardName}'s memories`;
+  $('pickmsg').style.display='none';$('addbox').style.display='block';
+  $('list').innerHTML=(memories||[]).map(m=>`
+    <div class="card">
+      <div><div class="desc">${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''}</div></div>
+      <div class="btns"><button class="del" onclick="del(${m.id})">Delete</button></div>
+    </div>`).join('')||'<small>No memories yet.</small>';
+}
+function pick(id,name){cardId=id;cardName=name;load()}
+async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
+async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
+load();
+</script>
+</body>
+</html>

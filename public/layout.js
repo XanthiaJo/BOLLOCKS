@@ -10,6 +10,7 @@
         ['Chat', '/'],
         ['Characters', '/characters.html'],
         ['World', '/world.html'],
+        ['Memories', '/memories.html'],
         ['Connection', '/connection.html'],
     ];
     const here = location.pathname === '/index.html' ? '/' : location.pathname;

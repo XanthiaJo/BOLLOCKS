@@ -57,9 +57,17 @@ export async function generateReply(roomId, card) {
         ? 'World info:\n' + world.map(e => e.content).join('\n\n')
         : null;
 
+    // Long-term memories for this character in this room.
+    const mems = db.prepare('SELECT content FROM memories WHERE card_id=? AND room_id=? ORDER BY id')
+        .all(card.id, roomId);
+    const memText = mems.length
+        ? `Things ${card.name} remembers:\n` + mems.map(m => '- ' + m.content).join('\n')
+        : null;
+
     const system = [
         card.system_prompt || `You are ${card.name}.`,
         worldText,
+        memText,
         card.description && `Description:\n${card.description}`,
         card.personality && `Personality:\n${card.personality}`,
         card.scenario && `Scenario:\n${card.scenario}`,
