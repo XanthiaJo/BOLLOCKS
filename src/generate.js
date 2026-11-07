@@ -173,7 +173,7 @@ export async function maybeSummarize(roomId) {
     });
     if (!resp.ok) return;
     const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
-    const ins = db.prepare('INSERT INTO memories (card_id,room_id,content,type) VALUES (NULL,?,?,?)');
+    const ins = db.prepare("INSERT INTO memories (card_id,room_id,content,type,source) VALUES (NULL,?,?,?,'auto')");
     for (const line of text.split('\n')) {
         let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
         const tag = fact.match(/^\[(fact|event|relationship|preference)\]\s*/i);
