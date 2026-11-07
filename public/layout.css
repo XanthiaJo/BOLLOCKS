@@ -8,7 +8,7 @@ nav a.on{background:#2b3a5e;color:#fff}
 #shell{flex:1;display:flex;min-height:0}
 #content{flex:1;min-width:0;display:flex;flex-direction:column}
 #sidebar{width:220px;flex:none}
-#rsidebar{width:340px;flex:none;padding:12px;background:#141517;overflow-y:auto;border-left:1px solid #232426}
+#rsidebar{width:400px;flex:none;padding:12px;background:#141517;overflow-y:auto;border-left:1px solid #232426}
 #sidebar.hide,#rsidebar.hide{display:none}
 .navtoggle{color:#9ab;text-decoration:none;padding:6px 10px;cursor:pointer;font-size:1.1em}
 .navtoggle:hover{color:#fff}
