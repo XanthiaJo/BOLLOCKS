@@ -48,113 +48,113 @@
     <div style="opacity:.45;pointer-events:none"><label class="cb"><input type="checkbox" disabled> Read-only mode — protect memories</label></div>
 
     <h4>Memory LLM</h4>
-    <div class="lbl">Extraction profile (default = active)</div>
+    <div class="lbl" title="Which API profile runs memory extraction — pick a cheaper model here if you like.">Extraction profile (default = active)</div>
     <select id="set_profile" onchange="saveSet()" style="width:220px"></select>
     <div class="ph">
-      <div class="row"><span class="lbl">Generation budget (tokens)</span><input value="8192" disabled style="width:80px;display:inline-block"></div>
+      <div class="row"><span class="lbl" title="Max tokens the memory LLM may use per extraction call. Unlimited warns it may be slow/costly." title="Max tokens the memory LLM may use per extraction call. Unlimited warns it may be slow/costly.">Generation budget (tokens)</span><input value="8192" disabled style="width:80px;display:inline-block"></div>
       <label class="cb"><input type="checkbox" disabled> Unlimited (-1)</label>
       <label class="cb"><input type="checkbox" disabled> Advanced mode</label>
       <label class="cb"><input type="checkbox" disabled> Show activity indicator</label>
       <label class="cb"><input type="checkbox" disabled> Unified injection</label>
       <label class="cb"><input type="checkbox" disabled> Generate contextual triggers</label>
       <label class="cb"><input type="checkbox" disabled> Auto-tune budgets</label>
-      <div class="row"><span class="lbl">Injection refresh every N AI messages</span><input value="1" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Hardware profile</span><input placeholder="Profile B: hosted / high-performance" disabled></div>
+      <div class="row"><span class="lbl" title="How often the injected memory block is rebuilt. 1 = every generation." title="How often the injected memory block is rebuilt. 1 = every generation.">Injection refresh every N AI messages</span><input value="1" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Preset matching your machine/API speed for extraction quality." title="Preset matching your machine/API speed for extraction quality.">Hardware profile</span><input placeholder="Profile B: hosted / high-performance" disabled></div>
     </div>
 
     <h4>Extraction</h4>
-    <div class="row"><span class="lbl">Extract after every</span><input type="number" id="set_every" min="2" max="100" onchange="saveSet()" style="width:80px;display:inline-block"></div> <span class="lbl" style="display:inline">new messages</span>
-    <div class="row"><span class="lbl">Max stored smart memories</span><input type="number" id="set_max" min="5" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl" title="How many new messages before the extractor summarizes them." title="How many new messages before the extractor summarizes them.">Extract after every</span><input type="number" id="set_every" min="2" max="100" onchange="saveSet()" style="width:80px;display:inline-block"></div> <span class="lbl" style="display:inline">new messages</span>
+    <div class="row"><span class="lbl" title="Cap on auto-extracted memories; oldest are dropped." title="Cap on auto-extracted memories; oldest are dropped.">Max stored smart memories</span><input type="number" id="set_max" min="5" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
     <div class="ph">
-      <div class="lbl">Extraction prompt template</div>
+      <div class="lbl" title="The instruction sent to the memory LLM when summarizing chat into memories.">Extraction prompt template</div>
       <textarea placeholder="(default extraction prompt)" disabled style="min-height:60px"></textarea>
-      <div class="row"><span class="lbl">Context threshold (%)</span><input value="80" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Response length (tokens)</span><input value="2000" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><input value="80" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><input value="2000" disabled style="width:80px"></div>
     </div>
 
     <h4>Injection</h4>
-    <div class="row"><span class="lbl">Token budget</span><input type="number" id="set_budget" min="50" max="4000" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl" title="Max tokens of memory content injected into each generation prompt." title="Max tokens of memory content injected into each generation prompt.">Token budget</span><input type="number" id="set_budget" min="50" max="4000" onchange="saveSet()" style="width:80px;display:inline-block"></div>
     <div class="ph">
-      <div class="lbl">Injection position</div>
+      <div class="lbl" title="Where memory text lands in the prompt: before/after the system block, or mid-history at depth N.">Injection position</div>
       <label class="cb"><input type="radio" name="pos" checked disabled> Before main prompt</label>
       <label class="cb"><input type="radio" name="pos" disabled> After main prompt</label>
       <label class="cb"><input type="radio" name="pos" disabled> In-chat @ depth</label>
       <div class="row"><span class="lbl">Triggered memories: in-chat depth</span><input value="0" disabled style="width:80px"></div>
-      <div class="lbl">Injection template</div>
+      <div class="lbl" title="Wrapper format for injected memory text.">Injection template</div>
       <textarea placeholder="(default template)" disabled style="min-height:60px"></textarea>
-      <div class="row"><span class="lbl">Trigger keywords (inject only when mentioned)</span><input placeholder="comma-separated triggers" disabled></div>
+      <div class="row"><span class="lbl" title="If set, this block only injects when a keyword appears in recent chat." title="If set, this block only injects when a keyword appears in recent chat.">Trigger keywords (inject only when mentioned)</span><input placeholder="comma-separated triggers" disabled></div>
     </div>
 
     <h4>Session Memory</h4>
     <div class="ph">
-      <div class="row"><span class="lbl">Extract after every N AI messages</span><input value="10" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Max session memories</span><input value="30" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Session injection budget</span><input value="400" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="How many AI replies pass before a memory extraction runs." title="How many AI replies pass before a memory extraction runs.">Extract after every N AI messages</span><input value="10" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Cap on session-scoped (temporary) memories; oldest drop off." title="Cap on session-scoped (temporary) memories; oldest drop off.">Max session memories</span><input value="30" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for session-memory text in prompts." title="Token cap for session-memory text in prompts.">Session injection budget</span><input value="400" disabled style="width:80px"></div>
     </div>
 
     <h4>Current Summary</h4>
     <div class="ph">
-      <div class="row"><span class="lbl">Context threshold (%)</span><input value="80" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Response length (tokens)</span><input value="2000" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Summary injection budget</span><input value="500" disabled style="width:80px"></div>
-      <div class="lbl">Summary template</div>
+      <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><input value="80" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><input value="2000" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for the rolling chat summary." title="Token cap for the rolling chat summary.">Summary injection budget</span><input value="500" disabled style="width:80px"></div>
+      <div class="lbl" title="Format the rolling summary is injected with.">Summary template</div>
       <textarea disabled style="min-height:50px"></textarea>
     </div>
 
     <h4>Scene History</h4>
     <div class="ph">
       <label class="cb"><input type="checkbox" disabled> Use AI scene detection</label>
-      <div class="row"><span class="lbl">Keep last N scenes</span><input value="5" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Scene injection budget</span><input value="300" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="How many recent scene summaries to retain." title="How many recent scene summaries to retain.">Keep last N scenes</span><input value="5" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for scene history in prompts." title="Token cap for scene history in prompts.">Scene injection budget</span><input value="300" disabled style="width:80px"></div>
     </div>
 
     <h4>Active Threads</h4>
     <div class="ph">
-      <div class="row"><span class="lbl">Max tracked arcs</span><input value="10" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Thread injection budget</span><input value="700" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="How many open story threads are tracked at once." title="How many open story threads are tracked at once.">Max tracked arcs</span><input value="10" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for open-threads context in prompts." title="Token cap for open-threads context in prompts.">Thread injection budget</span><input value="700" disabled style="width:80px"></div>
     </div>
 
     <h4>Consolidation</h4>
     <div class="ph">
-      <div class="row"><span class="lbl">Consolidate [fact] after N unprocessed</span><input value="4" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Consolidate [relationship] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Consolidate [preference] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Consolidate [event] after N</span><input value="4" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Consolidate [scene] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Consolidate [revelation] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Consolidate [development] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Consolidate [detail] after N</span><input value="3" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Merge N pending fact-memories into one consolidated entry." title="Merge N pending fact-memories into one consolidated entry.">Consolidate [fact] after N unprocessed</span><input value="4" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for relationship-type memories." title="Same, for relationship-type memories.">Consolidate [relationship] after N</span><input value="3" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for preference-type memories." title="Same, for preference-type memories.">Consolidate [preference] after N</span><input value="3" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for event-type memories." title="Same, for event-type memories.">Consolidate [event] after N</span><input value="4" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for scene summaries." title="Same, for scene summaries.">Consolidate [scene] after N</span><input value="3" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for character revelations." title="Same, for character revelations.">Consolidate [revelation] after N</span><input value="3" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for character development notes." title="Same, for character development notes.">Consolidate [development] after N</span><input value="3" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for detail memories." title="Same, for detail memories.">Consolidate [detail] after N</span><input value="3" disabled style="width:80px"></div>
     </div>
 
     <h4>Canon</h4>
     <div class="ph">
-      <div class="row"><span class="lbl">Canon injection budget</span><input value="800" disabled style="width:80px"></div>
-      <div class="lbl">Canon template</div><textarea disabled style="min-height:50px"></textarea>
+      <div class="row"><span class="lbl" title="Token cap for canon (always-true world facts) in prompts." title="Token cap for canon (always-true world facts) in prompts.">Canon injection budget</span><input value="800" disabled style="width:80px"></div>
+      <div class="lbl" title="Format canon facts are injected with.">Canon template</div><textarea disabled style="min-height:50px"></textarea>
     </div>
 
     <h4>Profiles</h4>
     <div class="ph">
-      <div class="row"><span class="lbl">Regenerate when older than</span><input value="30m" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Also regenerate every N msgs</span><input value="20" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Profile injection budget</span><input value="400" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Rebuild the character profile if older than this." title="Rebuild the character profile if older than this.">Regenerate when older than</span><input value="30m" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Or rebuild after this many messages, whichever first." title="Or rebuild after this many messages, whichever first.">Also regenerate every N msgs</span><input value="20" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for generated character profiles in prompts." title="Token cap for generated character profiles in prompts.">Profile injection budget</span><input value="400" disabled style="width:80px"></div>
     </div>
 
     <h4>Pairs (relationships)</h4>
     <div class="ph">
-      <div class="row"><span class="lbl">Pairs injection budget</span><input value="250" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for relationship-pair data in prompts." title="Token cap for relationship-pair data in prompts.">Pairs injection budget</span><input value="250" disabled style="width:80px"></div>
     </div>
 
     <h4>Perspective</h4>
     <div class="ph">
       <label class="cb"><input type="checkbox" disabled> Inject "does not know" entries</label>
       <label class="cb"><input type="checkbox" disabled> Frame secondhand long-term memories</label>
-      <div class="row"><span class="lbl">Perspective injection budget</span><input value="200" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for perspective entries in prompts." title="Token cap for perspective entries in prompts.">Perspective injection budget</span><input value="200" disabled style="width:80px"></div>
     </div>
 
     <h4>Recap</h4>
     <div class="ph">
-      <div class="row"><span class="lbl">Generate recap after</span><input value="4h" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl">Recap injection budget</span><input value="200" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Time between automatic scene/session recaps." title="Time between automatic scene/session recaps.">Generate recap after</span><input value="4h" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for recap text in prompts." title="Token cap for recap text in prompts.">Recap injection budget</span><input value="200" disabled style="width:80px"></div>
     </div>
 
     <h4>State cards</h4>
@@ -166,9 +166,9 @@
     <h4>Deduplication</h4>
     <div class="ph">
       <label class="cb"><input type="checkbox" disabled> Use semantic embeddings</label>
-      <div class="row"><span class="lbl">Embedding source</span><input placeholder="ollama / openai" disabled></div>
-      <div class="row"><span class="lbl">Embedding URL</span><input disabled></div>
-      <div class="row"><span class="lbl">Embedding model</span><input placeholder="nomic-embed-text" disabled></div>
+      <div class="row"><span class="lbl" title="Service providing embeddings." title="Service providing embeddings.">Embedding source</span><input placeholder="ollama / openai" disabled></div>
+      <div class="row"><span class="lbl" title="Endpoint for the embeddings service." title="Endpoint for the embeddings service.">Embedding URL</span><input disabled></div>
+      <div class="row"><span class="lbl" title="Model used for embeddings, e.g. nomic-embed-text." title="Model used for embeddings, e.g. nomic-embed-text.">Embedding model</span><input placeholder="nomic-embed-text" disabled></div>
       <label class="cb"><input type="checkbox" disabled> Keep model in memory</label>
     </div>
   </div>
