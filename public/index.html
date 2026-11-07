@@ -23,6 +23,7 @@ button.gen{background:#4a7c3a}
 .room.on{background:#2b3a5e}
 .room .n{font-weight:600}
 .member{padding:4px 8px;font-size:.9em;color:#abc;display:flex;align-items:center;gap:6px}
+.cap{display:block;font-size:.78em;color:#789;margin:6px 0 2px;text-transform:uppercase;letter-spacing:.04em}
 .member .fgen{margin:0;width:22px;height:22px;padding:0;font-size:10px;line-height:20px;text-align:center;flex:none;background:transparent;border:1px solid #3a4a3e;border-radius:4px;cursor:pointer;color:#6a8a6e}
 .member .fgen:hover{background:#4a7c3a;color:#fff;border-color:#4a7c3a}
 .member .fgen:disabled{opacity:.3;cursor:default}
@@ -57,7 +58,8 @@ button.gen{background:#4a7c3a}
     <option value="roundrobin">Round-robin</option>
   </select>
   <h3 style="margin-top:16px">Chat settings</h3>
-  World<br><select id="worldsel" onchange="setWorld(this.value)" style="width:100%"></select>
+  <div class="cap">World</div>
+  <select id="worldsel" onchange="setWorld(this.value)" style="width:100%"></select>
   <div style="font-size:.8em;color:#789;margin-top:8px" title="Cap on total prompt size — oldest history is dropped when exceeded">Max prompt tokens (0 = unlimited)</div>
   <input type="number" id="ctxmax" min="0" step="500" onchange="setCtx(this.value)" style="width:100%">
   <h3 style="margin-top:16px">Prompt use</h3>
