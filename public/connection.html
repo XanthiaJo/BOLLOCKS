@@ -78,7 +78,6 @@ async function load(){
       </div>
       <div class="btns" onclick="event.stopPropagation()">
         ${p.active?'':`<button class="act" onclick="activate(${p.id})">Make active</button>`}
-        <button onclick='edit(${JSON.stringify(p).replace(/'/g,"&#39;")})'>Edit</button>
         <button class="del" onclick="del(${p.id})">Delete</button>
       </div>
     </div>`).join('')||'<small>No profiles yet.</small>';
