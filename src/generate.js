@@ -20,8 +20,20 @@ export async function generateReply(roomId, card) {
         'SELECT name, text, kind FROM messages WHERE room_id=? ORDER BY id DESC LIMIT 30'
     ).all(roomId).reverse();
 
+    // Keyword-triggered world entries: constant entries always in; keyed
+    // entries fire when a key appears in recent chat or the card's fields.
+    const scanText = (history.map(m => `${m.name} ${m.text}`).join('\n')
+        + ' ' + (card.name || '') + ' ' + (card.description || '')).toLowerCase();
+    const world = db.prepare('SELECT * FROM world_entries WHERE room_id=? AND enabled=1 ORDER BY ord,id')
+        .all(roomId)
+        .filter(e => e.constant || (JSON.parse(e.keys || '[]').some(k => k && scanText.includes(k.toLowerCase()))));
+    const worldText = world.length
+        ? 'World info:\n' + world.map(e => e.content).join('\n\n')
+        : null;
+
     const system = [
         card.system_prompt || `You are ${card.name}.`,
+        worldText,
         card.description && `Description:\n${card.description}`,
         card.personality && `Personality:\n${card.personality}`,
         card.scenario && `Scenario:\n${card.scenario}`,

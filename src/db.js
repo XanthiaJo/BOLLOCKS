@@ -46,6 +46,15 @@ CREATE TABLE IF NOT EXISTS messages (
     supersedes INTEGER REFERENCES messages(id)
 );
 CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, id);
+CREATE TABLE IF NOT EXISTS world_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id INTEGER NOT NULL REFERENCES rooms(id),
+    keys TEXT DEFAULT '[]',          -- JSON array of trigger keywords
+    content TEXT NOT NULL DEFAULT '',
+    constant INTEGER DEFAULT 0,      -- 1 = always injected, no keyword needed
+    enabled INTEGER DEFAULT 1,
+    ord INTEGER DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS api_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),

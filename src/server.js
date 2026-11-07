@@ -43,6 +43,35 @@ const router = {
         catch { send(res, 409, { error: 'handle taken' }); }
     },
     'GET /api/me': async (req, res, u) => send(res, 200, { handle: u.handle }),
+    'GET /api/world': async (req, res, u) => {
+        const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room') || 1);
+        const entries = db.prepare('SELECT * FROM world_entries WHERE room_id=? ORDER BY ord, id').all(roomId);
+        send(res, 200, { entries });
+    },
+    'POST /api/world': async (req, res, u) => {
+        const b = await readBody(req);
+        const keys = typeof b.keys === 'string'
+            ? b.keys.split(',').map(k => k.trim()).filter(Boolean) : (b.keys || []);
+        const id = db.prepare('INSERT INTO world_entries (room_id,keys,content,constant,enabled,ord) VALUES (?,?,?,?,?,?)')
+            .run(b.room || 1, JSON.stringify(keys), b.content || '', b.constant ? 1 : 0, b.enabled === false ? 0 : 1, b.ord || 0).lastInsertRowid;
+        send(res, 200, { id });
+    },
+    'POST /api/world/update': async (req, res, u) => {
+        const b = await readBody(req);
+        const keys = typeof b.keys === 'string'
+            ? JSON.stringify(b.keys.split(',').map(k => k.trim()).filter(Boolean))
+            : (b.keys ? JSON.stringify(b.keys) : null);
+        db.prepare(`UPDATE world_entries SET keys=COALESCE(?,keys), content=COALESCE(?,content),
+            constant=COALESCE(?,constant), enabled=COALESCE(?,enabled), ord=COALESCE(?,ord) WHERE id=?`)
+            .run(keys, b.content, b.constant === undefined ? null : (b.constant ? 1 : 0),
+                b.enabled === undefined ? null : (b.enabled ? 1 : 0), b.ord, b.id);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/world/delete': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('DELETE FROM world_entries WHERE id=?').run(b.id);
+        send(res, 200, { ok: true });
+    },
     'GET /api/users': async (req, res, u) =>
         send(res, 200, { users: db.prepare('SELECT handle FROM users ORDER BY id').all() }),
     'GET /api/cards': async (req, res, u) => {

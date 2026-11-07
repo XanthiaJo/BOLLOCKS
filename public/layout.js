@@ -9,6 +9,7 @@
     const NAV = [
         ['Chat', '/'],
         ['Characters', '/characters.html'],
+        ['World', '/world.html'],
         ['Connection', '/connection.html'],
     ];
     const here = location.pathname === '/index.html' ? '/' : location.pathname;
