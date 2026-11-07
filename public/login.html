@@ -4,40 +4,33 @@
 <meta charset="utf-8"><title>RP · Login</title>
 <style>
 body{margin:0;background:#0d0e10;color:#ddd;font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.box{width:320px}
-h1{font-size:1.4em;font-weight:700;text-align:center}
-.acc{display:flex;align-items:center;gap:10px;padding:14px;border:1px solid #2b3a5e;border-radius:8px;background:#191b24;margin-bottom:10px;cursor:pointer}
-.acc:hover{border-color:#3a5ccc}
-.acc .n{font-weight:700}
+.box{width:300px;padding:28px;border:1px solid #2b3a5e;border-radius:8px;background:#191b24}
+h1{font-size:1.3em;font-weight:700;text-align:center;margin:0 0 18px}
+label{display:block;font-size:.78em;color:#789;text-transform:uppercase;letter-spacing:.04em;margin:10px 0 3px}
 input{width:100%;padding:10px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:6px;box-sizing:border-box}
-button{width:100%;padding:10px;background:#3a5ccc;border:none;color:#fff;border-radius:6px;cursor:pointer;margin-top:10px}
-.err{color:#c66;text-align:center;font-size:.85em;min-height:1.2em}
+button{width:100%;padding:10px;background:#3a5ccc;border:none;color:#fff;border-radius:6px;cursor:pointer;margin-top:16px}
+.err{color:#c66;text-align:center;font-size:.85em;min-height:1.2em;margin-top:8px}
 </style>
 </head>
 <body>
-<div class="box">
+<form class="box" onsubmit="go(event)">
   <h1>Sign in</h1>
-  <div id="accs"></div>
-  <div id="pwbox" style="display:none">
-    <input type="password" id="pw" placeholder="Password" onkeydown="if(event.key==='Enter')go()">
-    <button onclick="go()">Sign in</button>
-  </div>
+  <label>Username</label>
+  <input id="handle" autocomplete="username" autofocus>
+  <label>Password</label>
+  <input type="password" id="pw" autocomplete="current-password">
+  <button type="submit">Sign in</button>
   <div class="err" id="err"></div>
-</div>
+</form>
 <script>
-const accounts = ['creamms', 'entropy75'];
-let picked = '';
-document.getElementById('accs').innerHTML = accounts.map(h =>
-    `<div class="acc" onclick="pick('${h}')"><div class="n">${h}</div></div>`).join('');
-function pick(h) {
-    picked = h;
-    document.getElementById('pwbox').style.display = 'block';
-    document.getElementById('pw').focus();
-}
-async function go() {
+async function go(e) {
+    e.preventDefault();
     const r = await fetch('/api/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ handle: picked, password: document.getElementById('pw').value }),
+        body: JSON.stringify({
+            handle: document.getElementById('handle').value.trim(),
+            password: document.getElementById('pw').value,
+        }),
     }).then(r => r.json());
     if (r.error) return document.getElementById('err').textContent = r.error;
     localStorage.mp_token = r.token;
