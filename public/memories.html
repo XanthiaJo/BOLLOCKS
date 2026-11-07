@@ -34,7 +34,7 @@ const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.json());
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const ROOM=Number(localStorage.mp_room||1);
-let cardId=0,cardName='';
+let cardId=-1,cardName='';
 
 let roomName='';
 async function load(){
@@ -45,7 +45,7 @@ async function load(){
   $('rcards').innerHTML=(cards||[]).map(c=>
       `<div class="rprof${c.id===cardId?' on':''}" onclick="pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')"><div class="n">${esc(c.name)}</div></div>`
     ).join('')||'<small>None</small>';
-  if(!cardId){$('list').innerHTML='';return}
+  if(cardId<0){$('list').innerHTML='';return}
   const {memories}=await get(`memories?card=${cardId}&room=${ROOM}`);
   $('title').textContent=`${cardName}'s memories`;
   $('pickmsg').style.display='none';$('addbox').style.display='block';
