@@ -157,7 +157,7 @@ const router = {
         send(res, 200, { ok: true });
     },
     'GET /api/users': async (req, res, u) =>
-        send(res, 200, { users: db.prepare('SELECT handle FROM users ORDER BY id').all() }),
+        send(res, 200, { users: db.prepare('SELECT id,handle FROM users ORDER BY id').all() }),
     'GET /api/cards': async (req, res, u) => {
         // Own cards + cards in rooms shared with the caller — a non-owner
         // shouldn't even know other characters exist.
@@ -239,12 +239,22 @@ const router = {
     },
     'POST /api/members': async (req, res, u) => {
         const b = await readBody(req);
-        // Only the owner may place a character into a room.
+        if (b.userId) {
+            db.prepare('INSERT INTO members (room_id,user_id,kind) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM members WHERE room_id=? AND user_id=? AND card_id IS NULL)')
+                .run(b.room || 1, b.userId, 'human', b.room || 1, b.userId);
+            return send(res, 200, { ok: true });
+        }
         const card = db.prepare('SELECT owner_id FROM cards WHERE id=?').get(b.cardId);
         if (!card) return send(res, 404, { error: 'card not found' });
         if (card.owner_id !== u.id) return send(res, 403, { error: 'not your character' });
         db.prepare('INSERT INTO members (room_id,card_id,kind) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM members WHERE room_id=? AND card_id=?)')
             .run(b.room || 1, b.cardId, b.kind || 'ai', b.room || 1, b.cardId);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/members/remove': async (req, res, u) => {
+        const b = await readBody(req);
+        if (b.cardId) db.prepare('DELETE FROM members WHERE room_id=? AND card_id=?').run(b.room || 1, b.cardId);
+        else if (b.userId) db.prepare('DELETE FROM members WHERE room_id=? AND user_id=? AND card_id IS NULL').run(b.room || 1, b.userId);
         send(res, 200, { ok: true });
     },
     'POST /api/members/remove': async (req, res, u) => {

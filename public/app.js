@@ -49,10 +49,18 @@ async function loadRoom() {
                 ? `<span class="mname">${m.card_name}</span>` +
                   `<input type="range" class="talk" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setTalk(${m.card_id},this.value)">` +
                   `<span class="tv">${m.talkativeness ?? 50}%</span>` +
-                  `<button class="fgen" title="Generate" onclick="genCard(${m.card_id},this)">▶</button>`
-                : `<span>${m.card_name || m.handle || '?'} <small>${m.kind}</small></span>`) +
+                  `<button class="fgen" title="Generate" onclick="genCard(${m.card_id},this)">▶</button>` +
+                  `<button class="frem" title="Remove" onclick="remMember(${m.card_id},null,this)">✕</button>`
+                : `<span>${m.card_name || m.handle || '?'} <small>${m.kind}</small></span>` +
+                  `<button class="frem" title="Remove" onclick="remMember(null,${m.user_id},this)">✕</button>`) +
             `</div>`)
-        .join('');
+        .join('') + `<div class="member" style="margin-top:6px"><select id="addpick" style="flex:1;font-size:.85em"></select>` +
+            `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
+    const cur = new Set((r.members || []).map(m => m.card_id ? 'c' + m.card_id : 'u' + m.user_id));
+    const [{ users }, { cards }] = await Promise.all([get('users'), get('cards')]);
+    $('addpick').innerHTML =
+        (users || []).filter(x => !cur.has('u' + x.id)).map(x => `<option value="u${x.id}">${x.handle}</option>`).join('') +
+        (cards || []).filter(x => !cur.has('c' + x.id)).map(x => `<option value="c${x.id}">${x.name} (ai)</option>`).join('') || '<option>— everyone\'s in —</option>';
     document.title = `RP · room ${room}`;
     if (es) es.close();
     es = new EventSource(`/api/stream?room=${room}&token=${token}${AS ? '&as=' + AS : ''}`);
@@ -85,6 +93,18 @@ async function renderWorld() {
 }
 async function setWorld(bookId) {
     await api('world/link', { room, book: Number(bookId) || null });
+}
+async function addMember() {
+    const v = $('addpick').value;
+    if (!v) return;
+    const [kind, id] = [v[0], Number(v.slice(1))];
+    await api('members', kind === 'c' ? { room, cardId: id, kind: 'ai' } : { room, userId: id });
+    loadRoom();
+}
+async function remMember(cardId, userId, btn) {
+    btn.disabled = true;
+    await api('members/remove', { room, cardId, userId });
+    loadRoom();
 }
 async function setTrig(mode) {
     await api('room/trigger', { room, mode });
