@@ -12,7 +12,9 @@
 .tab{background:#2a2b2e;border:1px solid #3a3b3e;color:#9ab;padding:5px 14px;border-radius:4px;cursor:pointer;width:auto;font-size:.85em}
 .tab.on{background:#3a5ccc;color:#fff;border-color:#3a5ccc}
 #setpanel h4{color:#789;margin:16px 0 4px;font-size:.85em;text-transform:uppercase;letter-spacing:.04em}
-#setpanel .lbl{font-size:.8em;color:#789;margin:6px 0 2px}
+#setpanel .lbl{font-size:.8em;color:#789;margin:6px 0 2px;display:inline-block}
+#setpanel .lbl+input[type=number],#setpanel .lbl+input:not([type]){display:inline-block;margin-left:8px;vertical-align:middle;width:80px}
+#setpanel .lbl+input:not([type]){width:160px}
 #setpanel .ph{opacity:.45;pointer-events:none;margin-top:4px}
 #setpanel input[type=number]{display:inline-block}
 </style>
