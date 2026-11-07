@@ -192,9 +192,13 @@ export function seed() {
     for (const h of ['creamms', 'karima', 'blake', 'entropy75']) {
         if (!db.prepare('SELECT id FROM users WHERE handle=?').get(h))
             createUser(h, 'changeme');
-        const uid = db.prepare('SELECT id FROM users WHERE handle=?').get(h).id;
-        if (!db.prepare('SELECT 1 FROM members WHERE room_id=? AND user_id=? AND card_id IS NULL').get(room, uid))
+    }
+    // Only auto-join the test users on a fresh install (no humans anywhere).
+    if (!db.prepare('SELECT 1 FROM members WHERE user_id IS NOT NULL LIMIT 1').get()) {
+        for (const h of ['creamms', 'karima', 'blake', 'entropy75']) {
+            const uid = db.prepare('SELECT id FROM users WHERE handle=?').get(h).id;
             db.prepare('INSERT INTO members (room_id,user_id,kind) VALUES (?,?,?)').run(room, uid, 'human');
+        }
     }
     if (db.prepare('SELECT COUNT(*) c FROM messages').get().c) return;
     const mptest = db.prepare('SELECT id FROM users WHERE handle=?').get('mptest')?.id;

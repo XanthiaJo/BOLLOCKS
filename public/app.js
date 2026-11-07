@@ -3,11 +3,11 @@ let me = '';
 let room = Number(localStorage.mp_room || 1);
 let es = null;
 
-const AS = new URLSearchParams(location.search).get('as') || '';
+const AS = '';
 const $ = id => document.getElementById(id);
 const api = (p, b, method = 'POST') => fetch(`/api/${p}`, {
     method,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(AS ? { 'X-As-User': AS } : {}) },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     ...(method === 'POST' ? { body: JSON.stringify(b || {}) } : {}),
 }).then(r => r.json());
 const get = p => api(p, null, 'GET');
@@ -63,7 +63,7 @@ async function loadRoom() {
         (cards || []).filter(x => !cur.has('c' + x.id)).map(x => `<option value="c${x.id}">${x.name} (ai)</option>`).join('') || '<option>— everyone\'s in —</option>';
     document.title = `RP · room ${room}`;
     if (es) es.close();
-    es = new EventSource(`/api/stream?room=${room}&token=${token}${AS ? '&as=' + AS : ''}`);
+    es = new EventSource(`/api/stream?room=${room}&token=${token}`);
     es.onmessage = e => {
         const d = JSON.parse(e.data);
         if (d.type === 'message' && d.message.room_id === room) addMsg(d.message);
@@ -178,7 +178,7 @@ async function renderToks() {
                 'Post-History Instructions': '/characters.html',
             }[k];
             const lbl = href
-                ? `<a href="${href}${AS ? '?as=' + AS : ''}" style="color:#9ab">${k}</a>` : `<span>${k}</span>`;
+                ? `<a href="${href}" style="color:#9ab">${k}</a>` : `<span>${k}</span>`;
             return `<div style="display:flex;justify-content:space-between;font-size:.8em;color:#9ab"><span>${lbl}</span><span>${v}</span></div>`;
         }).join('');
 }

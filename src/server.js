@@ -25,8 +25,6 @@ const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'applic
 // Local testing mode: no token → ?as=<handle> impersonation, else first user.
 const auth = req =>
     userForToken(req.headers.authorization?.replace(/^Bearer /, '') || new URL(req.url, 'http://x').searchParams.get('token'))
-    || db.prepare('SELECT * FROM users WHERE handle=?').get(
-        new URL(req.url, 'http://x').searchParams.get('as') || req.headers['x-as-user'] || '')
     || db.prepare('SELECT * FROM users ORDER BY id LIMIT 1').get();
 
 const router = {

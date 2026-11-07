@@ -40,8 +40,7 @@ textarea{min-height:80px;font-family:inherit}
 </div>
 <script src="layout.js"></script>
 <script>
-const AS=new URLSearchParams(location.search).get('as')||'';
-const H=()=>({'Content-Type':'application/json',...(AS?{'X-As-User':AS}:{})});
+const H=()=>({'Content-Type':'application/json'});
 const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.json());
 const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.json());
 const $=id=>document.getElementById(id);
@@ -54,7 +53,7 @@ async function load(){
   const b=(books||[]).find(b=>b.id===BOOK);
   $('bookname').textContent=b?.name||('Book #'+BOOK);
   $('rbooks').innerHTML=(books||[]).map(x=>
-    `<div class="rprof${x.id===BOOK?' on':''}" onclick="location='/world-edit.html?id=${x.id}${AS?'&as='+AS:''}'"><div class="n">${esc(x.name)}</div><div class="m">${x.cnt||0} entries</div></div>`
+    `<div class="rprof${x.id===BOOK?' on':''}" onclick="location='/world-edit.html?id=${x.id}'"><div class="n">${esc(x.name)}</div><div class="m">${x.cnt||0} entries</div></div>`
   ).join('')||'<small>No books</small>';
   $('list').innerHTML=(entries||[]).map(e=>`
     <div class="card ent${e.enabled?'':' off'}">
