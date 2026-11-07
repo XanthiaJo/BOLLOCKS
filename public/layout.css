@@ -10,8 +10,10 @@ nav a.on{background:#2b3a5e;color:#fff}
 #sidebar{padding:12px;background:#141517;overflow-y:auto;border-right:1px solid #232426}
 #sidebar h3{margin:4px 0 8px;font-size:.85em;text-transform:uppercase;color:#789;letter-spacing:.06em}
 #content{min-height:0;display:flex;flex-direction:column;overflow:hidden}
-input,textarea,button{padding:8px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:4px;margin:3px 0}
-input,textarea{width:100%}
+input,textarea,select,button{padding:8px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:4px;margin:3px 0}
+input,textarea,select{width:100%}
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23789'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+select option{background:#2a2b2e;color:#ddd}
 button{background:#3a5ccc;cursor:pointer;border:none}
 button.del{background:#7c3a3a}
 button.act{background:#4a7c3a}
