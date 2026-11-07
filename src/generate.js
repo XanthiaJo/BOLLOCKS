@@ -20,8 +20,15 @@ export async function generateReply(roomId, card) {
         'SELECT name, text, kind FROM messages WHERE room_id=? ORDER BY id DESC LIMIT 30'
     ).all(roomId).reverse();
 
-    const system = `You are ${card.name}. ${card.description || ''}\n` +
-        'You are an NPC in a shared roleplay. Write ONLY your character\'s next message.';
+    const system = [
+        card.system_prompt || `You are ${card.name}.`,
+        card.description && `Description:\n${card.description}`,
+        card.personality && `Personality:\n${card.personality}`,
+        card.scenario && `Scenario:\n${card.scenario}`,
+        card.mes_example && `Example dialogue:\n${card.mes_example}`,
+        `You are an NPC in a shared roleplay. Write ONLY ${card.name}'s next message.` +
+            (card.post_history_instructions ? ` ${card.post_history_instructions}` : ''),
+    ].filter(Boolean).join('\n\n');
 
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db, seed, login, userForToken, createUser, activeProfile, migrateProfiles, migrateSchema } from './db.js';
 import { generateReply } from './generate.js';
+import { extractCardJson, normalizeCard } from './pngcard.js';
 
 const PUB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const PORT = Number(process.env.PORT || 8100);
@@ -59,15 +60,62 @@ const router = {
     'POST /api/cards': async (req, res, u) => {
         const b = await readBody(req);
         if (!b.name) return send(res, 400, { error: 'name required' });
-        const id = db.prepare('INSERT INTO cards (owner_id,name,description,first_message,profile_id) VALUES (?,?,?,?,?)')
-            .run(u.id, b.name, b.description || '', b.first_message || '', b.profileId || null).lastInsertRowid;
+        const id = db.prepare(`INSERT INTO cards (owner_id,name,description,personality,scenario,first_message,
+            mes_example,system_prompt,post_history_instructions,tags,creator,profile_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+            .run(u.id, b.name, b.description || '', b.personality || '', b.scenario || '', b.first_message || '',
+                b.mes_example || '', b.system_prompt || '', b.post_history_instructions || '',
+                JSON.stringify(typeof b.tags === 'string' ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : (b.tags || [])),
+                b.creator || '', b.profileId || null).lastInsertRowid;
         send(res, 200, { id });
+    },
+    // Import a SillyTavern card: {png_b64} for PNG cards, {card} for JSON.
+    'POST /api/cards/import': async (req, res, u) => {
+        const b = await readBody(req);
+        let raw = null;
+        let avatarPath = '';
+        if (b.png_b64) {
+            const png = Buffer.from(b.png_b64, 'base64');
+            raw = extractCardJson(png);
+            if (!raw) return send(res, 400, { error: 'no character data in PNG' });
+            const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'cards');
+            fs.mkdirSync(dir, { recursive: true });
+            avatarPath = `cards/import-${Date.now()}.png`;
+            fs.writeFileSync(path.join(dir, path.basename(avatarPath)), png);
+        } else if (b.card) {
+            raw = typeof b.card === 'string' ? JSON.parse(b.card) : b.card;
+        }
+        if (!raw) return send(res, 400, { error: 'no card data supplied' });
+        const c = normalizeCard(raw);
+        const id = db.prepare(`INSERT INTO cards (owner_id,name,description,personality,scenario,first_message,mes_example,
+            system_prompt,post_history_instructions,alternate_greetings,tags,creator,creatorcomment,character_version,avatar,card_json)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+            .run(u.id, c.name, c.description, c.personality, c.scenario, c.first_mes, c.mes_example,
+                c.system_prompt, c.post_history_instructions, JSON.stringify(c.alternate_greetings),
+                JSON.stringify(c.tags), c.creator, c.creatorcomment, c.character_version, avatarPath,
+                JSON.stringify(raw)).lastInsertRowid;
+        send(res, 200, { id, name: c.name });
+    },
+    // Card avatar image.
+    'GET /api/avatar': (req, res) => {
+        const id = Number(new URL(req.url, 'http://x').searchParams.get('id'));
+        const c = db.prepare('SELECT avatar FROM cards WHERE id=?').get(id);
+        if (!c?.avatar) return send(res, 404, { error: 'no avatar' });
+        const file = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', c.avatar);
+        if (!fs.existsSync(file)) return send(res, 404, { error: 'no avatar file' });
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        fs.createReadStream(file).pipe(res);
     },
     'POST /api/cards/update': async (req, res, u) => {
         const b = await readBody(req);
         db.prepare(`UPDATE cards SET name=COALESCE(?,name), description=COALESCE(?,description),
-            first_message=COALESCE(?,first_message), profile_id=? WHERE id=? AND owner_id=?`)
-            .run(b.name, b.description, b.first_message, b.profileId ?? null, b.id, u.id);
+            personality=COALESCE(?,personality), scenario=COALESCE(?,scenario),
+            first_message=COALESCE(?,first_message), mes_example=COALESCE(?,mes_example),
+            system_prompt=COALESCE(?,system_prompt), post_history_instructions=COALESCE(?,post_history_instructions),
+            tags=COALESCE(?,tags), creator=COALESCE(?,creator), profile_id=? WHERE id=? AND owner_id=?`)
+            .run(b.name, b.description, b.personality, b.scenario, b.first_message, b.mes_example,
+                b.system_prompt, b.post_history_instructions,
+                b.tags !== undefined ? JSON.stringify(typeof b.tags === 'string' ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : b.tags) : null,
+                b.creator, b.profileId ?? null, b.id, u.id);
         send(res, 200, { ok: true });
     },
     'POST /api/cards/delete': async (req, res, u) => {

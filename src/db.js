@@ -88,8 +88,24 @@ export function activeProfile(userId) {
 /** Schema touch-ups for existing DBs (CREATE TABLE only applies on fresh). */
 export function migrateSchema() {
     const cols = db.prepare('PRAGMA table_info(cards)').all().map(c => c.name);
-    if (!cols.includes('profile_id'))
-        db.exec('ALTER TABLE cards ADD COLUMN profile_id INTEGER REFERENCES api_profiles(id)');
+    // SillyTavern character-card (V2) field parity.
+    const v2 = {
+        profile_id: 'INTEGER REFERENCES api_profiles(id)',
+        personality: "TEXT DEFAULT ''",
+        scenario: "TEXT DEFAULT ''",
+        mes_example: "TEXT DEFAULT ''",
+        system_prompt: "TEXT DEFAULT ''",
+        post_history_instructions: "TEXT DEFAULT ''",
+        alternate_greetings: "TEXT DEFAULT '[]'",
+        tags: "TEXT DEFAULT '[]'",
+        creator: "TEXT DEFAULT ''",
+        creatorcomment: "TEXT DEFAULT ''",
+        character_version: "TEXT DEFAULT ''",
+        avatar: "TEXT DEFAULT ''",
+        card_json: "TEXT DEFAULT ''",
+    };
+    for (const [col, def] of Object.entries(v2))
+        if (!cols.includes(col)) db.exec(`ALTER TABLE cards ADD COLUMN ${col} ${def}`);
     // NULL-keyed UNIQUE never deduped — purge duplicate human members.
     db.exec(`DELETE FROM members WHERE id NOT IN (
         SELECT MIN(id) FROM members
