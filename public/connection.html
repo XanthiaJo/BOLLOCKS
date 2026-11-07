@@ -51,6 +51,19 @@ button.act{background:#4a7c3a}
       <label class="cb"><input type="checkbox" disabled> Streaming</label>
       <input placeholder="Instruct template" disabled>
     </div>
+    <h4 style="margin:14px 0 4px;color:#789">Chat completions <small>(coming soon)</small></h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px;opacity:.45;pointer-events:none">
+      <input placeholder="Reasoning effort" disabled>
+      <input placeholder="n (response count)" disabled>
+      <input placeholder="Seed" disabled>
+      <input placeholder="Logprobs" disabled>
+      <input placeholder="Verbosity" disabled>
+    </div>
+    <div style="opacity:.45;pointer-events:none">
+      <label class="cb"><input type="checkbox" disabled> Request images</label>
+      <label class="cb"><input type="checkbox" disabled> Include reasoning in reply</label>
+      <input placeholder="Custom request body (JSON)" disabled>
+    </div>
     <button onclick="saveProf()">Save</button>
     <button onclick="clearEd()" style="background:#444">Clear</button>
   </div>
