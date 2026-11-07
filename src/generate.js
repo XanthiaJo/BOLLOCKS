@@ -17,7 +17,7 @@ export async function generateReply(roomId, card) {
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(
-        'SELECT name, text, kind FROM messages WHERE room_id=? ORDER BY id DESC LIMIT 30'
+        'SELECT name, text, kind, card_id FROM messages WHERE room_id=? ORDER BY id DESC LIMIT 30'
     ).all(roomId).reverse();
 
     // Keyword-triggered world entries: constant entries always in; keyed
@@ -57,10 +57,11 @@ export async function generateReply(roomId, card) {
             model: conn.model || 'local',
             messages: [
                 { role: 'system', content: system },
-                ...history.map(m => ({
-                    role: 'user',
-                    content: `[${m.name}] ${m.text}`,
-                })),
+                // The card's own past lines are its voice (assistant);
+                // everyone else's lines are tagged context (user).
+                ...history.map(m => m.card_id === card.id
+                    ? { role: 'assistant', content: m.text }
+                    : { role: 'user', content: `${m.name}: ${m.text}` }),
             ],
             temperature: 0.8,
             max_tokens: 512,
