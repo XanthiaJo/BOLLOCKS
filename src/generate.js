@@ -13,7 +13,7 @@ export async function generateReply(roomId, card) {
     const p = card.profile_id
         ? db.prepare('SELECT * FROM api_profiles WHERE id=?').get(card.profile_id)
         : null;
-    const conn = p ? { apiUrl: p.api_url, model: p.model, key: p.key } : activeProfile(owner?.id);
+    const conn = p ? { apiUrl: p.api_url, model: p.model, key: p.key, strip: !!p.strip_prefix } : { ...activeProfile(owner?.id), strip: true };
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(
@@ -92,7 +92,12 @@ export async function generateReply(roomId, card) {
     });
     if (!resp.ok) throw new Error(`AI ${resp.status}: ${await resp.text()}`);
     const data = await resp.json();
-    const text = data?.choices?.[0]?.message?.content?.trim();
+    let text = data?.choices?.[0]?.message?.content?.trim();
     if (!text) throw new Error('empty AI response');
+    // Profile option: drop a leading "Name:" / "**Name:**" / "[Name]" tag.
+    if (conn.strip) {
+        const esc = card.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        text = text.replace(new RegExp(`^\\**\\[?${esc}\\]?\\**\\s*:\\s*`, 'i'), '').trimStart();
+    }
     return text;
 }

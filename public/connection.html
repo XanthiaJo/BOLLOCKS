@@ -31,6 +31,7 @@ button.act{background:#4a7c3a}
     <input id="ed_url" placeholder="API URL e.g. https://openrouter.ai/api/v1">
     <input id="ed_model" placeholder="Model e.g. openrouter/free">
     <input id="ed_key" type="password" placeholder="API key (blank keeps existing)">
+    <label class="cb"><input type="checkbox" id="ed_strip" checked> Strip "Name:" speaker tags from replies</label>
     <button onclick="saveProf()">Save</button>
     <button onclick="clearEd()" style="background:#444">Clear</button>
   </div>
@@ -64,12 +65,12 @@ async function load(){
     </div>`).join('')||'<small>No profiles yet.</small>';
 }
 
-function edit(p){$('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';scrollTo(0,0)}
+function edit(p){$('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';$('ed_strip').checked=!!p.strip_prefix;scrollTo(0,0)}
 function clearEd(){$('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value=''}
 
 async function saveProf(){
   const id=$('ed_id').value;
-  const b={name:$('ed_name').value.trim(),apiUrl:$('ed_url').value.trim(),model:$('ed_model').value.trim(),key:$('ed_key').value.trim()};
+  const b={name:$('ed_name').value.trim(),apiUrl:$('ed_url').value.trim(),model:$('ed_model').value.trim(),key:$('ed_key').value.trim(),stripPrefix:$('ed_strip').checked};
   if(!b.name)return alert('needs a name');
   if(id)await api('profiles/update',{id:Number(id),...b});
   else await api('profiles',b);
