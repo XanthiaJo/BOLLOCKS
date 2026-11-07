@@ -38,25 +38,13 @@
     shell.id = 'shell';
     if (side) shell.appendChild(side); else shell.classList.add('no-side');
     shell.appendChild(content);
-    // Optional right sidebar: <body data-rsidebar="profiles">
-    if (document.body.dataset.rsidebar === 'profiles') {
-        shell.classList.add('rs');
-        const rs = document.createElement('aside');
-        rs.id = 'rsidebar';
-        rs.innerHTML = '<h3>Profiles</h3><div id="rprofs"></div>';
-        shell.appendChild(rs);
-        const load = () => fetch('/api/profiles').then(r => r.json()).then(({ profiles }) => {
-            rs.querySelector('#rprofs').innerHTML = (profiles || []).map(p =>
-                `<div class="rprof${p.active ? ' on' : ''}" onclick="activateProf(${p.id})">
-                    <div class="n">${p.name}</div><div class="m">${p.model || ''}</div>
-                </div>`).join('') || '<small>No profiles</small>';
-        }).catch(() => { });
-        load();
-    }
+    // Optional right sidebar: pages declare <aside id="rsidebar">…</aside>.
+    const rside = document.getElementById('rsidebar');
+    if (rside) { shell.classList.add('rs'); shell.appendChild(rside); }
     document.body.prepend(nav, shell);
 })();
 
-// Right-sidebar profile quick-activate.
+// Right-sidebar profile quick-activate (used by connection page's rail).
 function activateProf(id) {
     fetch('/api/profiles/activate', {
         method: 'POST',

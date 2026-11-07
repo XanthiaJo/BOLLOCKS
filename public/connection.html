@@ -21,7 +21,11 @@ button.act{background:#4a7c3a}
 #editor input{width:100%}
 </style>
 </head>
-<body data-rsidebar="profiles">
+<body>
+<aside id="rsidebar">
+  <h3>Profiles</h3>
+  <div id="rprofs"></div>
+</aside>
 <div id="content">
 <main>
   <div id="editor">
@@ -63,6 +67,9 @@ async function load(){
         <button class="del" onclick="del(${p.id})">Delete</button>
       </div>
     </div>`).join('')||'<small>No profiles yet.</small>';
+  $('rprofs').innerHTML=(profiles||[]).map(p=>
+    `<div class="rprof${p.active?' on':''}" onclick="activateProf(${p.id})"><div class="n">${esc(p.name)}</div><div class="m">${esc(p.model||'')}</div></div>`
+  ).join('')||'<small>None</small>';
 }
 
 function edit(p){$('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';$('ed_strip').checked=!!p.strip_prefix;scrollTo(0,0)}
