@@ -57,11 +57,15 @@ export async function generateReply(roomId, card) {
         ? 'World info:\n' + world.map(e => e.content).join('\n\n')
         : null;
 
-    // Long-term memories for this character in this room.
+    // Long-term memories: shared room facts + this character's own.
+    const roomMems = db.prepare('SELECT content FROM memories WHERE room_id=? AND card_id IS NULL ORDER BY id').all(roomId);
     const mems = db.prepare('SELECT content FROM memories WHERE card_id=? AND room_id=? ORDER BY id')
         .all(card.id, roomId);
-    const memText = mems.length
-        ? `Things ${card.name} remembers:\n` + mems.map(m => '- ' + m.content).join('\n')
+    const memText = (roomMems.length || mems.length)
+        ? [
+            roomMems.length && 'What happened here:\n' + roomMems.map(m => '- ' + m.content).join('\n'),
+            mems.length && `Things ${card.name} remembers:\n` + mems.map(m => '- ' + m.content).join('\n'),
+        ].filter(Boolean).join('\n\n')
         : null;
 
     const system = [

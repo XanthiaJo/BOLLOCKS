@@ -36,9 +36,11 @@ let cardId=0,cardName='';
 
 async function load(){
   const {cards}=await get('cards');
-  $('rcards').innerHTML=(cards||[]).map(c=>
-    `<div class="rprof${c.id===cardId?' on':''}" onclick="pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')"><div class="n">${esc(c.name)}</div></div>`
-  ).join('')||'<small>None</small>';
+  $('rcards').innerHTML=
+    `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'This chat')"><div class="n">This chat</div><div class="m">shared memories</div></div>`+
+    (cards||[]).map(c=>
+      `<div class="rprof${c.id===cardId?' on':''}" onclick="pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')"><div class="n">${esc(c.name)}</div></div>`
+    ).join('')||'<small>None</small>';
   if(!cardId){$('list').innerHTML='';return}
   const {memories}=await get(`memories?card=${cardId}&room=${ROOM}`);
   $('title').textContent=`${cardName}'s memories`;

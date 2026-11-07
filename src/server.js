@@ -45,17 +45,19 @@ const router = {
     'GET /api/me': async (req, res, u) => send(res, 200, { handle: u.handle }),
     'GET /api/memories': async (req, res, u) => {
         const q = new URL(req.url, 'http://x').searchParams;
+        const card = Number(q.get('card') ?? -1);
+        const room = Number(q.get('room') || 0);
         const rows = db.prepare(`SELECT m.*, c.name card_name, r.name room_name FROM memories m
-            JOIN cards c ON c.id=m.card_id JOIN rooms r ON r.id=m.room_id
-            WHERE (?=0 OR m.card_id=?) AND (?=0 OR m.room_id=?) ORDER BY m.id`).all(
-            Number(q.get('card') || 0), Number(q.get('card') || 0),
-            Number(q.get('room') || 0), Number(q.get('room') || 0));
+            LEFT JOIN cards c ON c.id=m.card_id JOIN rooms r ON r.id=m.room_id
+            WHERE (?<0 OR (?=0 AND m.card_id IS NULL) OR m.card_id=?)
+              AND (?=0 OR m.room_id=?) ORDER BY m.id`)
+            .all(card, card, card, room, room);
         send(res, 200, { memories: rows });
     },
     'POST /api/memories': async (req, res, u) => {
         const b = await readBody(req);
         const id = db.prepare('INSERT INTO memories (card_id,room_id,content) VALUES (?,?,?)')
-            .run(b.cardId, b.room || 1, b.content || '').lastInsertRowid;
+            .run(b.cardId || null, b.room || 1, b.content || '').lastInsertRowid;
         send(res, 200, { id });
     },
     'POST /api/memories/delete': async (req, res, u) => {
