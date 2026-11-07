@@ -1,26 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8"><title>RP Server</title>
+<meta charset="utf-8"><title>RP · Chat</title>
+<link rel="stylesheet" href="layout.css">
 <style>
-*{box-sizing:border-box}
-body{font-family:system-ui;background:#1a1b1e;color:#ddd;margin:0;height:100vh;display:flex;flex-direction:column}
-nav{display:flex;gap:14px;align-items:center;padding:8px 16px;background:#141517;border-bottom:1px solid #2a2b2e}
-nav .brand{font-weight:700;margin-right:8px}
-nav a{color:#9ab;text-decoration:none;padding:5px 10px;border-radius:5px;font-size:.95em}
-nav a:hover{background:#232426;color:#ddd}
-nav a.on{background:#2b3a5e;color:#fff}
-input,button{padding:8px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:4px;width:100%;margin:3px 0}
-button{background:#3a5ccc;cursor:pointer;border:none}
-button.gen{background:#4a7c3a}
-small{color:#789}
-/* layout */
-#login{max-width:340px;margin:15vh auto}
-#app{display:none;flex:1;grid-template-columns:1fr 240px;min-height:0}
-#app.on{display:grid}
-.side{padding:12px;background:#141517;overflow-y:auto}
-.side h3{margin:4px 0 8px;font-size:.85em;text-transform:uppercase;color:#789;letter-spacing:.06em}
-#chat{display:flex;flex-direction:column;min-height:0}
+#chat{display:flex;flex-direction:column;min-height:0;flex:1}
 #msgs{list-style:none;padding:8px 16px;margin:0;flex:1;overflow-y:auto}
 .mes{padding:7px 4px;border-bottom:1px solid #232426}
 .mes .n{font-weight:600;color:#9ab;margin-right:6px}
@@ -30,45 +14,39 @@ small{color:#789}
 .mes .t code{background:#232426;padding:1px 5px;border-radius:3px;font-size:.92em}
 .mes.ai .n{color:#7ac}
 .mes.sys .t{color:#789;font-style:italic}
-#composer{padding:10px 16px;display:flex;gap:8px;border-top:1px solid #2a2b2e}
+#composer{padding:10px 16px;display:flex;gap:8px;border-top:1px solid #2a2b2e;flex:none}
 #composer input{flex:1;margin:0}
 #composer button{width:auto;margin:0;white-space:nowrap}
+button.gen{background:#4a7c3a}
 .room{padding:7px 8px;border-radius:5px;cursor:pointer;margin-bottom:3px}
 .room:hover{background:#232426}
 .room.on{background:#2b3a5e}
 .room .n{font-weight:600}
 .member{padding:6px 8px;font-size:.9em;color:#abc}
+#sidebar input,#sidebar button{width:100%}
 </style>
 </head>
 <body>
-<nav>
-  <span class="brand">RP</span>
-  <a href="/" class="on">Chat</a>
-  <a href="/characters.html">Characters</a>
-  <a href="/connection.html">Connection</a>
-</nav>
+<aside id="sidebar">
+  <h3>Chats</h3>
+  <div id="rooms"></div>
+  <input id="newroom" placeholder="New chat name">
+  <button onclick="newRoom()">+ Chat</button>
+  <h3 style="margin-top:16px">In this chat</h3>
+  <div id="members"></div>
+</aside>
 
-<div id="login" style="display:none"></div>
-
-<div id="app">
-  <main id="chat">
+<div id="content">
+  <div id="chat">
     <ul id="msgs"></ul>
     <div id="composer">
       <input id="in" placeholder="Type a message" autofocus onkeydown="if(event.key==='Enter')say()">
       <button onclick="say()">Send</button>
       <button class="gen" onclick="gen()">NPC ▸</button>
     </div>
-  </main>
-
-  <aside class="side">
-    <h3>Chats</h3>
-    <div id="rooms"></div>
-    <input id="newroom" placeholder="New chat name">
-    <button onclick="newRoom()">+ Chat</button>
-    <h3 style="margin-top:16px">In this chat</h3>
-    <div id="members"></div>
-  </aside>
+  </div>
 </div>
+<script src="layout.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

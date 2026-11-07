@@ -83,7 +83,6 @@ async function gen() {
 }
 
 async function start() {
-    $('app').classList.add('on');
     const m = await get('me');
     me = m.handle || 'you';
     await loadRoom();
