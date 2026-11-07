@@ -284,6 +284,7 @@ const router = {
         db.prepare('DELETE FROM messages WHERE room_id=?').run(b.id);
         db.prepare('DELETE FROM members WHERE room_id=?').run(b.id);
         db.prepare('DELETE FROM memories WHERE room_id=?').run(b.id);
+        db.prepare('DELETE FROM world_entries WHERE room_id=?').run(b.id);
         db.prepare('DELETE FROM rooms WHERE id=?').run(b.id);
         send(res, 200, { ok: true });
     },
