@@ -24,8 +24,7 @@ const readBody = req => new Promise(r => { let b = ''; req.on('data', c => b += 
 const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
 // Local testing mode: no token → ?as=<handle> impersonation, else first user.
 const auth = req =>
-    userForToken(req.headers.authorization?.replace(/^Bearer /, '') || new URL(req.url, 'http://x').searchParams.get('token'))
-    || db.prepare('SELECT * FROM users ORDER BY id LIMIT 1').get();
+    userForToken(req.headers.authorization?.replace(/^Bearer /, '') || new URL(req.url, 'http://x').searchParams.get('token'));
 
 const router = {
     'POST /api/login': async (req, res) => {
@@ -421,7 +420,10 @@ http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
     const key = `${req.method} ${url.pathname}`;
     const user = auth(req);
-    if (!user) return send(res, 401, { error: 'auth required' });
+    // Unauthenticated: /api/* is off-limits except login; static files still
+    // serve so the login page (and its css/js) can load.
+    if (!user && url.pathname.startsWith('/api/') && key !== 'POST /api/login')
+        return send(res, 401, { error: 'auth required' });
     if (router[key]) return router[key](req, res, user);
     // static
     const file = path.join(PUB, url.pathname === '/' ? 'index.html' : url.pathname);
