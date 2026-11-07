@@ -45,8 +45,15 @@ const router = {
     'GET /api/users': async (req, res, u) =>
         send(res, 200, { users: db.prepare('SELECT handle FROM users ORDER BY id').all() }),
     'GET /api/cards': async (req, res, u) => {
+        // Own cards + cards in rooms shared with the caller — a non-owner
+        // shouldn't even know other characters exist.
         const cards = db.prepare(`SELECT c.*, u.handle owner FROM cards c
-            LEFT JOIN users u ON u.id=c.owner_id ORDER BY c.name`).all();
+            LEFT JOIN users u ON u.id=c.owner_id
+            WHERE c.owner_id = ? OR c.id IN (
+                SELECT m2.card_id FROM members m2
+                JOIN members me ON me.room_id = m2.room_id AND me.user_id = ?
+                WHERE m2.card_id IS NOT NULL
+            ) ORDER BY c.name`).all(u.id, u.id);
         send(res, 200, { cards });
     },
     'POST /api/cards': async (req, res, u) => {
@@ -71,8 +78,12 @@ const router = {
     },
     'POST /api/members': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('INSERT OR IGNORE INTO members (room_id,card_id,kind) VALUES (?,?,?)')
-            .run(b.room || 1, b.cardId, b.kind || 'ai');
+        // Only the owner may place a character into a room.
+        const card = db.prepare('SELECT owner_id FROM cards WHERE id=?').get(b.cardId);
+        if (!card) return send(res, 404, { error: 'card not found' });
+        if (card.owner_id !== u.id) return send(res, 403, { error: 'not your character' });
+        db.prepare('INSERT INTO members (room_id,card_id,kind) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM members WHERE room_id=? AND card_id=?)')
+            .run(b.room || 1, b.cardId, b.kind || 'ai', b.room || 1, b.cardId);
         send(res, 200, { ok: true });
     },
     'POST /api/members/remove': async (req, res, u) => {

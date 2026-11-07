@@ -58,7 +58,7 @@ async function load(){
       </div>
       <div class="btns">
         ${c.owner===me?`<button onclick='edit(${JSON.stringify(c).replace(/'/g,"&#39;")})'>Edit</button>`:''}
-        <button onclick="addToRoom(${c.id})">+ Chat</button>
+        ${c.owner===me?`<button onclick="addToRoom(${c.id})">+ Chat</button>`:''}
         ${c.owner===me?`<button class="del" onclick="del(${c.id})">Delete</button>`:''}
       </div>
     </div>`).join('');
