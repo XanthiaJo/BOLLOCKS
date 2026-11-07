@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"><title>RP · Connection</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui;background:#1a1b1e;color:#ddd;margin:0}
+nav{display:flex;gap:14px;align-items:center;padding:8px 16px;background:#141517;border-bottom:1px solid #2a2b2e}
+nav .brand{font-weight:700;margin-right:8px}
+nav a{color:#9ab;text-decoration:none;padding:5px 10px;border-radius:5px;font-size:.95em}
+nav a:hover{background:#232426;color:#ddd}
+nav a.on{background:#2b3a5e;color:#fff}
+main{max-width:860px;margin:24px auto;padding:0 16px}
+input,button{padding:8px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:4px;width:100%;margin:3px 0}
+button{background:#3a5ccc;cursor:pointer;border:none;width:auto}
+button.del{background:#7c3a3a}
+button.act{background:#4a7c3a}
+.prof{display:grid;grid-template-columns:1fr auto;gap:10px;padding:12px;border:1px solid #2a2b2e;border-radius:6px;margin-bottom:10px;background:#141517}
+.prof.on{border-color:#4a7c3a}
+.prof .name{font-weight:700}
+.prof .url{color:#abc;font-size:.9em}
+.prof .meta{color:#567;font-size:.8em;margin-top:4px}
+.prof .btns{display:flex;flex-direction:column;gap:6px}
+.badge{display:inline-block;background:#4a7c3a;color:#fff;font-size:.75em;padding:1px 7px;border-radius:8px;margin-left:6px;vertical-align:middle}
+#editor{border:1px solid #2b3a5e;border-radius:6px;padding:14px;margin-bottom:18px;background:#191b24}
+#editor h3{margin-top:0}
+small{color:#789}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">RP</span>
+  <a href="/">Chat</a>
+  <a href="/characters.html">Characters</a>
+  <a href="/connection.html" class="on">Connection</a>
+</nav>
+<main>
+  <div id="editor">
+    <h3 id="edtitle">New profile</h3>
+    <input type="hidden" id="ed_id">
+    <input id="ed_name" placeholder="Profile name e.g. OpenRouter free">
+    <input id="ed_url" placeholder="API URL e.g. https://openrouter.ai/api/v1">
+    <input id="ed_model" placeholder="Model e.g. openrouter/free">
+    <input id="ed_key" type="password" placeholder="API key (blank keeps existing)">
+    <button onclick="saveProf()">Save</button>
+    <button onclick="clearEd()" style="background:#444">Clear</button>
+  </div>
+  <div id="list"></div>
+  <small>Generation uses the <b>active</b> profile. Keys are stored server-side and never reach other clients.</small>
+</main>
+<script>
+const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})}).then(r=>r.json());
+const get=p=>fetch(`/api/${p}`).then(r=>r.json());
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function load(){
+  const {profiles}=await get('profiles');
+  $('list').innerHTML=(profiles||[]).map(p=>`
+    <div class="prof${p.active?' on':''}">
+      <div>
+        <div class="name">${esc(p.name)}${p.active?'<span class="badge">active</span>':''}</div>
+        <div class="url">${esc(p.api_url)}</div>
+        <div class="meta">${esc(p.model)} · ${p.has_key?'key set':'no key'}</div>
+      </div>
+      <div class="btns">
+        ${p.active?'':`<button class="act" onclick="activate(${p.id})">Make active</button>`}
+        <button onclick='edit(${JSON.stringify(p).replace(/'/g,"&#39;")})'>Edit</button>
+        <button class="del" onclick="del(${p.id})">Delete</button>
+      </div>
+    </div>`).join('')||'<small>No profiles yet.</small>';
+}
+
+function edit(p){$('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';scrollTo(0,0)}
+function clearEd(){$('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value=''}
+
+async function saveProf(){
+  const id=$('ed_id').value;
+  const b={name:$('ed_name').value.trim(),apiUrl:$('ed_url').value.trim(),model:$('ed_model').value.trim(),key:$('ed_key').value.trim()};
+  if(!b.name)return alert('needs a name');
+  if(id)await api('profiles/update',{id:Number(id),...b});
+  else await api('profiles',b);
+  clearEd();load();
+}
+async function activate(id){await api('profiles/activate',{id});load()}
+async function del(id){if(confirm('Delete this profile?')){await api('profiles/delete',{id});load()}}
+load();
+</script>
+</body>
+</html>

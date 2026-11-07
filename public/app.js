@@ -54,21 +54,6 @@ async function newRoom() {
     if (r.id) pick(r.id);
 }
 
-async function loadSettings() {
-    const s = await get('settings');
-    $('api_url').value = s.apiUrl || '';
-    $('api_model').value = s.model || '';
-    $('api_key').placeholder = s.key ? 'key set — type to replace' : 'API key';
-}
-async function saveSettings() {
-    const r = await api('settings', {
-        apiUrl: $('api_url').value.trim(),
-        model: $('api_model').value.trim(),
-        key: $('api_key').value.trim(),
-    });
-    if (r.ok) { $('api_key').value = ''; loadSettings(); }
-}
-
 async function say() {
     const text = $('in').value.trim();
     if (!text) return;
@@ -84,7 +69,7 @@ async function start() {
     $('app').classList.add('on');
     const m = await get('me');
     me = m.handle || 'you';
-    await Promise.all([loadRoom(), loadSettings()]);
+    await loadRoom();
 }
 
 start();

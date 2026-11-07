@@ -2,12 +2,13 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, seed, login, userForToken, createUser } from './db.js';
+import { db, seed, login, userForToken, createUser, activeProfile, migrateProfiles } from './db.js';
 import { generateReply } from './generate.js';
 
 const PUB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const PORT = Number(process.env.PORT || 8100);
 seed();
+migrateProfiles();
 
 // ---- SSE fan-out per room ----
 const streams = new Map(); // room_id -> Set<res>
@@ -86,17 +87,36 @@ const router = {
         db.prepare('INSERT INTO members (room_id,user_id,kind) VALUES (?,?,?)').run(id, u.id, 'human');
         send(res, 200, { id, name: b.name });
     },
-    'GET /api/settings': async (req, res, u) => {
-        const s = JSON.parse(u.settings || '{}');
-        send(res, 200, { apiUrl: s.apiUrl || '', model: s.model || '', key: s.key ? '••••••' : '' });
+    'GET /api/profiles': async (req, res, u) => {
+        const profiles = db.prepare('SELECT id,name,api_url,model,active,(key!=\'\') has_key FROM api_profiles WHERE user_id=? ORDER BY id').all(u.id);
+        send(res, 200, { profiles });
     },
-    'POST /api/settings': async (req, res, u) => {
+    'POST /api/profiles': async (req, res, u) => {
         const b = await readBody(req);
-        const s = JSON.parse(u.settings || '{}');
-        if (b.apiUrl !== undefined) s.apiUrl = b.apiUrl;
-        if (b.model !== undefined) s.model = b.model;
-        if (b.key && b.key !== '••••••') s.key = b.key;
-        db.prepare('UPDATE users SET settings=? WHERE id=?').run(JSON.stringify(s), u.id);
+        if (!b.name) return send(res, 400, { error: 'name required' });
+        const first = !db.prepare('SELECT 1 FROM api_profiles WHERE user_id=?').get(u.id);
+        const id = db.prepare('INSERT INTO api_profiles (user_id,name,api_url,model,key,active) VALUES (?,?,?,?,?,?)')
+            .run(u.id, b.name, b.apiUrl || '', b.model || '', b.key || '', first ? 1 : 0).lastInsertRowid;
+        send(res, 200, { id });
+    },
+    'POST /api/profiles/update': async (req, res, u) => {
+        const b = await readBody(req);
+        const sets = ['name=?', 'api_url=?', 'model=?'];
+        const args = [b.name, b.apiUrl, b.model];
+        if (b.key) { sets.push('key=?'); args.push(b.key); }
+        args.push(b.id, u.id);
+        db.prepare(`UPDATE api_profiles SET ${sets.join(',')} WHERE id=? AND user_id=?`).run(...args);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/profiles/activate': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('UPDATE api_profiles SET active=0 WHERE user_id=?').run(u.id);
+        db.prepare('UPDATE api_profiles SET active=1 WHERE id=? AND user_id=?').run(b.id, u.id);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/profiles/delete': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('DELETE FROM api_profiles WHERE id=? AND user_id=?').run(b.id, u.id);
         send(res, 200, { ok: true });
     },
     'GET /api/room': async (req, res, u) => {

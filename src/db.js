@@ -45,6 +45,15 @@ CREATE TABLE IF NOT EXISTS messages (
     supersedes INTEGER REFERENCES messages(id)
 );
 CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, id);
+CREATE TABLE IF NOT EXISTS api_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    api_url TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    key TEXT NOT NULL DEFAULT '',
+    active INTEGER DEFAULT 0
+);
 `);
 
 export const hash = (pw, salt = crypto.randomBytes(16).toString('hex')) =>
@@ -66,6 +75,27 @@ export function login(handle, password) {
 }
 export const userForToken = t =>
     t && db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=?').get(t);
+
+/** The caller's active connection profile (falls back to legacy settings JSON). */
+export function activeProfile(userId) {
+    const p = db.prepare('SELECT * FROM api_profiles WHERE user_id=? AND active=1').get(userId);
+    if (p) return { apiUrl: p.api_url, model: p.model, key: p.key };
+    const s = JSON.parse(db.prepare('SELECT settings FROM users WHERE id=?').get(userId)?.settings || '{}');
+    return s.apiUrl ? s : null;
+}
+
+/** One-time: import legacy settings-JSON connections as a "Default" profile. */
+export function migrateProfiles() {
+    for (const u of db.prepare('SELECT * FROM users').all()) {
+        const s = JSON.parse(u.settings || '{}');
+        if (!s.apiUrl) continue;
+        const exists = db.prepare('SELECT 1 FROM api_profiles WHERE user_id=?').get(u.id);
+        if (exists) continue;
+        db.prepare(`INSERT INTO api_profiles (user_id,name,api_url,model,key,active)
+            VALUES (?,?,?,?,?,1)`).run(u.id, 'ST OpenRouter', s.apiUrl, s.model || '', s.key || '');
+        console.log(`[db] imported connection profile for ${u.handle}`);
+    }
+}
 
 export function seed() {
     if (db.prepare('SELECT COUNT(*) c FROM users').get().c) return;

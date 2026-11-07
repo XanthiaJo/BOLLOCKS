@@ -1,4 +1,4 @@
-import { db } from './db.js';
+import { db, activeProfile } from './db.js';
 
 /**
  * Server-side generation — the server owns the prompt AND the API call.
@@ -7,10 +7,10 @@ import { db } from './db.js';
  * { apiUrl, model, key }) — read from DB, never reaches clients.
  */
 export async function generateReply(roomId, card) {
-    const owner = db.prepare(`SELECT u.settings FROM members m JOIN users u ON u.id=m.user_id
+    const owner = db.prepare(`SELECT u.id FROM members m JOIN users u ON u.id=m.user_id
         WHERE m.room_id=? AND m.kind='human' ORDER BY m.user_id LIMIT 1`).get(roomId);
-    const conn = JSON.parse(owner?.settings || '{}');
-    if (!conn.apiUrl) throw new Error('no API connection configured');
+    const conn = activeProfile(owner?.id);
+    if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(
         'SELECT name, text, kind FROM messages WHERE room_id=? ORDER BY id DESC LIMIT 30'

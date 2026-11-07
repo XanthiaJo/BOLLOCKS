@@ -16,7 +16,7 @@ button.gen{background:#4a7c3a}
 small{color:#789}
 /* layout */
 #login{max-width:340px;margin:15vh auto}
-#app{display:none;flex:1;grid-template-columns:260px 1fr 240px;min-height:0}
+#app{display:none;flex:1;grid-template-columns:1fr 240px;min-height:0}
 #app.on{display:grid}
 .side{padding:12px;background:#141517;overflow-y:auto}
 .side h3{margin:4px 0 8px;font-size:.85em;text-transform:uppercase;color:#789;letter-spacing:.06em}
@@ -42,20 +42,12 @@ small{color:#789}
   <span class="brand">RP</span>
   <a href="/" class="on">Chat</a>
   <a href="/characters.html">Characters</a>
+  <a href="/connection.html">Connection</a>
 </nav>
 
 <div id="login" style="display:none"></div>
 
 <div id="app">
-  <aside class="side">
-    <h3>API connection</h3>
-    <input id="api_url" placeholder="API URL e.g. http://host:11434/v1">
-    <input id="api_model" placeholder="model name">
-    <input id="api_key" type="password" placeholder="API key">
-    <button onclick="saveSettings()">Save connection</button>
-    <small>Stored server-side — your key never reaches other clients.</small>
-  </aside>
-
   <main id="chat">
     <ul id="msgs"></ul>
     <div id="composer">
