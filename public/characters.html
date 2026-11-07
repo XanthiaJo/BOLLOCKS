@@ -27,12 +27,25 @@ button.del{background:#7c3a3a}
   <h3>Characters</h3>
   <div id="list"></div>
 </aside>
+<div id="cropmodal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center">
+  <div style="background:#191b24;padding:16px;border-radius:10px;text-align:center">
+    <div class="cap" style="margin:0 0 8px">Drag to crop — confirm keeps the square</div>
+    <div id="cropwrap" style="position:relative;display:inline-block">
+      <img id="cropimg" draggable="false">
+      <div id="cropbox" style="position:absolute;border:2px solid #4a7c3a;background:rgba(74,124,58,.15);cursor:move"></div>
+    </div>
+    <div style="margin-top:10px">
+      <button onclick="cropConfirm()">Use crop</button>
+      <button onclick="$('cropmodal').style.display='none'" style="background:#555">Cancel</button>
+    </div>
+  </div>
+</div>
 <div id="content">
 <main>
   <div id="editor">
     <h3 id="edtitle">New character</h3>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <img id="ed_av" src="" onerror="this.style.visibility='hidden'" style="width:72px;height:72px;object-fit:cover;border-radius:8px;background:#232426;cursor:pointer" title="Change picture" onclick="$('avpick').click()">
+      <img id="ed_av" src="" onload="this.style.visibility='visible'" onerror="this.style.visibility='hidden'" style="width:72px;height:72px;object-fit:cover;border-radius:8px;background:#232426;cursor:pointer" title="Change picture" onclick="$('avpick').click()">
       <div><div class="cap" style="margin-top:0">Picture</div>
       <button onclick="$('avpick').click()" style="padding:6px 12px">Choose image</button>
       <input type="file" id="avpick" accept="image/*" style="display:none" onchange="pickAvatar(this)"></div>
@@ -74,6 +87,20 @@ const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(local
 const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.json());
 const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.json());
 const $=id=>document.getElementById(id);
+// Crop-drag wiring
+document.addEventListener('DOMContentLoaded',()=>{
+  const box=$('cropbox');let drag=null;
+  const mv=e=>{
+    if(!drag)return;const p=e.touches?e.touches[0]:e;
+    cropX=Math.max(0,Math.min($('cropimg').width-cropSize,p.clientX-drag.x));
+    cropY=Math.max(0,Math.min($('cropimg').height-cropSize,p.clientY-drag.y));
+    box.style.left=cropX+'px';box.style.top=cropY+'px';
+  };
+  const dn=e=>{const p=e.touches?e.touches[0]:e;const r=box.getBoundingClientRect();drag={x:p.clientX-cropX,y:p.clientY-cropY};e.preventDefault();};
+  box.addEventListener('mousedown',dn);box.addEventListener('touchstart',dn);
+  document.addEventListener('mousemove',mv);document.addEventListener('touchmove',mv);
+  document.addEventListener('mouseup',()=>drag=null);document.addEventListener('touchend',()=>drag=null);
+});
 
 let me='';
 async function load(){
@@ -104,21 +131,35 @@ async function loadProfs(){
 }
 
 function edit(c){
-  $('ed_av').src=c.avatar?'/api/avatar?id='+c.id+'&t='+Date.now():'';$('edtitle').textContent='Edit '+c.name;$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');$('ed_creator').value=c.creator||'';$('ed_profile').value=c.profile_id||'';scrollTo(0,0)}
+  const mine=c.owner===me;
+  document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=!mine);
+  $('edtitle').textContent=(mine?'Edit ':'')+c.name+(mine?'':` (${c.owner})`);
+  $('ed_av').src=c.avatar?'/api/avatar?id='+c.id+'&t='+Date.now():'';
+  if(!mine){$('editor').style.display='block';$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');scrollTo(0,0);return;}$('edtitle').textContent='Edit '+c.name;$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');$('ed_creator').value=c.creator||'';$('ed_profile').value=c.profile_id||'';scrollTo(0,0)}
+let cropImg=null,cropX=0,cropY=0,cropSize=0,cropScale=1;
 function pickAvatar(inp){
   const f=inp.files[0];inp.value='';if(!f)return;
   const img=new Image();
   img.onerror=()=>alert('Could not read that image — HEIC phone photos are not supported, save as JPG or PNG first');
-  img.onload=async()=>{
-    const MAX=512,s=Math.min(1,MAX/Math.max(img.width,img.height));
-    const cv=document.createElement('canvas');cv.width=img.width*s;cv.height=img.height*s;
-    cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
-    const url=cv.toDataURL('image/png'),b64=url.split(',')[1],id=$('ed_id').value;
-    if(id){const r=await api('cards/avatar',{id:Number(id),png_b64:b64});
-      if(r.error)alert(r.error);else $('ed_av').src='/api/avatar?id='+id+'&t='+Date.now();}
-    else{$('ed_av').src=url;$('ed_av').dataset.pending=b64;}
-  };
+  img.onload=()=>{cropImg=img;openCrop(img);};
   img.src=URL.createObjectURL(f);
+}
+function openCrop(img){
+  const MAXD=400;cropScale=Math.min(1,MAXD/Math.max(img.width,img.height));
+  $('cropimg').src=img.src;$('cropimg').width=img.width*cropScale;$('cropimg').height=img.height*cropScale;
+  cropSize=Math.min($('cropimg').width,$('cropimg').height)*0.9;cropX=cropY=0;
+  const box=$('cropbox');box.style.width=box.style.height=cropSize+'px';box.style.left=box.style.top='0px';
+  $('cropmodal').style.display='flex';
+}
+function cropConfirm(){
+  const sx=cropX/cropScale,sy=cropY/cropScale,ss=cropSize/cropScale;
+  const cv=document.createElement('canvas');cv.width=cv.height=512;
+  cv.getContext('2d').drawImage(cropImg,sx,sy,ss,ss,0,0,512,512);
+  const url=cv.toDataURL('image/png'),b64=url.split(',')[1],id=$('ed_id').value;
+  $('cropmodal').style.display='none';
+  if(id)api('cards/avatar',{id:Number(id),png_b64:b64}).then(r=>{
+    if(r.error)alert(r.error);else $('ed_av').src='/api/avatar?id='+id+'&t='+Date.now();});
+  else{$('ed_av').src=url;$('ed_av').dataset.pending=b64;}
 }
 function clearEd(){$('edtitle').textContent='New character';['ed_id','ed_name','ed_desc','ed_personality','ed_scenario','ed_first','ed_mesex','ed_sysp','ed_phi','ed_tags','ed_creator'].forEach(i=>$(i).value='');$('ed_profile').value='';$('ed_av').src='';$('ed_av').dataset.pending=''}
 
