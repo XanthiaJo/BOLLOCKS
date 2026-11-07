@@ -46,13 +46,12 @@ async function loadRoom() {
     $('members').innerHTML = (r.members || [])
         .map(m => `<div class="member">` +
             (m.kind === 'ai' && m.card_id
-                ? `<button class="fgen" title="Generate" onclick="genCard(${m.card_id},this)">▶</button>`
-                : '') +
-            `<span>${m.card_name || m.handle || '?'} <small>${m.kind}</small></span>` +
-            `</div>` +
-            (m.kind === 'ai' && m.card_id
-                ? `<div class="talk"><span>chatty</span><input type="range" min="0" max="100" value="${m.talkativeness ?? 50}" onchange="setTalk(${m.card_id},this.value)"><span class="tv">${m.talkativeness ?? 50}%</span></div>`
-                : ''))
+                ? `<button class="fgen" title="Generate" onclick="genCard(${m.card_id},this)">▶</button>` +
+                  `<span class="mname">${m.card_name}</span>` +
+                  `<input type="range" class="talk" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" onchange="setTalk(${m.card_id},this.value)">` +
+                  `<span class="tv">${m.talkativeness ?? 50}%</span>`
+                : `<span>${m.card_name || m.handle || '?'} <small>${m.kind}</small></span>`) +
+            `</div>`)
         .join('');
     document.title = `RP · room ${room}`;
     if (es) es.close();
