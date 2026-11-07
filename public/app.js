@@ -44,7 +44,11 @@ async function loadRoom() {
     $('msgs').innerHTML = '';
     (r.messages || []).forEach(addMsg);
     $('members').innerHTML = (r.members || [])
-        .map(m => `<div class="member">${m.card_name || m.handle || '?'} <small>${m.kind}</small></div>`)
+        .map(m => `<div class="member">${m.card_name || m.handle || '?'} <small>${m.kind}</small>` +
+            (m.kind === 'ai' && m.card_id
+                ? `<button class="fgen" title="Generate" onclick="genCard(${m.card_id},this)">▶</button>`
+                : '') +
+            `</div>`)
         .join('');
     document.title = `RP · room ${room}`;
     if (es) es.close();
@@ -92,6 +96,15 @@ async function say() {
 async function gen() {
     const r = await api('generate', { room });
     if (r.error) alert(r.error);
+}
+async function genCard(cardId, btn) {
+    btn.disabled = true;
+    try {
+        const r = await api('generate', { room, card: cardId });
+        if (r.error) alert(r.error);
+    } finally {
+        btn.disabled = false;
+    }
 }
 
 async function start() {
