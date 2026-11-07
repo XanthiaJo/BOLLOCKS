@@ -189,7 +189,7 @@ export function seed() {
     // Test users — every account gets membership in room 1.
     const room = db.prepare('SELECT id FROM rooms ORDER BY id LIMIT 1').get()?.id
         || db.prepare('INSERT INTO rooms (name) VALUES (?)').run('The House').lastInsertRowid;
-    for (const h of ['creamms', 'karima', 'blake']) {
+    for (const h of ['creamms', 'karima', 'blake', 'entropy75']) {
         if (!db.prepare('SELECT id FROM users WHERE handle=?').get(h))
             createUser(h, 'changeme');
         const uid = db.prepare('SELECT id FROM users WHERE handle=?').get(h).id;
