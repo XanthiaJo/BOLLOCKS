@@ -80,10 +80,24 @@ async function loadRoom() {
 async function renderRooms() {
     const { rooms } = await get('rooms');
     $('rooms').innerHTML = (rooms || [])
-        .map(r => `<div class="room${r.id === room ? ' on' : ''}" onclick="pick(${r.id})"><span class="n">${r.name}</span></div>`)
+        .map(r => `<div class="room${r.id === room ? ' on' : ''}" onclick="pick(${r.id})"><span class="n">${r.name}</span>` +
+            `<span class="rbtns"><a href="#" title="Rename" onclick="event.stopPropagation();renameRoom(${r.id});return false">✎</a>` +
+            `<a href="#" title="Delete" onclick="event.stopPropagation();delRoom(${r.id});return false" style="color:#a55">✕</a></span></div>`)
         .join('');
 }
 function pick(id) { room = id; localStorage.mp_room = id; loadRoom(); }
+async function renameRoom(id) {
+    const n = prompt('Rename chat:', '');
+    if (!n) return;
+    await api('rooms/update', { id, name: n });
+    loadRoom();
+}
+async function delRoom(id) {
+    if (!confirm('Delete this chat and all its messages?')) return;
+    await api('rooms/delete', { id });
+    if (room === id) { room = 1; localStorage.mp_room = 1; }
+    loadRoom();
+}
 
 async function renderWorld() {
     const { books, rooms } = await get('world/books');

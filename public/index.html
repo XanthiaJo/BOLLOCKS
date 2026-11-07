@@ -24,6 +24,12 @@ button.gen{background:#4a7c3a}
 .room .n{font-weight:600}
 .member{padding:4px 8px;font-size:.9em;color:#abc;display:flex;align-items:center;gap:6px}
 .cap{display:block;font-size:.78em;color:#789;margin:6px 0 2px;text-transform:uppercase;letter-spacing:.04em}
+.room{display:flex;align-items:center;gap:6px}
+.room .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.room .rbtns{display:none;flex:none;font-size:.8em}
+.room:hover .rbtns{display:inline}
+.room .rbtns a{color:#789;text-decoration:none;margin-left:6px}
+.room .rbtns a:hover{color:#fff}
 .member .fgen{margin:0;width:22px;height:22px;padding:0;font-size:10px;line-height:20px;text-align:center;flex:none;background:transparent;border:1px solid #3a4a3e;border-radius:4px;cursor:pointer;color:#6a8a6e}
 .member .fgen:hover{background:#4a7c3a;color:#fff;border-color:#4a7c3a}
 .member .fgen:disabled{opacity:.3;cursor:default}

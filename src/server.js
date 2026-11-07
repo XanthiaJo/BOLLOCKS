@@ -274,6 +274,19 @@ const router = {
         db.prepare('INSERT INTO members (room_id,user_id,kind) VALUES (?,?,?)').run(id, u.id, 'human');
         send(res, 200, { id, name: b.name });
     },
+    'POST /api/rooms/update': async (req, res, u) => {
+        const b = await readBody(req);
+        if (b.name) db.prepare('UPDATE rooms SET name=? WHERE id=?').run(b.name, b.id);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/rooms/delete': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('DELETE FROM messages WHERE room_id=?').run(b.id);
+        db.prepare('DELETE FROM members WHERE room_id=?').run(b.id);
+        db.prepare('DELETE FROM memories WHERE room_id=?').run(b.id);
+        db.prepare('DELETE FROM rooms WHERE id=?').run(b.id);
+        send(res, 200, { ok: true });
+    },
     'GET /api/profiles': async (req, res, u) => {
         const profiles = db.prepare('SELECT id,name,api_url,model,active,strip_prefix,(key!=\'\') has_key FROM api_profiles WHERE user_id=? ORDER BY id').all(u.id);
         send(res, 200, { profiles });
