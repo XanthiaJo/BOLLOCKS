@@ -14,8 +14,8 @@ textarea{min-height:80px;font-family:inherit}
 </head>
 <body>
 <aside id="rsidebar">
-  <h3>Entries</h3>
-  <div id="list"></div>
+  <h3>Books</h3>
+  <div id="rbooks"></div>
 </aside>
 <div id="content">
 <main>
@@ -35,6 +35,7 @@ textarea{min-height:80px;font-family:inherit}
     <button onclick="document.getElementById('editor').style.display='none'" style="background:#444">Close</button>
   </div>
   <button onclick="newEntry()" style="margin-bottom:12px">+ New entry</button>
+  <div id="list"></div>
 </main>
 </div>
 <script src="layout.js"></script>
@@ -52,6 +53,9 @@ async function load(){
   const [{entries},{books}]=await Promise.all([get('world?book='+BOOK),get('world/books')]);
   const b=(books||[]).find(b=>b.id===BOOK);
   $('bookname').textContent=b?.name||('Book #'+BOOK);
+  $('rbooks').innerHTML=(books||[]).map(x=>
+    `<div class="rprof${x.id===BOOK?' on':''}" onclick="location='/world-edit.html?id=${x.id}${AS?'&as='+AS:''}'"><div class="n">${esc(x.name)}</div><div class="m">${x.cnt||0} entries</div></div>`
+  ).join('')||'<small>No books</small>';
   $('list').innerHTML=(entries||[]).map(e=>`
     <div class="card ent${e.enabled?'':' off'}">
       <div>
