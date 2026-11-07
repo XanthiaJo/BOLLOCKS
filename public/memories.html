@@ -12,7 +12,8 @@
 </head>
 <body>
 <aside id="rsidebar">
-  <h3>Chat</h3>
+  <div class="rprof" id="rset" onclick="pick(-1,'Settings')"><div class="n">Settings</div></div>
+  <h3 style="margin-top:14px">Chat</h3>
   <div id="rchat"></div>
   <h3 style="margin-top:14px">Characters</h3>
   <div id="rcards"></div>
@@ -29,7 +30,7 @@
     <small id="pickmsg">Pick a character on the right to see their memories.</small>
   </div>
   <div id="list"></div>
-  <div class="panel">
+  <div class="panel" id="setpanel">
     <h3>Memory settings</h3>
     <label class="cb"><input type="checkbox" id="set_auto" onchange="saveSet()"> Enable Smart Memory</label>
     <h4 style="margin:12px 0 4px;color:#789">Extraction</h4>
@@ -71,7 +72,12 @@ async function load(){
   $('rcards').innerHTML=(cards||[]).map(c=>
       `<div class="rprof${c.id===cardId?' on':''}" onclick="pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')"><div class="n">${esc(c.name)}</div></div>`
     ).join('')||'<small>None</small>';
-  if(cardId<0){$('list').innerHTML='';return}
+  if(cardId<0){
+    $('list').innerHTML='';$('title').textContent='Memories';
+    $('pickmsg').style.display='block';$('addbox').style.display='none';$('setpanel').style.display='block';
+    $('rset').classList.add('on');return;
+  }
+  $('rset').classList.remove('on');$('setpanel').style.display='none';
   const {memories}=await get(`memories?card=${cardId}&room=${ROOM}`);
   $('title').textContent=`${cardName}'s memories`;
   $('pickmsg').style.display='none';$('addbox').style.display='block';
