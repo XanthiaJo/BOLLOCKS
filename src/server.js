@@ -43,17 +43,60 @@ const router = {
         catch { send(res, 409, { error: 'handle taken' }); }
     },
     'GET /api/me': async (req, res, u) => send(res, 200, { handle: u.handle }),
+    'GET /api/world/books': async (req, res, u) => {
+        const books = db.prepare(`SELECT b.*, u.handle owner FROM world_books b
+            LEFT JOIN users u ON u.id=b.owner_id ORDER BY b.id`).all();
+        const rooms = db.prepare('SELECT id,name,world_book_id FROM rooms').all();
+        send(res, 200, { books, rooms });
+    },
+    'POST /api/world/books': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!b.name) return send(res, 400, { error: 'name required' });
+        const id = db.prepare('INSERT INTO world_books (owner_id,name) VALUES (?,?)').run(u.id, b.name).lastInsertRowid;
+        send(res, 200, { id });
+    },
+    'POST /api/world/books/delete': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('DELETE FROM world_entries WHERE book_id=?').run(b.id);
+        db.prepare('DELETE FROM world_books WHERE id=? AND owner_id=?').run(b.id, u.id);
+        db.prepare('UPDATE rooms SET world_book_id=NULL WHERE world_book_id=?').run(b.id);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/world/link': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('UPDATE rooms SET world_book_id=? WHERE id=?').run(b.book || null, b.room || 1);
+        send(res, 200, { ok: true });
+    },
+    // ST lorebook JSON import: {entries: {0: {key, keysecondary, comment, content, constant, order, disable}}}
+    'POST /api/world/import': async (req, res, u) => {
+        const b = await readBody(req);
+        const raw = typeof b.book === 'string' ? JSON.parse(b.book) : b.book;
+        const list = Object.values(raw?.entries || {});
+        if (!list.length) return send(res, 400, { error: 'no entries found' });
+        const bid = db.prepare('INSERT INTO world_books (owner_id,name) VALUES (?,?)')
+            .run(u.id, b.name || raw.name || 'Imported book').lastInsertRowid;
+        const ins = db.prepare(`INSERT INTO world_entries (room_id,book_id,keys,keysecondary,comment,content,constant,enabled,ord)
+            VALUES (?,?,?,?,?,?,?,?,?)`);
+        for (const e of list) {
+            ins.run(b.room || 1, bid, JSON.stringify(e.key || []), JSON.stringify(e.keysecondary || []),
+                e.comment || '', e.content || '', e.constant ? 1 : 0, e.disable ? 0 : 1, e.order || 0);
+        }
+        send(res, 200, { id: bid, count: list.length });
+    },
     'GET /api/world': async (req, res, u) => {
-        const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room') || 1);
-        const entries = db.prepare('SELECT * FROM world_entries WHERE room_id=? ORDER BY ord, id').all(roomId);
+        const bookId = Number(new URL(req.url, 'http://x').searchParams.get('book') || 0);
+        const entries = db.prepare('SELECT * FROM world_entries WHERE book_id=? ORDER BY ord, id').all(bookId);
         send(res, 200, { entries });
     },
     'POST /api/world': async (req, res, u) => {
         const b = await readBody(req);
         const keys = typeof b.keys === 'string'
             ? b.keys.split(',').map(k => k.trim()).filter(Boolean) : (b.keys || []);
-        const id = db.prepare('INSERT INTO world_entries (room_id,keys,content,constant,enabled,ord) VALUES (?,?,?,?,?,?)')
-            .run(b.room || 1, JSON.stringify(keys), b.content || '', b.constant ? 1 : 0, b.enabled === false ? 0 : 1, b.ord || 0).lastInsertRowid;
+        const secondary = typeof b.keysecondary === 'string'
+            ? b.keysecondary.split(',').map(k => k.trim()).filter(Boolean) : (b.keysecondary || []);
+        const id = db.prepare('INSERT INTO world_entries (room_id,book_id,keys,keysecondary,comment,content,constant,enabled,ord) VALUES (?,?,?,?,?,?,?,?,?)')
+            .run(b.room || 1, b.book || null, JSON.stringify(keys), JSON.stringify(secondary),
+                b.comment || '', b.content || '', b.constant ? 1 : 0, b.enabled === false ? 0 : 1, b.ord || 0).lastInsertRowid;
         send(res, 200, { id });
     },
     'POST /api/world/update': async (req, res, u) => {
@@ -61,9 +104,14 @@ const router = {
         const keys = typeof b.keys === 'string'
             ? JSON.stringify(b.keys.split(',').map(k => k.trim()).filter(Boolean))
             : (b.keys ? JSON.stringify(b.keys) : null);
-        db.prepare(`UPDATE world_entries SET keys=COALESCE(?,keys), content=COALESCE(?,content),
+        const secondary = typeof b.keysecondary === 'string'
+            ? JSON.stringify(b.keysecondary.split(',').map(k => k.trim()).filter(Boolean))
+            : (b.keysecondary ? JSON.stringify(b.keysecondary) : null);
+        db.prepare(`UPDATE world_entries SET keys=COALESCE(?,keys), keysecondary=COALESCE(?,keysecondary),
+            comment=COALESCE(?,comment), content=COALESCE(?,content),
             constant=COALESCE(?,constant), enabled=COALESCE(?,enabled), ord=COALESCE(?,ord) WHERE id=?`)
-            .run(keys, b.content, b.constant === undefined ? null : (b.constant ? 1 : 0),
+            .run(keys, secondary, b.comment, b.content,
+                b.constant === undefined ? null : (b.constant ? 1 : 0),
                 b.enabled === undefined ? null : (b.enabled ? 1 : 0), b.ord, b.id);
         send(res, 200, { ok: true });
     },

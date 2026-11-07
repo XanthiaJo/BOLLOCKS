@@ -46,6 +46,12 @@ CREATE TABLE IF NOT EXISTS messages (
     supersedes INTEGER REFERENCES messages(id)
 );
 CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, id);
+CREATE TABLE IF NOT EXISTS world_books (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER REFERENCES users(id),
+    name TEXT NOT NULL,
+    created TEXT DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS world_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     room_id INTEGER NOT NULL REFERENCES rooms(id),
@@ -115,6 +121,19 @@ export function migrateSchema() {
     };
     for (const [col, def] of Object.entries(v2))
         if (!cols.includes(col)) db.exec(`ALTER TABLE cards ADD COLUMN ${col} ${def}`);
+    // World lorebook model: books own entries; rooms link to one book.
+    const wcols = db.prepare('PRAGMA table_info(world_entries)').all().map(c => c.name);
+    if (!wcols.includes('book_id')) db.exec('ALTER TABLE world_entries ADD COLUMN book_id INTEGER REFERENCES world_books(id)');
+    if (!wcols.includes('comment')) db.exec("ALTER TABLE world_entries ADD COLUMN comment TEXT DEFAULT ''");
+    if (!wcols.includes('keysecondary')) db.exec("ALTER TABLE world_entries ADD COLUMN keysecondary TEXT DEFAULT '[]'");
+    const rcols = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);
+    if (!rcols.includes('world_book_id')) db.exec('ALTER TABLE rooms ADD COLUMN world_book_id INTEGER REFERENCES world_books(id)');
+    // Legacy: entries keyed by room become a default book linked to that room.
+    for (const r of db.prepare('SELECT DISTINCT room_id FROM world_entries WHERE book_id IS NULL').all()) {
+        const bid = db.prepare('INSERT INTO world_books (owner_id,name) VALUES (NULL,?)').run('Room ' + r.room_id + ' book').lastInsertRowid;
+        db.prepare('UPDATE world_entries SET book_id=? WHERE room_id=? AND book_id IS NULL').run(bid, r.room_id);
+        db.prepare('UPDATE rooms SET world_book_id=? WHERE id=? AND world_book_id IS NULL').run(bid, r.room_id);
+    }
     // NULL-keyed UNIQUE never deduped — purge duplicate human members.
     db.exec(`DELETE FROM members WHERE id NOT IN (
         SELECT MIN(id) FROM members
