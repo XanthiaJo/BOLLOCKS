@@ -36,13 +36,13 @@ async function load(){
   me=who.handle;
   const room=rooms.find(r=>r.id===ROOM);
   $('list').innerHTML=(books||[]).map(b=>{
-    const linked=room?.world_book_id===b.id;
+    const usedIn=rooms.filter(r=>r.world_book_id===b.id).map(r=>r.name);
     const mine=!b.owner||b.owner===me;
     return `
     <div class="card">
       <div>
-        <div class="name">${esc(b.name)}${linked?'<span class="badge">in this chat</span>':''}</div>
-        <div class="meta">#${b.id} · ${b.cnt||0} entries · ${esc(b.owner||'shared')}</div>
+        <div class="name">${esc(b.name)}</div>
+        <div class="meta">#${b.id} · ${b.cnt||0} entries · ${esc(b.owner||'shared')}${usedIn.length?' · in: '+esc(usedIn.join(', ')):''}</div>
       </div>
       <div class="btns">
         <button onclick="location='/world-edit.html?id=${b.id}${AS?'&as='+AS:''}'">Open</button>
