@@ -35,10 +35,12 @@ button.gen{background:#4a7c3a}
   <div id="rooms"></div>
   <input id="newroom" placeholder="New chat name">
   <button onclick="newRoom()">+ Chat</button>
-  <h3 style="margin-top:16px">In this chat</h3>
+</aside>
+<aside id="rsidebar">
+  <h3>In this chat</h3>
   <div id="members"></div>
-  <h3 style="margin-top:16px">World</h3>
-  <select id="worldsel" onchange="setWorld(this.value)" style="width:100%"></select>
+  <h3 style="margin-top:16px">Chat settings</h3>
+  World<br><select id="worldsel" onchange="setWorld(this.value)" style="width:100%"></select>
 </aside>
 
 <div id="content">

@@ -33,14 +33,25 @@
     }).catch(() => { });
 
     const side = document.getElementById('sidebar');
+    const rside = document.getElementById('rsidebar');
     const content = document.getElementById('content') || document.body;
+    // Collapse toggles in the nav for each sidebar that exists.
+    const mob = () => window.innerWidth <= 700;
+    const mk = (el, side) => {
+        const b = document.createElement('a');
+        b.className = 'navtoggle';
+        b.textContent = side === 'l' ? '☰' : '⚙';
+        b.title = (side === 'l' ? 'Toggle left panel' : 'Toggle right panel');
+        b.onclick = () => el.classList.toggle(mob() ? 'open' : 'hide');
+        return b;
+    };
+    if (side) nav.prepend(mk(side, 'l'));
+    if (rside) nav.appendChild(mk(rside, 'r'));
     const shell = document.createElement('div');
     shell.id = 'shell';
-    if (side) shell.appendChild(side); else shell.classList.add('no-side');
+    if (side) shell.appendChild(side);
     shell.appendChild(content);
-    // Optional right sidebar: pages declare <aside id="rsidebar">…</aside>.
-    const rside = document.getElementById('rsidebar');
-    if (rside) { shell.classList.add('rs'); shell.appendChild(rside); }
+    if (rside) shell.appendChild(rside);
     document.body.prepend(nav, shell);
 })();
 
