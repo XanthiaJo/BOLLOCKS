@@ -63,14 +63,14 @@ async function load(){
   const [{cards},who]=await Promise.all([get('cards'),get('me')]);
   me=who.handle;
   $('list').innerHTML=(cards||[]).map(c=>`
-    <div class="card">
+    <div class="card" style="cursor:pointer" onclick='edit(${JSON.stringify(c).replace(/'/g,"&#39;")})'>
       <img src="${c.avatar?'/api/avatar?id='+c.id:'/api/avatar?id=0'}" onerror="this.style.visibility='hidden'">
       <div>
         <div class="name">${esc(c.name)}</div>
         <div class="desc">${esc(c.description)}</div>
         <div class="meta">#${c.id} · owner ${esc(c.owner||'?')}${profName(c)}</div>
       </div>
-      <div class="btns" id="btns${c.id}">
+      <div class="btns" id="btns${c.id}" onclick="event.stopPropagation()">
         ${c.owner===me?`<button onclick='edit(${JSON.stringify(c).replace(/'/g,"&#39;")})'>Edit</button>`:''}
         ${c.owner===me?`<button onclick="addToRoom(${c.id})">+ Chat</button>`:''}
         ${c.owner===me?`<button style="background:${c.is_persona?'#4a7c3a':'#5a5a4a'}" onclick="api('persona',{cardId:${c.is_persona?'null':c.id}}).then(load)">★${c.is_persona?' persona':''}</button>`:''}
