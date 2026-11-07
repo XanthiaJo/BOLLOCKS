@@ -289,6 +289,32 @@ const router = {
         const msg = db.prepare('SELECT * FROM messages WHERE id=?').get(r.lastInsertRowid);
         push(b.room || 1, { type: 'message', message: msg });
         send(res, 200, msg);
+        // AI trigger policy for this room.
+        const roomRow = db.prepare('SELECT ai_trigger FROM rooms WHERE id=?').get(msg.room_id);
+        if (roomRow?.ai_trigger && roomRow.ai_trigger !== 'manual') {
+            const ais = db.prepare(`SELECT c.* FROM members m JOIN cards c ON c.id=m.card_id
+                WHERE m.room_id=? AND m.kind='ai' ORDER BY m.card_id`).all(msg.room_id);
+            let picks = [];
+            if (roomRow.ai_trigger === 'all') picks = ais;
+            else if (roomRow.ai_trigger === 'named')
+                picks = ais.filter(c => new RegExp('\\b' + c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(b.text || ''));
+            else if (roomRow.ai_trigger === 'roundrobin') picks = ais.slice(0, 1);
+            for (const card of picks)
+                generateReply(msg.room_id, card)
+                    .then(text => {
+                        if (!text?.trim()) return;
+                        const r2 = db.prepare(`INSERT INTO messages (room_id,card_id,name,text,kind) VALUES (?,?,?,?,'ai')`)
+                            .run(msg.room_id, card.id, card.name, text);
+                        const m2 = db.prepare('SELECT * FROM messages WHERE id=?').get(r2.lastInsertRowid);
+                        push(msg.room_id, { type: 'message', message: m2 });
+                    })
+                    .catch(e => console.error('[gen]', e.message));
+        }
+    },
+    'POST /api/room/trigger': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('UPDATE rooms SET ai_trigger=? WHERE id=?').run(b.mode || 'manual', b.room || 1);
+        send(res, 200, { ok: true });
     },
     'POST /api/generate': async (req, res, u) => {
         const b = await readBody(req);

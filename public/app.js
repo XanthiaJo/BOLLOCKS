@@ -60,6 +60,10 @@ async function loadRoom() {
     renderRooms();
     renderWorld();
     renderToks();
+    get('rooms').then(({ rooms }) => {
+        const r = (rooms || []).find(x => x.id === room);
+        if (r) $('trigsel').value = r.ai_trigger || 'manual';
+    });
 }
 
 async function renderRooms() {
@@ -78,6 +82,9 @@ async function renderWorld() {
 }
 async function setWorld(bookId) {
     await api('world/link', { room, book: Number(bookId) || null });
+}
+async function setTrig(mode) {
+    await api('room/trigger', { room, mode });
 }
 
 async function newRoom() {
