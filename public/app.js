@@ -11,12 +11,29 @@ const api = (p, b, method = 'POST') => fetch(`/api/${p}`, {
 }).then(r => r.json());
 const get = p => api(p, null, 'GET');
 
+// Minimal markdown for RP text: *i* **b** ***bi*** _i_ __b__ ~~s~~ `code` #..####
+function md(src) {
+    const esc = String(src ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return esc
+        .replace(/^####\s*(.+)$/gm, '<h5>$1</h5>')
+        .replace(/^###\s*(.+)$/gm, '<h4>$1</h4>')
+        .replace(/^##\s*(.+)$/gm, '<h3>$1</h3>')
+        .replace(/^#\s*(.+)$/gm, '<h2>$1</h2>')
+        .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+        .replace(/\*\*\*([^*]+)\*\*\*/g, '<b><i>$1</i></b>')
+        .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+        .replace(/\*([^*\n]+)\*/g, '<i>$1</i>')
+        .replace(/__([^_]+)__/g, '<b>$1</b>')
+        .replace(/_([^_\n]+)_/g, '<i>$1</i>')
+        .replace(/~~([^~]+)~~/g, '<s>$1</s>');
+}
+
 function addMsg(m) {
     const li = document.createElement('li');
     li.className = 'mes' + (m.kind === 'ai' ? ' ai' : m.kind === 'sys' ? ' sys' : '');
     li.innerHTML = `<span class="n"></span> <span class="t"></span>`;
     li.querySelector('.n').textContent = m.name;
-    li.querySelector('.t').textContent = m.text;
+    li.querySelector('.t').innerHTML = md(m.text);
     $('msgs').append(li);
     $('msgs').scrollTop = 1e9;
 }
