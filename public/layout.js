@@ -12,10 +12,11 @@
         ['Connection', '/connection.html'],
     ];
     const here = location.pathname === '/index.html' ? '/' : location.pathname;
+    const as = new URLSearchParams(location.search).get('as') || '';
     const nav = document.createElement('nav');
     nav.innerHTML = '<span class="brand">RP</span>' +
         NAV.map(([label, href]) =>
-            `<a href="${href}"${href === here ? ' class="on"' : ''}>${label}</a>`).join('') +
+            `<a href="${href}${as ? '?as=' + as : ''}"${href === here ? ' class="on"' : ''}>${label}</a>`).join('') +
         '<span style="flex:1"></span><span id="test-users" style="display:flex;gap:6px;align-items:center"></span>';
     // Test mode: a button per user opens a fresh window as that perspective.
     fetch('/api/users').then(r => r.json()).then(({ users }) => {
