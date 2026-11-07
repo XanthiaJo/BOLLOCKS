@@ -106,8 +106,9 @@ async function loadProfs(){
 function edit(c){
   $('ed_av').src=c.avatar?'/api/avatar?id='+c.id+'&t='+Date.now():'';$('edtitle').textContent='Edit '+c.name;$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');$('ed_creator').value=c.creator||'';$('ed_profile').value=c.profile_id||'';scrollTo(0,0)}
 function pickAvatar(inp){
-  const f=inp.files[0];if(!f)return;
+  const f=inp.files[0];inp.value='';if(!f)return;
   const img=new Image();
+  img.onerror=()=>alert('Could not read that image — HEIC phone photos are not supported, save as JPG or PNG first');
   img.onload=async()=>{
     const MAX=512,s=Math.min(1,MAX/Math.max(img.width,img.height));
     const cv=document.createElement('canvas');cv.width=img.width*s;cv.height=img.height*s;
