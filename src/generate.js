@@ -83,6 +83,8 @@ export async function generateReply(roomId, card) {
                 ...history.map(m => m.card_id === card.id
                     ? { role: 'assistant', content: m.text }
                     : { role: 'user', content: `${m.name}: ${m.text}` }),
+                // Final nudge — primes the model to continue as this character.
+                { role: 'user', content: `${card.name}:` },
             ],
             temperature: 0.8,
             max_tokens: 512,
