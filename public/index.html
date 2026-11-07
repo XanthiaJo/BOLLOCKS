@@ -3,30 +3,65 @@
 <head>
 <meta charset="utf-8"><title>RP Server</title>
 <style>
-body{font-family:system-ui;background:#1a1b1e;color:#ddd;max-width:760px;margin:0 auto;padding:16px}
-#login,#chat{max-width:480px;margin:40px auto}#chat{max-width:760px;margin:0 auto}
-input,button{padding:8px;margin:4px 0;width:100%;box-sizing:border-box;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:4px}
+*{box-sizing:border-box}
+body{font-family:system-ui;background:#1a1b1e;color:#ddd;margin:0;height:100vh;display:flex;flex-direction:column}
+input,button{padding:8px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:4px;width:100%;margin:3px 0}
 button{background:#3a5ccc;cursor:pointer;border:none}
-#msgs{list-style:none;padding:0;max-height:70vh;overflow-y:auto}
-.mes{padding:6px;border-bottom:1px solid #2a2b2e}
-.mes .n{font-weight:600;color:#9ab}
-.mes .t{white-space:pre-wrap}
-.gen{background:#4a7c3a}
+button.gen{background:#4a7c3a}
+small{color:#789}
+/* layout */
+#login{max-width:340px;margin:15vh auto}
+#app{display:none;flex:1;grid-template-columns:260px 1fr 240px;min-height:0}
+#app.on{display:grid}
+.side{padding:12px;background:#141517;overflow-y:auto}
+.side h3{margin:4px 0 8px;font-size:.85em;text-transform:uppercase;color:#789;letter-spacing:.06em}
+#chat{display:flex;flex-direction:column;min-height:0}
+#msgs{list-style:none;padding:8px 16px;margin:0;flex:1;overflow-y:auto}
+.mes{padding:7px 4px;border-bottom:1px solid #232426}
+.mes .n{font-weight:600;color:#9ab;margin-right:6px}
+.mes .t{white-space:pre-wrap;margin-top:2px}
+.mes.ai .n{color:#7ac}
+.mes.sys .t{color:#789;font-style:italic}
+#composer{padding:10px 16px;display:flex;gap:8px;border-top:1px solid #2a2b2e}
+#composer input{flex:1;margin:0}
+#composer button{width:auto;margin:0;white-space:nowrap}
+.room{padding:7px 8px;border-radius:5px;cursor:pointer;margin-bottom:3px}
+.room:hover{background:#232426}
+.room.on{background:#2b3a5e}
+.room .n{font-weight:600}
+.member{padding:6px 8px;font-size:.9em;color:#abc}
 </style>
 </head>
 <body>
-<div id="login">
-  <h2>Sign in</h2>
-  <input id="h" placeholder="handle" autocomplete="username">
-  <input id="p" type="password" placeholder="password" autocomplete="current-password">
-  <button onclick="doLogin()">Login</button>
-</div>
-<div id="chat" style="display:none">
-  <h2 id="room">The House</h2>
-  <ul id="msgs"></ul>
-  <input id="in" placeholder="Type a message" autofocus onkeydown="if(event.key==='Enter')say()">
-  <button onclick="say()">Send</button>
-  <button class="gen" onclick="gen()">Generate NPC</button>
+<div id="login" style="display:none"></div>
+
+<div id="app">
+  <aside class="side">
+    <h3>API connection</h3>
+    <input id="api_url" placeholder="API URL e.g. http://host:11434/v1">
+    <input id="api_model" placeholder="model name">
+    <input id="api_key" type="password" placeholder="API key">
+    <button onclick="saveSettings()">Save connection</button>
+    <small>Stored server-side — your key never reaches other clients.</small>
+  </aside>
+
+  <main id="chat">
+    <ul id="msgs"></ul>
+    <div id="composer">
+      <input id="in" placeholder="Type a message" autofocus onkeydown="if(event.key==='Enter')say()">
+      <button onclick="say()">Send</button>
+      <button class="gen" onclick="gen()">NPC ▸</button>
+    </div>
+  </main>
+
+  <aside class="side">
+    <h3>Chats</h3>
+    <div id="rooms"></div>
+    <input id="newroom" placeholder="New chat name">
+    <button onclick="newRoom()">+ Chat</button>
+    <h3 style="margin-top:16px">In this chat</h3>
+    <div id="members"></div>
+  </aside>
 </div>
 <script src="app.js"></script>
 </body>

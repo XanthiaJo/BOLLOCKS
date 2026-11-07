@@ -19,7 +19,10 @@ const push = (roomId, evt) => {
 // ---- HTTP helpers ----
 const readBody = req => new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { r(JSON.parse(b)); } catch { r({}); } }); });
 const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
-const auth = req => userForToken(req.headers.authorization?.replace(/^Bearer /, '') || new URL(req.url, 'http://x').searchParams.get('token'));
+// Local testing mode: no token → first user. Swap for real auth later.
+const auth = req =>
+    userForToken(req.headers.authorization?.replace(/^Bearer /, '') || new URL(req.url, 'http://x').searchParams.get('token'))
+    || db.prepare('SELECT * FROM users ORDER BY id LIMIT 1').get();
 
 const router = {
     'POST /api/login': async (req, res) => {
@@ -33,6 +36,32 @@ const router = {
         if (!b.handle || !b.password) return send(res, 400, { error: 'handle+password required' });
         try { send(res, 200, { id: createUser(b.handle, b.password) }); }
         catch { send(res, 409, { error: 'handle taken' }); }
+    },
+    'GET /api/me': async (req, res, u) => send(res, 200, { handle: u.handle }),
+    'GET /api/rooms': async (req, res, u) => {
+        const rooms = db.prepare(`SELECT r.id, r.name FROM rooms r
+            JOIN members m ON m.room_id=r.id WHERE m.user_id=? ORDER BY r.id`).all(u.id);
+        send(res, 200, { rooms });
+    },
+    'POST /api/rooms': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!b.name) return send(res, 400, { error: 'name required' });
+        const id = db.prepare('INSERT INTO rooms (name) VALUES (?)').run(b.name).lastInsertRowid;
+        db.prepare('INSERT INTO members (room_id,user_id,kind) VALUES (?,?,?)').run(id, u.id, 'human');
+        send(res, 200, { id, name: b.name });
+    },
+    'GET /api/settings': async (req, res, u) => {
+        const s = JSON.parse(u.settings || '{}');
+        send(res, 200, { apiUrl: s.apiUrl || '', model: s.model || '', key: s.key ? '••••••' : '' });
+    },
+    'POST /api/settings': async (req, res, u) => {
+        const b = await readBody(req);
+        const s = JSON.parse(u.settings || '{}');
+        if (b.apiUrl !== undefined) s.apiUrl = b.apiUrl;
+        if (b.model !== undefined) s.model = b.model;
+        if (b.key && b.key !== '••••••') s.key = b.key;
+        db.prepare('UPDATE users SET settings=? WHERE id=?').run(JSON.stringify(s), u.id);
+        send(res, 200, { ok: true });
     },
     'GET /api/room': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('id') || 1);
@@ -80,7 +109,7 @@ const router = {
 http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
     const key = `${req.method} ${url.pathname}`;
-    const user = key === 'POST /api/login' || key === 'POST /api/register' ? true : auth(req);
+    const user = auth(req);
     if (!user) return send(res, 401, { error: 'auth required' });
     if (router[key]) return router[key](req, res, user);
     // static
