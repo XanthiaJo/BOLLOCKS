@@ -62,7 +62,9 @@ export async function generateReply(roomId, card) {
         card.mes_example && `Example dialogue:\n${card.mes_example}`,
         others.length && `Also present in the scene:\n` +
             others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
-        `You are an NPC in a shared roleplay. Write ONLY ${card.name}'s next message.` +
+        `You are ${card.name} and ONLY ${card.name} — an NPC in a shared roleplay. ` +
+            `The other characters listed are separate people speaking for themselves; ` +
+            `do NOT speak for them or imitate them. Write ONLY ${card.name}'s next message.` +
             (card.post_history_instructions ? ` ${card.post_history_instructions}` : ''),
     ].filter(Boolean).join('\n\n');
 
