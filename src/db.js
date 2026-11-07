@@ -146,6 +146,15 @@ export function migrateSchema() {
     }
     const mcols = db.prepare('PRAGMA table_info(members)').all().map(c => c.name);
     if (!mcols.includes('talkativeness')) db.exec('ALTER TABLE members ADD COLUMN talkativeness INTEGER DEFAULT 50');
+    // memories.card_id must be nullable — NULL = shared room memory.
+    const mi = db.prepare('PRAGMA table_info(memories)').all().find(c => c.name === 'card_id');
+    if (mi?.notnull) db.exec(`BEGIN;
+        CREATE TABLE memories_new (id INTEGER PRIMARY KEY AUTOINCREMENT,
+            card_id INTEGER REFERENCES cards(id),
+            room_id INTEGER NOT NULL REFERENCES rooms(id),
+            content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')));
+        INSERT INTO memories_new SELECT * FROM memories;
+        DROP TABLE memories; ALTER TABLE memories_new RENAME TO memories; COMMIT;`);
     // NULL-keyed UNIQUE never deduped — purge duplicate human members.
     db.exec(`DELETE FROM members WHERE id NOT IN (
         SELECT MIN(id) FROM members
