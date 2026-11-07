@@ -1,0 +1,46 @@
+import { db } from './db.js';
+
+/**
+ * Server-side generation — the server owns the prompt AND the API call.
+ * Prompt = card description (system) + recent messages (context). The API
+ * config lives in the room owner's settings (user.settings JSON:
+ * { apiUrl, model, key }) — read from DB, never reaches clients.
+ */
+export async function generateReply(roomId, card) {
+    const owner = db.prepare(`SELECT u.settings FROM members m JOIN users u ON u.id=m.user_id
+        WHERE m.room_id=? AND m.kind='human' ORDER BY m.user_id LIMIT 1`).get(roomId);
+    const conn = JSON.parse(owner?.settings || '{}');
+    if (!conn.apiUrl) throw new Error('no API connection configured');
+
+    const history = db.prepare(
+        'SELECT name, text, kind FROM messages WHERE room_id=? ORDER BY id DESC LIMIT 30'
+    ).all(roomId).reverse();
+
+    const system = `You are ${card.name}. ${card.description || ''}\n` +
+        'You are an NPC in a shared roleplay. Write ONLY your character\'s next message.';
+
+    const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
+        },
+        body: JSON.stringify({
+            model: conn.model || 'local',
+            messages: [
+                { role: 'system', content: system },
+                ...history.map(m => ({
+                    role: 'user',
+                    content: `[${m.name}] ${m.text}`,
+                })),
+            ],
+            temperature: 0.8,
+            max_tokens: 512,
+        }),
+    });
+    if (!resp.ok) throw new Error(`AI ${resp.status}: ${await resp.text()}`);
+    const data = await resp.json();
+    const text = data?.choices?.[0]?.message?.content?.trim();
+    if (!text) throw new Error('empty AI response');
+    return text;
+}

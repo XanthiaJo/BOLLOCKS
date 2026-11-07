@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"><title>RP Server</title>
+<style>
+body{font-family:system-ui;background:#1a1b1e;color:#ddd;max-width:760px;margin:0 auto;padding:16px}
+#login,#chat{max-width:480px;margin:40px auto}#chat{max-width:760px;margin:0 auto}
+input,button{padding:8px;margin:4px 0;width:100%;box-sizing:border-box;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:4px}
+button{background:#3a5ccc;cursor:pointer;border:none}
+#msgs{list-style:none;padding:0;max-height:70vh;overflow-y:auto}
+.mes{padding:6px;border-bottom:1px solid #2a2b2e}
+.mes .n{font-weight:600;color:#9ab}
+.mes .t{white-space:pre-wrap}
+.gen{background:#4a7c3a}
+</style>
+</head>
+<body>
+<div id="login">
+  <h2>Sign in</h2>
+  <input id="h" placeholder="handle" autocomplete="username">
+  <input id="p" type="password" placeholder="password" autocomplete="current-password">
+  <button onclick="doLogin()">Login</button>
+</div>
+<div id="chat" style="display:none">
+  <h2 id="room">The House</h2>
+  <ul id="msgs"></ul>
+  <input id="in" placeholder="Type a message" autofocus onkeydown="if(event.key==='Enter')say()">
+  <button onclick="say()">Send</button>
+  <button class="gen" onclick="gen()">Generate NPC</button>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
