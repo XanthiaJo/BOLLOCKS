@@ -21,6 +21,8 @@ const push = (roomId, evt) => {
 
 // ---- HTTP helpers ----
 const readBody = req => new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { r(JSON.parse(b)); } catch { r({}); } }); });
+const CARDS_DIR = path.join(process.cwd(), 'data', 'cards');
+fs.mkdirSync(CARDS_DIR, { recursive: true });
 const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
 // Local testing mode: no token → ?as=<handle> impersonation, else first user.
 const auth = req =>
@@ -155,6 +157,15 @@ const router = {
     },
     'GET /api/users': async (req, res, u) =>
         send(res, 200, { users: db.prepare('SELECT id,handle FROM users ORDER BY id').all() }),
+    'POST /api/cards/avatar': async (req, res, u) => {
+        const b = await readBody(req);
+        const card = db.prepare('SELECT owner_id FROM cards WHERE id=?').get(b.id);
+        if (!card || card.owner_id !== u.id) return send(res, 403, { error: 'not your card' });
+        const file = `${b.id}.png`;
+        fs.writeFileSync(path.join(CARDS_DIR, file), Buffer.from(b.png_b64, 'base64'));
+        db.prepare('UPDATE cards SET avatar=? WHERE id=?').run(file, b.id);
+        send(res, 200, { ok: true, avatar: file });
+    },
     'GET /api/cards': async (req, res, u) => {
         // Own cards + cards in rooms shared with the caller — a non-owner
         // shouldn't even know other characters exist.
