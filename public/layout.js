@@ -18,7 +18,8 @@
     nav.innerHTML = '<span class="brand">RP</span>' +
         NAV.map(([label, href]) =>
             `<a href="${href}"${href === here ? ' class="on"' : ''}>${label}</a>`).join('') +
-        '<span style="flex:1"></span>';
+        '<span style="flex:1"></span>' +
+        `<a href="/login.html" onclick="localStorage.removeItem('mp_token')" style="color:#789" title="Log out">⏻</a>`;
 
     const side = document.getElementById('sidebar');
     const rside = document.getElementById('rsidebar');
