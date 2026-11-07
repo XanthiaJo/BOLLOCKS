@@ -10,11 +10,6 @@
   <div id="rchat"></div>
   <h3 style="margin-top:14px">Characters</h3>
   <div id="rcards"></div>
-  <h3 style="margin-top:14px">Settings</h3>
-  <label class="cb"><input type="checkbox" id="set_auto" onchange="saveSet()"> Smart memories</label>
-  <div style="font-size:.8em;color:#789">Summarize every</div>
-  <input type="number" id="set_every" min="2" max="100" onchange="saveSet()">
-  <div style="font-size:.75em;color:#567;margin-top:4px">new messages into shared memories</div>
 </aside>
 <div id="content">
 <main>
@@ -28,6 +23,13 @@
     <small id="pickmsg">Pick a character on the right to see their memories.</small>
   </div>
   <div id="list"></div>
+  <div class="panel">
+    <h3>Settings</h3>
+    <label class="cb"><input type="checkbox" id="set_auto" onchange="saveSet()"> Smart memories</label>
+    <div style="font-size:.8em;color:#789">Summarize every</div>
+    <input type="number" id="set_every" min="2" max="100" onchange="saveSet()" style="width:80px">
+    <div style="font-size:.75em;color:#567;margin-top:4px">new messages into shared memories</div>
+  </div>
 </main>
 </div>
 <script src="layout.js"></script>
