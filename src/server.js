@@ -244,7 +244,7 @@ const router = {
         send(res, 200, { ok: true });
     },
     'GET /api/rooms': async (req, res, u) => {
-        const rooms = db.prepare(`SELECT r.id, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget, r.mem_max, r.mem_profile_id FROM rooms r
+        const rooms = db.prepare(`SELECT r.id, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget, r.mem_max, r.mem_profile_id, r.max_context FROM rooms r
             JOIN members m ON m.room_id=r.id WHERE m.user_id=? ORDER BY r.id`).all(u.id);
         send(res, 200, { rooms });
     },
@@ -339,6 +339,12 @@ const router = {
     'POST /api/room/trigger': async (req, res, u) => {
         const b = await readBody(req);
         db.prepare('UPDATE rooms SET ai_trigger=? WHERE id=?').run(b.mode || 'manual', b.room || 1);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/room/settings': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('UPDATE rooms SET max_context=COALESCE(?,max_context) WHERE id=?')
+            .run(b.maxContext === undefined ? null : b.maxContext, b.room || 1);
         send(res, 200, { ok: true });
     },
     'POST /api/room/memsettings': async (req, res, u) => {

@@ -142,6 +142,7 @@ export function migrateSchema() {
     if (!rcols.includes('mem_budget')) db.exec('ALTER TABLE rooms ADD COLUMN mem_budget INTEGER DEFAULT 500');
     if (!rcols.includes('mem_max')) db.exec('ALTER TABLE rooms ADD COLUMN mem_max INTEGER DEFAULT 50');
     if (!rcols.includes('mem_profile_id')) db.exec('ALTER TABLE rooms ADD COLUMN mem_profile_id INTEGER');
+    if (!rcols.includes('max_context')) db.exec('ALTER TABLE rooms ADD COLUMN max_context INTEGER DEFAULT 0');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
     if (!mecols.includes('source')) db.exec("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'manual'");

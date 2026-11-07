@@ -98,6 +98,21 @@ export async function generateReply(roomId, card) {
         'Post-History Instructions': tok(card.post_history_instructions),
         'Chat History': history.reduce((n, m) => n + tok(m.name + ' ' + m.text), 0),
     };
+    parts.Memories = tok(memText);
+
+    // Context cap: drop oldest history lines until the prompt fits.
+    const maxCtx = db.prepare('SELECT max_context FROM rooms WHERE id=?').get(roomId)?.max_context || 0;
+    if (maxCtx > 0) {
+        const overhead = Object.entries(parts).filter(([k]) => k !== 'Chat History')
+            .reduce((a, [, v]) => a + v, 0);
+        let histTok = parts['Chat History'];
+        while (history.length > 1 && overhead + histTok > maxCtx) {
+            const m = history.shift();
+            histTok -= tok(m.name + ' ' + m.text);
+        }
+        parts['Chat History'] = histTok;
+        parts['(capped)'] = maxCtx;
+    }
 
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',

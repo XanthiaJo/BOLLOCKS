@@ -65,7 +65,7 @@ async function loadRoom() {
     renderToks();
     get('rooms').then(({ rooms }) => {
         const r = (rooms || []).find(x => x.id === room);
-        if (r) $('trigsel').value = r.ai_trigger || 'manual';
+        if (r) { $('trigsel').value = r.ai_trigger || 'manual'; $('ctxmax').value = r.max_context || 0; }
     });
 }
 
@@ -88,6 +88,9 @@ async function setWorld(bookId) {
 }
 async function setTrig(mode) {
     await api('room/trigger', { room, mode });
+}
+async function setCtx(v) {
+    await api('room/settings', { room, maxContext: Math.max(0, Number(v) || 0) });
 }
 async function setTalk(cardId, value) {
     await api('members/talkativeness', { room, cardId, value });

@@ -55,6 +55,8 @@ button.gen{background:#4a7c3a}
   </select>
   <h3 style="margin-top:16px">Chat settings</h3>
   World<br><select id="worldsel" onchange="setWorld(this.value)" style="width:100%"></select>
+  <div style="font-size:.8em;color:#789;margin-top:8px" title="Cap on total prompt size — oldest history is dropped when exceeded">Max prompt tokens (0 = unlimited)</div>
+  <input type="number" id="ctxmax" min="0" step="500" onchange="setCtx(this.value)" style="width:100%">
   <h3 style="margin-top:16px">Prompt use</h3>
   <div id="toks"><small>generate to see</small></div>
 </aside>
