@@ -35,33 +35,35 @@ button.act{background:#4a7c3a}
     <input id="ed_url" placeholder="API URL e.g. https://openrouter.ai/api/v1">
     <input id="ed_model" placeholder="Model e.g. openrouter/free">
     <input id="ed_key" type="password" placeholder="API key (blank keeps existing)">
-    <h4 style="margin:14px 0 4px;color:#789">Sampling <small>(coming soon)</small></h4>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px;opacity:.45;pointer-events:none">
-      <input placeholder="Context size (tokens)" disabled>
-      <input placeholder="Max tokens (response)" disabled>
+    <h4 style="margin:14px 0 4px;color:#789">Chat Completion <small>(coming soon)</small></h4>
+    <div style="opacity:.45;pointer-events:none">
+      <label class="cb"><input type="checkbox" disabled> Unlocked Context Size</label>
+      <input placeholder="Context Size (tokens)" disabled>
+      <input placeholder="Max Response Length (tokens)" disabled>
+      <input placeholder="Multiple swipes per generation" disabled>
+      <label class="cb"><input type="checkbox" disabled> Streaming</label>
       <input placeholder="Temperature" disabled>
+      <input placeholder="Frequency Penalty" disabled>
+      <input placeholder="Presence Penalty" disabled>
       <input placeholder="Top P" disabled>
       <input placeholder="Top K" disabled>
       <input placeholder="Min P" disabled>
       <input placeholder="Repetition penalty" disabled>
-      <input placeholder="Frequency penalty" disabled>
-      <input placeholder="Presence penalty" disabled>
-    </div>
-    <div style="opacity:.45;pointer-events:none">
-      <label class="cb"><input type="checkbox" disabled> Streaming</label>
-      <input placeholder="Instruct template" disabled>
-    </div>
-    <h4 style="margin:14px 0 4px;color:#789">Chat completions <small>(coming soon)</small></h4>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px;opacity:.45;pointer-events:none">
-      <input placeholder="Reasoning effort" disabled>
-      <input placeholder="n (response count)" disabled>
-      <input placeholder="Seed" disabled>
-      <input placeholder="Logprobs" disabled>
+      <input placeholder="Seed (-1 = random)" disabled>
+      <input placeholder="Character Names Behavior" disabled>
+      <input placeholder="Continue Postfix" disabled>
+      <label class="cb"><input type="checkbox" disabled> Continue prefill</label>
+      <label class="cb"><input type="checkbox" disabled> Squash system messages</label>
+      <label class="cb"><input type="checkbox" disabled> Enable function calling</label>
+      <input placeholder="Tool Call Recurse Limit" disabled>
+      <label class="cb"><input type="checkbox" disabled> Interleaved Thinking</label>
+      <label class="cb"><input type="checkbox" disabled> Send inline media</label>
+      <input placeholder="Inline Image Quality" disabled>
+      <label class="cb"><input type="checkbox" disabled> Request model reasoning</label>
+      <input placeholder="Reasoning Effort (auto/min/max)" disabled>
       <input placeholder="Verbosity" disabled>
-    </div>
-    <div style="opacity:.45;pointer-events:none">
-      <label class="cb"><input type="checkbox" disabled> Request images</label>
-      <label class="cb"><input type="checkbox" disabled> Include reasoning in reply</label>
+      <input placeholder="Logit Bias" disabled>
+      <input placeholder="Instruct template" disabled>
       <input placeholder="Custom request body (JSON)" disabled>
     </div>
     <button onclick="saveProf()">Save</button>
