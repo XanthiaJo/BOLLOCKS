@@ -137,6 +137,8 @@ export function migrateSchema() {
         db.prepare('UPDATE world_entries SET book_id=? WHERE room_id=? AND book_id IS NULL').run(bid, r.room_id);
         db.prepare('UPDATE rooms SET world_book_id=? WHERE id=? AND world_book_id IS NULL').run(bid, r.room_id);
     }
+    const mcols = db.prepare('PRAGMA table_info(members)').all().map(c => c.name);
+    if (!mcols.includes('talkativeness')) db.exec('ALTER TABLE members ADD COLUMN talkativeness INTEGER DEFAULT 50');
     // NULL-keyed UNIQUE never deduped — purge duplicate human members.
     db.exec(`DELETE FROM members WHERE id NOT IN (
         SELECT MIN(id) FROM members

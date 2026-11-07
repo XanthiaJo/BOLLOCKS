@@ -292,10 +292,12 @@ const router = {
         // AI trigger policy for this room.
         const roomRow = db.prepare('SELECT ai_trigger FROM rooms WHERE id=?').get(msg.room_id);
         if (roomRow?.ai_trigger && roomRow.ai_trigger !== 'manual') {
-            const ais = db.prepare(`SELECT c.* FROM members m JOIN cards c ON c.id=m.card_id
+            const ais = db.prepare(`SELECT c.*, m.talkativeness FROM members m JOIN cards c ON c.id=m.card_id
                 WHERE m.room_id=? AND m.kind='ai' ORDER BY m.card_id`).all(msg.room_id);
+            // Talkativeness: per-member 0–100% chance to reply (named always fires).
+            const roll = c => Math.random() * 100 < (c.talkativeness ?? 50);
             let picks = [];
-            if (roomRow.ai_trigger === 'all') picks = ais;
+            if (roomRow.ai_trigger === 'all') picks = ais.filter(roll);
             else if (roomRow.ai_trigger === 'named')
                 picks = ais.filter(c => new RegExp('\\b' + c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(b.text || ''));
             else if (roomRow.ai_trigger === 'roundrobin') picks = ais.slice(0, 1);
@@ -314,6 +316,12 @@ const router = {
     'POST /api/room/trigger': async (req, res, u) => {
         const b = await readBody(req);
         db.prepare('UPDATE rooms SET ai_trigger=? WHERE id=?').run(b.mode || 'manual', b.room || 1);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/members/talkativeness': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('UPDATE members SET talkativeness=? WHERE room_id=? AND card_id=?')
+            .run(Math.max(0, Math.min(100, Number(b.value) || 0)), b.room || 1, b.cardId);
         send(res, 200, { ok: true });
     },
     'POST /api/generate': async (req, res, u) => {

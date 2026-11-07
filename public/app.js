@@ -48,7 +48,10 @@ async function loadRoom() {
             (m.kind === 'ai' && m.card_id
                 ? `<button class="fgen" title="Generate" onclick="genCard(${m.card_id},this)">▶</button>`
                 : '') +
-            `</div>`)
+            `</div>` +
+            (m.kind === 'ai' && m.card_id
+                ? `<div class="talk"><span>chatty</span><input type="range" min="0" max="100" value="${m.talkativeness ?? 50}" onchange="setTalk(${m.card_id},this.value)"><span class="tv">${m.talkativeness ?? 50}%</span></div>`
+                : ''))
         .join('');
     document.title = `RP · room ${room}`;
     if (es) es.close();
@@ -85,6 +88,12 @@ async function setWorld(bookId) {
 }
 async function setTrig(mode) {
     await api('room/trigger', { room, mode });
+}
+async function setTalk(cardId, value) {
+    await api('members/talkativeness', { room, cardId, value });
+    document.querySelectorAll('.talk input').forEach(i => {
+        i.nextElementSibling.textContent = i.value + '%';
+    });
 }
 
 async function newRoom() {
