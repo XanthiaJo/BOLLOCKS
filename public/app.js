@@ -47,7 +47,7 @@ async function loadRoom() {
         .map(m => `<div class="member">` +
             (m.kind === 'ai' && m.card_id
                 ? `<span class="mname">${m.card_name}</span>` +
-                  `<input type="range" class="talk" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" onchange="setTalk(${m.card_id},this.value)">` +
+                  `<input type="range" class="talk" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setTalk(${m.card_id},this.value)">` +
                   `<span class="tv">${m.talkativeness ?? 50}%</span>` +
                   `<button class="fgen" title="Generate" onclick="genCard(${m.card_id},this)">▶</button>`
                 : `<span>${m.card_name || m.handle || '?'} <small>${m.kind}</small></span>`) +
@@ -91,9 +91,6 @@ async function setTrig(mode) {
 }
 async function setTalk(cardId, value) {
     await api('members/talkativeness', { room, cardId, value });
-    document.querySelectorAll('.talk input').forEach(i => {
-        i.nextElementSibling.textContent = i.value + '%';
-    });
 }
 
 async function newRoom() {
