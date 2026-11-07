@@ -42,7 +42,16 @@ const router = {
         try { send(res, 200, { id: createUser(b.handle, b.password) }); }
         catch { send(res, 409, { error: 'handle taken' }); }
     },
-    'GET /api/me': async (req, res, u) => send(res, 200, { handle: u.handle }),
+    'GET /api/me': async (req, res, u) => {
+        const persona = db.prepare('SELECT id,name FROM cards WHERE owner_id=? AND is_persona=1').get(u.id);
+        send(res, 200, { handle: u.handle, persona: persona || null });
+    },
+    'POST /api/persona': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('UPDATE cards SET is_persona=0 WHERE owner_id=?').run(u.id);
+        if (b.cardId) db.prepare('UPDATE cards SET is_persona=1 WHERE id=? AND owner_id=?').run(b.cardId, u.id);
+        send(res, 200, { ok: true });
+    },
     'GET /api/memories': async (req, res, u) => {
         const q = new URL(req.url, 'http://x').searchParams;
         const card = Number(q.get('card') ?? -1);

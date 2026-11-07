@@ -104,11 +104,12 @@ async function newRoom() {
     if (r.id) pick(r.id);
 }
 
+let persona = null;
 async function say() {
     const text = $('in').value.trim();
     if (!text) return;
     $('in').value = '';
-    await api('say', { room, name: me, text });
+    await api('say', { room, name: persona?.name || me, cardId: persona?.id || null, text });
 }
 async function gen() {
     const r = await api('generate', { room });
@@ -151,6 +152,7 @@ async function renderToks() {
 async function start() {
     const m = await get('me');
     me = m.handle || 'you';
+    persona = m.persona || null;
     await loadRoom();
 }
 

@@ -125,6 +125,7 @@ export function migrateSchema() {
         character_version: "TEXT DEFAULT ''",
         avatar: "TEXT DEFAULT ''",
         card_json: "TEXT DEFAULT ''",
+        is_persona: "INTEGER DEFAULT 0",
     };
     for (const [col, def] of Object.entries(v2))
         if (!cols.includes(col)) db.exec(`ALTER TABLE cards ADD COLUMN ${col} ${def}`);
