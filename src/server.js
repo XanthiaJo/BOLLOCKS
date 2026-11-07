@@ -161,8 +161,8 @@ const router = {
         const b = await readBody(req);
         const card = db.prepare('SELECT owner_id FROM cards WHERE id=?').get(b.id);
         if (!card || card.owner_id !== u.id) return send(res, 403, { error: 'not your card' });
-        const file = `${b.id}.png`;
-        fs.writeFileSync(path.join(CARDS_DIR, file), Buffer.from(b.png_b64, 'base64'));
+        const file = `cards/${b.id}.png`;
+        fs.writeFileSync(path.join(CARDS_DIR, `${b.id}.png`), Buffer.from(b.png_b64, 'base64'));
         db.prepare('UPDATE cards SET avatar=? WHERE id=?').run(file, b.id);
         send(res, 200, { ok: true, avatar: file });
     },
