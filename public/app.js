@@ -51,7 +51,7 @@ async function loadRoom() {
                   `<span class="tv">${m.talkativeness ?? 50}%</span>` +
                   `<button class="fgen" title="Generate" onclick="genCard(${m.card_id},this)">▶</button>` +
                   `<button class="frem" title="Remove" onclick="remMember(${m.card_id},null,this)">✕</button>`
-                : `<span>${m.card_name || m.handle || '?'} <small>${m.kind}</small></span>` +
+                : `<span>${m.card_name || m.persona_name || m.handle || '?'} <small>${m.kind}</small></span>` +
                   `<button class="frem" title="Remove" onclick="remMember(null,${m.user_id},this)">✕</button>`) +
             `</div>`)
         .join('') + `<div class="member" style="margin-top:6px"><select id="addpick" style="flex:1;font-size:.85em"></select>` +
