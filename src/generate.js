@@ -1,5 +1,9 @@
 import { db, activeProfile } from './db.js';
 
+// Latest prompt composition per room — exposed for the chat sidebar.
+export const genStats = {};
+const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
+
 /**
  * Server-side generation — the server owns the prompt AND the API call.
  * Prompt = card description (system) + recent messages (context). The API
@@ -68,6 +72,18 @@ export async function generateReply(roomId, card) {
             (card.post_history_instructions ? ` ${card.post_history_instructions}` : ''),
     ].filter(Boolean).join('\n\n');
 
+    const parts = {
+        'Main Prompt': tok(card.system_prompt || `You are ${card.name}.`),
+        'World Info': tok(worldText),
+        'Char Description': tok(card.description),
+        'Char Personality': tok(card.personality),
+        'Scenario': tok(card.scenario),
+        'Chat Examples': tok(card.mes_example),
+        'Other Characters': tok(others.map(o => o.name + (o.description || '')).join('')),
+        'Post-History Instructions': tok(card.post_history_instructions),
+        'Chat History': history.reduce((n, m) => n + tok(m.name + ' ' + m.text), 0),
+    };
+
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -94,6 +110,13 @@ export async function generateReply(roomId, card) {
     const data = await resp.json();
     let text = data?.choices?.[0]?.message?.content?.trim();
     if (!text) throw new Error('empty AI response');
+    genStats[roomId] = {
+        at: Date.now(), card: card.name,
+        est: Object.values(parts).reduce((a, b) => a + b, 0),
+        prompt_tokens: data?.usage?.prompt_tokens ?? null,
+        completion_tokens: data?.usage?.completion_tokens ?? null,
+        parts,
+    };
     // Always drop a leading "Name:" / "**Name:**" / "[Name]" speaker tag —
     // the UI already labels messages; the tag only exists for steering.
     {

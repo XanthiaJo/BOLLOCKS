@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db, seed, login, userForToken, createUser, activeProfile, migrateProfiles, migrateSchema } from './db.js';
-import { generateReply } from './generate.js';
+import { generateReply, genStats } from './generate.js';
 import { extractCardJson, normalizeCard } from './pngcard.js';
 
 const PUB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -43,6 +43,10 @@ const router = {
         catch { send(res, 409, { error: 'handle taken' }); }
     },
     'GET /api/me': async (req, res, u) => send(res, 200, { handle: u.handle }),
+    'GET /api/genstats': async (req, res, u) => {
+        const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room') || 1);
+        send(res, 200, { stats: genStats[roomId] || null });
+    },
     'GET /api/world/books': async (req, res, u) => {
         const books = db.prepare(`SELECT b.*, u.handle owner,
             (SELECT COUNT(*) FROM world_entries WHERE book_id=b.id) cnt
