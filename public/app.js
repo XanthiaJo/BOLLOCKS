@@ -32,7 +32,7 @@ function md(src) {
 function addMsg(m) {
     const li = document.createElement('li');
     li.className = 'mes' + (m.kind === 'ai' ? ' ai' : m.kind === 'sys' ? ' sys' : '');
-    li.innerHTML = `<span class="n"></span> <span class="t"></span>`;
+    li.innerHTML = `${m.card_id ? `<img class="mav" src="/api/avatar?id=${m.card_id}" onerror="this.remove()">` : ''}<span class="n"></span> <span class="t"></span>`;
     li.querySelector('.n').textContent = m.name;
     li.querySelector('.t').innerHTML = md(m.text);
     $('msgs').append(li);
