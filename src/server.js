@@ -434,7 +434,7 @@ http.createServer(async (req, res) => {
     const user = auth(req);
     // Unauthenticated: /api/* is off-limits except login; static files still
     // serve so the login page (and its css/js) can load.
-    if (!user && url.pathname.startsWith('/api/') && key !== 'POST /api/login')
+    if (!user && url.pathname.startsWith('/api/') && key !== 'POST /api/login' && key !== 'GET /api/avatar')
         return send(res, 401, { error: 'auth required' });
     if (router[key]) return router[key](req, res, user);
     // static
