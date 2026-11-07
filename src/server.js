@@ -339,7 +339,7 @@ const router = {
     'GET /api/room': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('id') || 1);
         const msgs = db.prepare('SELECT * FROM messages WHERE room_id=? ORDER BY id').all(roomId);
-        const members = db.prepare(`SELECT m.*, c.name card_name, u.handle, pc.name persona_name FROM members m
+        const members = db.prepare(`SELECT m.*, c.name card_name, c.avatar card_avatar, u.handle, pc.name persona_name, pc.avatar persona_avatar, pc.id persona_id FROM members m
             LEFT JOIN cards c ON c.id=m.card_id LEFT JOIN users u ON u.id=m.user_id
             LEFT JOIN cards pc ON pc.owner_id=m.user_id AND pc.is_persona=1 WHERE m.room_id=?`).all(roomId);
         send(res, 200, { messages: msgs, members });

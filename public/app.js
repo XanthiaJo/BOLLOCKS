@@ -45,6 +45,7 @@ async function loadRoom() {
     (r.messages || []).forEach(addMsg);
     $('members').innerHTML = (r.members || [])
         .map(m => `<div class="member">` +
+            `<img class="mav" src="/api/avatar?id=${m.card_id || m.persona_id || 0}" onerror="this.style.display='none'">` +
             (m.kind === 'ai' && m.card_id
                 ? `<span class="mname">${m.card_name}</span>` +
                   `<input type="range" class="talk" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setTalk(${m.card_id},this.value)">` +
