@@ -13,6 +13,10 @@ textarea{min-height:80px;font-family:inherit}
 </style>
 </head>
 <body>
+<aside id="rsidebar">
+  <h3>Entries</h3>
+  <div id="list"></div>
+</aside>
 <div id="content">
 <main>
   <a class="back" href="/world.html">← Books</a>
@@ -31,7 +35,6 @@ textarea{min-height:80px;font-family:inherit}
     <button onclick="document.getElementById('editor').style.display='none'" style="background:#444">Close</button>
   </div>
   <button onclick="newEntry()" style="margin-bottom:12px">+ New entry</button>
-  <div id="list"></div>
 </main>
 </div>
 <script src="layout.js"></script>
