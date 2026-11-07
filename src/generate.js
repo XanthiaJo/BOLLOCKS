@@ -146,13 +146,14 @@ export async function generateReply(roomId, card) {
  * stored as shared room memories. Runs after every N messages per room.
  */
 export async function maybeSummarize(roomId) {
-    const room = db.prepare('SELECT auto_mem, mem_every, mem_last_id FROM rooms WHERE id=?').get(roomId);
+    const room = db.prepare('SELECT * FROM rooms WHERE id=?').get(roomId);
     if (!room?.auto_mem) return;
     const lastId = db.prepare('SELECT MAX(id) m FROM messages WHERE room_id=?').get(roomId).m || 0;
     if (lastId - room.mem_last_id < (room.mem_every || 10)) return;
     const owner = db.prepare(`SELECT u.id FROM members m JOIN users u ON u.id=m.user_id
         WHERE m.room_id=? AND m.kind='human' ORDER BY m.user_id LIMIT 1`).get(roomId);
-    const conn = activeProfile(owner?.id);
+    const p = room.mem_profile_id ? db.prepare('SELECT * FROM api_profiles WHERE id=?').get(room.mem_profile_id) : null;
+    const conn = p ? { apiUrl: p.api_url, model: p.model, key: p.key } : activeProfile(owner?.id);
     if (!conn?.apiUrl) return;
     const excerpt = db.prepare(
         'SELECT name,text FROM messages WHERE room_id=? AND id>? ORDER BY id LIMIT 30')
@@ -181,4 +182,8 @@ export async function maybeSummarize(roomId) {
         if (tag) fact = fact.slice(tag[0].length);
         if (fact.length > 10) ins.run(roomId, fact, type);
     }
+    // Cap stored smart memories — oldest auto entries drop off.
+    db.prepare(`DELETE FROM memories WHERE room_id=? AND source='auto' AND id NOT IN
+        (SELECT id FROM memories WHERE room_id=? AND source='auto' ORDER BY id DESC LIMIT ?)`)
+        .run(roomId, roomId, room.mem_max || 50);
 }

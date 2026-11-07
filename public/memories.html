@@ -38,9 +38,14 @@
   <div class="panel" id="setpanel">
     <h3>Memory settings</h3>
     <label class="cb"><input type="checkbox" id="set_auto" onchange="saveSet()"> Enable Smart Memory</label>
+    <h4 style="margin:12px 0 4px;color:#789">Memory LLM</h4>
+    <div style="font-size:.8em;color:#789">Extraction profile (default = active)</div>
+    <select id="set_profile" onchange="saveSet()" style="width:220px"></select>
     <h4 style="margin:12px 0 4px;color:#789">Extraction</h4>
     <div style="font-size:.8em;color:#789">Extract after every</div>
     <input type="number" id="set_every" min="2" max="100" onchange="saveSet()" style="width:80px;display:inline-block"> <span style="font-size:.8em;color:#789">new messages</span>
+    <div style="font-size:.8em;color:#789">Max stored smart memories</div>
+    <input type="number" id="set_max" min="5" max="500" onchange="saveSet()" style="width:80px;display:inline-block">
     <h4 style="margin:12px 0 4px;color:#789">Injection</h4>
     <div style="font-size:.8em;color:#789">Injection token budget</div>
     <input type="number" id="set_budget" min="50" max="4000" onchange="saveSet()" style="width:80px;display:inline-block">
@@ -48,9 +53,13 @@
       <div style="font-size:.8em;color:#789">Injection position</div>
       <label class="cb"><input type="radio" name="pos" checked disabled> Before main prompt</label>
       <label class="cb"><input type="radio" name="pos" disabled> In-chat @ depth</label>
-      <label class="cb"><input type="checkbox" disabled> Read-only mode</label>
-      <div style="font-size:.8em;color:#789">Max stored memories per character</div>
-      <input type="number" value="50" disabled style="width:80px">
+      <div style="font-size:.8em;color:#789">Extraction prompt template</div>
+      <input placeholder="(default extraction prompt)" disabled>
+      <label class="cb"><input type="checkbox" disabled> Read-only mode — protect memories from AI edits</label>
+      <label class="cb"><input type="checkbox" disabled> Consolidate similar memories</label>
+      <label class="cb"><input type="checkbox" disabled> Deduplicate semantically (embeddings)</label>
+      <div style="font-size:.8em;color:#789">Trigger keywords (inject only when mentioned)</div>
+      <input placeholder="comma-separated triggers" disabled>
     </div>
   </div>
 </main>
@@ -85,10 +94,12 @@ function renderList(){
 
 let roomName='';
 async function load(){
-  const [{cards},{rooms}]=await Promise.all([get('cards'),get('rooms')]);
+  const [{cards},{rooms},{profiles}]=await Promise.all([get('cards'),get('rooms'),get('profiles')]);
+  $('set_profile').innerHTML='<option value="0">— default (active) —</option>'+
+    (profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   const rm=(rooms||[]).find(r=>r.id===ROOM);
   roomName=rm?.name||'Chat';
-  $('set_auto').checked=!!rm?.auto_mem;$('set_every').value=rm?.mem_every||10;$('set_budget').value=rm?.mem_budget||500;
+  $('set_auto').checked=!!rm?.auto_mem;$('set_every').value=rm?.mem_every||10;$('set_budget').value=rm?.mem_budget||500;$('set_max').value=rm?.mem_max||50;$('set_profile').value=rm?.mem_profile_id||0;
   $('rchat').innerHTML=
     `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div>`;
   $('rcards').innerHTML=(cards||[]).map(c=>
@@ -103,7 +114,7 @@ async function load(){
 function pick(id,name){cardId=id;cardName=name;load()}
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
-async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500})}
+async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500,max:Number($('set_max').value)||50,profileId:Number($('set_profile').value)||null})}
 load();
 </script>
 </body>

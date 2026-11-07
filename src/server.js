@@ -244,7 +244,7 @@ const router = {
         send(res, 200, { ok: true });
     },
     'GET /api/rooms': async (req, res, u) => {
-        const rooms = db.prepare(`SELECT r.id, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget FROM rooms r
+        const rooms = db.prepare(`SELECT r.id, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget, r.mem_max, r.mem_profile_id FROM rooms r
             JOIN members m ON m.room_id=r.id WHERE m.user_id=? ORDER BY r.id`).all(u.id);
         send(res, 200, { rooms });
     },
@@ -343,8 +343,9 @@ const router = {
     },
     'POST /api/room/memsettings': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('UPDATE rooms SET auto_mem=COALESCE(?,auto_mem), mem_every=COALESCE(?,mem_every), mem_budget=COALESCE(?,mem_budget) WHERE id=?')
-            .run(b.auto === undefined ? null : (b.auto ? 1 : 0), b.every, b.budget, b.room || 1);
+        db.prepare(`UPDATE rooms SET auto_mem=COALESCE(?,auto_mem), mem_every=COALESCE(?,mem_every),
+            mem_budget=COALESCE(?,mem_budget), mem_max=COALESCE(?,mem_max), mem_profile_id=? WHERE id=?`)
+            .run(b.auto === undefined ? null : (b.auto ? 1 : 0), b.every, b.budget, b.max, b.profileId ?? null, b.room || 1);
         send(res, 200, { ok: true });
     },
     'POST /api/members/talkativeness': async (req, res, u) => {
