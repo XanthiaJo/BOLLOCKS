@@ -7,6 +7,15 @@ nav a:hover{background:#232426;color:#ddd}
 nav a.on{background:#2b3a5e;color:#fff}
 #shell{flex:1;display:grid;grid-template-columns:220px 1fr;min-height:0}
 #shell.no-side{grid-template-columns:1fr}
+#shell.rs{grid-template-columns:220px 1fr 230px}
+#shell.rs.no-side{grid-template-columns:1fr 230px}
+#rsidebar{padding:12px;background:#141517;overflow-y:auto;border-left:1px solid #232426}
+#rsidebar h3{margin:4px 0 8px;font-size:.85em;text-transform:uppercase;color:#789;letter-spacing:.06em}
+.rprof{padding:7px 8px;border:1px solid #2a2b2e;border-radius:5px;margin-bottom:6px;cursor:pointer}
+.rprof:hover{background:#232426}
+.rprof.on{border-color:#4a7c3a}
+.rprof .n{font-weight:600;font-size:.9em}
+.rprof .m{color:#789;font-size:.78em;margin-top:2px}
 #sidebar{padding:12px;background:#141517;overflow-y:auto;border-right:1px solid #232426}
 #sidebar h3{margin:4px 0 8px;font-size:.85em;text-transform:uppercase;color:#789;letter-spacing:.06em}
 #content{min-height:0;display:flex;flex-direction:column;overflow:hidden}
