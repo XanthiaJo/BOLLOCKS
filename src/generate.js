@@ -9,7 +9,11 @@ import { db, activeProfile } from './db.js';
 export async function generateReply(roomId, card) {
     const owner = db.prepare(`SELECT u.id FROM members m JOIN users u ON u.id=m.user_id
         WHERE m.room_id=? AND m.kind='human' ORDER BY m.user_id LIMIT 1`).get(roomId);
-    const conn = activeProfile(owner?.id);
+    // Card's own profile wins; otherwise the room owner's active profile.
+    const p = card.profile_id
+        ? db.prepare('SELECT * FROM api_profiles WHERE id=?').get(card.profile_id)
+        : null;
+    const conn = p ? { apiUrl: p.api_url, model: p.model, key: p.key } : activeProfile(owner?.id);
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(

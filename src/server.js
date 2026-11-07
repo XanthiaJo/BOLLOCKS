@@ -2,12 +2,13 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, seed, login, userForToken, createUser, activeProfile, migrateProfiles } from './db.js';
+import { db, seed, login, userForToken, createUser, activeProfile, migrateProfiles, migrateSchema } from './db.js';
 import { generateReply } from './generate.js';
 
 const PUB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const PORT = Number(process.env.PORT || 8100);
 seed();
+migrateSchema();
 migrateProfiles();
 
 // ---- SSE fan-out per room ----
@@ -47,15 +48,15 @@ const router = {
     'POST /api/cards': async (req, res, u) => {
         const b = await readBody(req);
         if (!b.name) return send(res, 400, { error: 'name required' });
-        const id = db.prepare('INSERT INTO cards (owner_id,name,description,first_message) VALUES (?,?,?,?)')
-            .run(u.id, b.name, b.description || '', b.first_message || '').lastInsertRowid;
+        const id = db.prepare('INSERT INTO cards (owner_id,name,description,first_message,profile_id) VALUES (?,?,?,?,?)')
+            .run(u.id, b.name, b.description || '', b.first_message || '', b.profileId || null).lastInsertRowid;
         send(res, 200, { id });
     },
     'POST /api/cards/update': async (req, res, u) => {
         const b = await readBody(req);
         db.prepare(`UPDATE cards SET name=COALESCE(?,name), description=COALESCE(?,description),
-            first_message=COALESCE(?,first_message) WHERE id=? AND owner_id=?`)
-            .run(b.name, b.description, b.first_message, b.id, u.id);
+            first_message=COALESCE(?,first_message), profile_id=? WHERE id=? AND owner_id=?`)
+            .run(b.name, b.description, b.first_message, b.profileId ?? null, b.id, u.id);
         send(res, 200, { ok: true });
     },
     'POST /api/cards/delete': async (req, res, u) => {

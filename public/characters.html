@@ -28,6 +28,9 @@ button.del{background:#7c3a3a}
     <input id="ed_name" placeholder="Name">
     <textarea id="ed_desc" placeholder="Description — personality, appearance, how they speak"></textarea>
     <textarea id="ed_first" placeholder="First message (greeting) — optional"></textarea>
+    <label>API profile <small>— uses default unless changed</small><br>
+      <select id="ed_profile" style="width:100%;padding:8px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:4px"></select>
+    </label>
     <button onclick="saveCard()">Save</button>
     <button onclick="clearEd()" style="background:#444">Clear</button>
   </div>
@@ -47,7 +50,7 @@ async function load(){
       <div>
         <div class="name">${esc(c.name)}</div>
         <div class="desc">${esc(c.description)}</div>
-        <div class="meta">#${c.id} · owner ${esc(c.owner||'?')}</div>
+        <div class="meta">#${c.id} · owner ${esc(c.owner||'?')}${profName(c)}</div>
       </div>
       <div class="btns">
         <button onclick='edit(${JSON.stringify(c).replace(/'/g,"&#39;")})'>Edit</button>
@@ -57,13 +60,21 @@ async function load(){
     </div>`).join('');
 }
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let profs=[];
+const profName=c=>c.profile_id?(' · '+(profs.find(p=>p.id===c.profile_id)?.name||'custom api')):'';
+async function loadProfs(){
+  const {profiles}=await get('profiles');
+  profs=profiles||[];
+  $('ed_profile').innerHTML='<option value="">— default —</option>'+
+    profs.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+}
 
-function edit(c){$('edtitle').textContent='Edit '+c.name;$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_first').value=c.first_message||'';scrollTo(0,0)}
+function edit(c){$('edtitle').textContent='Edit '+c.name;$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_first').value=c.first_message||'';$('ed_profile').value=c.profile_id||'';scrollTo(0,0)}
 function clearEd(){$('edtitle').textContent='New character';$('ed_id').value='';$('ed_name').value='';$('ed_desc').value='';$('ed_first').value=''}
 
 async function saveCard(){
   const id=$('ed_id').value;
-  const b={name:$('ed_name').value.trim(),description:$('ed_desc').value,first_message:$('ed_first').value};
+  const b={name:$('ed_name').value.trim(),description:$('ed_desc').value,first_message:$('ed_first').value,profileId:Number($('ed_profile').value)||null};
   if(!b.name)return alert('needs a name');
   if(id)await api('cards/update',{id:Number(id),...b});
   else await api('cards',b);
@@ -71,7 +82,7 @@ async function saveCard(){
 }
 async function del(id){if(confirm('Delete this character?')){await api('cards/delete',{id});load()}}
 async function addToRoom(id){await api('members',{room:Number(localStorage.mp_room||1),cardId:id,kind:'ai'});alert('added to current chat')}
-load();
+Promise.all([load(),loadProfs()]);
 </script>
 </body>
 </html>

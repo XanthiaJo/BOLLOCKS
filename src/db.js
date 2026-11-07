@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS members (
 CREATE TABLE IF NOT EXISTS cards (
     id INTEGER PRIMARY KEY, owner_id INTEGER REFERENCES users(id),
     name TEXT NOT NULL, description TEXT DEFAULT '',
-    first_message TEXT DEFAULT ''
+    first_message TEXT DEFAULT '',
+    profile_id INTEGER REFERENCES api_profiles(id)
 );
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,6 +83,13 @@ export function activeProfile(userId) {
     if (p) return { apiUrl: p.api_url, model: p.model, key: p.key };
     const s = JSON.parse(db.prepare('SELECT settings FROM users WHERE id=?').get(userId)?.settings || '{}');
     return s.apiUrl ? s : null;
+}
+
+/** Schema touch-ups for existing DBs (CREATE TABLE only applies on fresh). */
+export function migrateSchema() {
+    const cols = db.prepare('PRAGMA table_info(cards)').all().map(c => c.name);
+    if (!cols.includes('profile_id'))
+        db.exec('ALTER TABLE cards ADD COLUMN profile_id INTEGER REFERENCES api_profiles(id)');
 }
 
 /** One-time: import legacy settings-JSON connections as a "Default" profile. */
