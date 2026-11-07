@@ -106,13 +106,17 @@ export function migrateProfiles() {
 }
 
 export function seed() {
-    if (db.prepare('SELECT COUNT(*) c FROM users').get().c) return;
-    createUser('creamms', 'changeme');
-    createUser('mptest', 'changeme');
-    const room = db.prepare('INSERT INTO rooms (name) VALUES (?)').run('The House').lastInsertRowid;
-    const u1 = db.prepare('SELECT id FROM users WHERE handle=?').get('creamms').id;
-    const u2 = db.prepare('SELECT id FROM users WHERE handle=?').get('mptest').id;
-    db.prepare('INSERT INTO members (room_id,user_id,kind) VALUES (?,?,?)').run(room, u1, 'human');
-    db.prepare('INSERT INTO members (room_id,user_id,kind) VALUES (?,?,?)').run(room, u2, 'human');
-    console.log('[db] seeded default users + room (change passwords!)');
+    // Test users — every account gets membership in room 1.
+    const room = db.prepare('SELECT id FROM rooms ORDER BY id LIMIT 1').get()?.id
+        || db.prepare('INSERT INTO rooms (name) VALUES (?)').run('The House').lastInsertRowid;
+    for (const h of ['creamms', 'karima', 'blake']) {
+        if (!db.prepare('SELECT id FROM users WHERE handle=?').get(h))
+            createUser(h, 'changeme');
+        const uid = db.prepare('SELECT id FROM users WHERE handle=?').get(h).id;
+        db.prepare('INSERT OR IGNORE INTO members (room_id,user_id,kind) VALUES (?,?,?)').run(room, uid, 'human');
+    }
+    if (db.prepare('SELECT COUNT(*) c FROM messages').get().c) return;
+    const mptest = db.prepare('SELECT id FROM users WHERE handle=?').get('mptest')?.id;
+    if (mptest) db.prepare('INSERT OR IGNORE INTO members (room_id,user_id,kind) VALUES (?,?,?)').run(room, mptest, 'human');
+    console.log('[db] users + room ensured');
 }

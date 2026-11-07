@@ -21,9 +21,11 @@ const push = (roomId, evt) => {
 // ---- HTTP helpers ----
 const readBody = req => new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { r(JSON.parse(b)); } catch { r({}); } }); });
 const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
-// Local testing mode: no token → first user. Swap for real auth later.
+// Local testing mode: no token → ?as=<handle> impersonation, else first user.
 const auth = req =>
     userForToken(req.headers.authorization?.replace(/^Bearer /, '') || new URL(req.url, 'http://x').searchParams.get('token'))
+    || db.prepare('SELECT * FROM users WHERE handle=?').get(
+        new URL(req.url, 'http://x').searchParams.get('as') || req.headers['x-as-user'] || '')
     || db.prepare('SELECT * FROM users ORDER BY id LIMIT 1').get();
 
 const router = {
@@ -40,6 +42,8 @@ const router = {
         catch { send(res, 409, { error: 'handle taken' }); }
     },
     'GET /api/me': async (req, res, u) => send(res, 200, { handle: u.handle }),
+    'GET /api/users': async (req, res, u) =>
+        send(res, 200, { users: db.prepare('SELECT handle FROM users ORDER BY id').all() }),
     'GET /api/cards': async (req, res, u) => {
         const cards = db.prepare(`SELECT c.*, u.handle owner FROM cards c
             LEFT JOIN users u ON u.id=c.owner_id ORDER BY c.name`).all();

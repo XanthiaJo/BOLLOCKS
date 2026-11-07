@@ -3,10 +3,11 @@ let me = '';
 let room = Number(localStorage.mp_room || 1);
 let es = null;
 
+const AS = new URLSearchParams(location.search).get('as') || '';
 const $ = id => document.getElementById(id);
 const api = (p, b, method = 'POST') => fetch(`/api/${p}`, {
     method,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(AS ? { 'X-As-User': AS } : {}) },
     ...(method === 'POST' ? { body: JSON.stringify(b || {}) } : {}),
 }).then(r => r.json());
 const get = p => api(p, null, 'GET');
@@ -47,7 +48,7 @@ async function loadRoom() {
         .join('');
     document.title = `RP · room ${room}`;
     if (es) es.close();
-    es = new EventSource(`/api/stream?room=${room}&token=${token}`);
+    es = new EventSource(`/api/stream?room=${room}&token=${token}${AS ? '&as=' + AS : ''}`);
     es.onmessage = e => {
         const d = JSON.parse(e.data);
         if (d.type === 'message' && d.message.room_id === room) addMsg(d.message);
