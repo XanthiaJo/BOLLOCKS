@@ -17,8 +17,25 @@ export async function generateReply(roomId, card) {
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(
-        'SELECT name, text, kind, card_id FROM messages WHERE room_id=? ORDER BY id DESC LIMIT 30'
+        'SELECT name, text, kind, card_id, sender_user_id FROM messages WHERE room_id=? ORDER BY id DESC LIMIT 30'
     ).all(roomId).reverse();
+    const lastSpeaker = [...history].reverse().find(m => m.kind === 'say')?.name || 'the user';
+
+    // {{char}}/{{user}} macro substitution — ST cards are full of them.
+    const sub = s => (s || '')
+        .replace(/\{\{char\}\}/gi, card.name)
+        .replace(/\{\{user\}\}/gi, lastSpeaker)
+        .replace(/<user>/gi, lastSpeaker)
+        .replace(/<USER>/gi, lastSpeaker);
+    for (const k of ['description', 'personality', 'scenario', 'mes_example', 'first_message',
+        'system_prompt', 'post_history_instructions'])
+        card[k] = sub(card[k]);
+
+    // Other characters in the scene — ST injects member context so NPCs
+    // know who's present. Descriptions only; no full cards.
+    const others = db.prepare(`SELECT c.name, c.description FROM members m
+        JOIN cards c ON c.id=m.card_id WHERE m.room_id=? AND m.kind='ai' AND c.id!=?`)
+        .all(roomId, card.id);
 
     // Keyword-triggered world entries: constant entries always in; keyed
     // entries fire when a key appears in recent chat or the card's fields.
@@ -43,6 +60,8 @@ export async function generateReply(roomId, card) {
         card.personality && `Personality:\n${card.personality}`,
         card.scenario && `Scenario:\n${card.scenario}`,
         card.mes_example && `Example dialogue:\n${card.mes_example}`,
+        others.length && `Also present in the scene:\n` +
+            others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
         `You are an NPC in a shared roleplay. Write ONLY ${card.name}'s next message.` +
             (card.post_history_instructions ? ` ${card.post_history_instructions}` : ''),
     ].filter(Boolean).join('\n\n');
