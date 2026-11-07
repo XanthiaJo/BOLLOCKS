@@ -134,8 +134,18 @@ async function renderToks() {
         `<small style="color:#789">${stats.card} · ${stats.prompt_tokens ? 'actual' : 'estimated'}</small>` +
         `<div style="display:flex;justify-content:space-between;font-weight:600;font-size:.85em"><span>Prompt tokens</span><span>${total}</span></div>` +
         (stats.completion_tokens ? `<div style="display:flex;justify-content:space-between;font-size:.8em;color:#789"><span>Reply tokens</span><span>${stats.completion_tokens}</span></div>` : '') +
-        Object.entries(stats.parts).filter(([, v]) => v).map(([k, v]) =>
-            `<div style="display:flex;justify-content:space-between;font-size:.8em;color:#9ab"><span>${k}</span><span>${v}</span></div>`).join('');
+        Object.entries(stats.parts).filter(([, v]) => v).map(([k, v]) => {
+            const href = {
+                'World Info': '/world.html', 'Memories': '/memories.html',
+                'Main Prompt': '/characters.html', 'Char Description': '/characters.html',
+                'Char Personality': '/characters.html', 'Scenario': '/characters.html',
+                'Chat Examples': '/characters.html', 'Other Characters': '/characters.html',
+                'Post-History Instructions': '/characters.html',
+            }[k];
+            const lbl = href
+                ? `<a href="${href}${AS ? '?as=' + AS : ''}" style="color:#9ab">${k}</a>` : `<span>${k}</span>`;
+            return `<div style="display:flex;justify-content:space-between;font-size:.8em;color:#9ab"><span>${lbl}</span><span>${v}</span></div>`;
+        }).join('');
 }
 
 async function start() {
