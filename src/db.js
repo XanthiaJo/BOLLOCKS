@@ -90,6 +90,10 @@ export function migrateSchema() {
     const cols = db.prepare('PRAGMA table_info(cards)').all().map(c => c.name);
     if (!cols.includes('profile_id'))
         db.exec('ALTER TABLE cards ADD COLUMN profile_id INTEGER REFERENCES api_profiles(id)');
+    // NULL-keyed UNIQUE never deduped — purge duplicate human members.
+    db.exec(`DELETE FROM members WHERE id NOT IN (
+        SELECT MIN(id) FROM members
+        GROUP BY room_id, IFNULL(user_id,-1), IFNULL(card_id,-1))`);
 }
 
 /** One-time: import legacy settings-JSON connections as a "Default" profile. */
@@ -113,7 +117,8 @@ export function seed() {
         if (!db.prepare('SELECT id FROM users WHERE handle=?').get(h))
             createUser(h, 'changeme');
         const uid = db.prepare('SELECT id FROM users WHERE handle=?').get(h).id;
-        db.prepare('INSERT OR IGNORE INTO members (room_id,user_id,kind) VALUES (?,?,?)').run(room, uid, 'human');
+        if (!db.prepare('SELECT 1 FROM members WHERE room_id=? AND user_id=? AND card_id IS NULL').get(room, uid))
+            db.prepare('INSERT INTO members (room_id,user_id,kind) VALUES (?,?,?)').run(room, uid, 'human');
     }
     if (db.prepare('SELECT COUNT(*) c FROM messages').get().c) return;
     const mptest = db.prepare('SELECT id FROM users WHERE handle=?').get('mptest')?.id;
