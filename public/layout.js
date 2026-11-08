@@ -74,3 +74,18 @@ function mpCloseEditor(){
   if (ed && ed._home) { ed._home.insertBefore(ed, ed._next || null); }
   v.remove();
 }
+
+// Transient "saved" toast — pages call this after a successful write so the
+// form can stay open instead of vanishing.
+function mpFlashSaved(msg = 'Saved') {
+    let t = document.getElementById('mpsaved');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'mpsaved'; t.className = 'mp-saved';
+        document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._t);
+    t._t = setTimeout(() => t.classList.remove('show'), 1600);
+}

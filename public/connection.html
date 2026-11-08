@@ -115,7 +115,7 @@ async function fetchModels(){
   $('modelist').innerHTML=(r.models||[]).map(m=>`<option value="${m}">`).join('');
   $('ed_model').focus();
 }
-function clearEd(){$('editor').style.display='none';$('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value='';$('ed_headers').value='';$('ed_ctx').value='';$('ed_maxr').value=''}
+function clearEd(){$('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value='';$('ed_headers').value='';$('ed_ctx').value='';$('ed_maxr').value=''}
 function newProf(){clearEd();mpOpenEditor('inline');$('ed_name').focus()}
 
 async function saveProf(){
@@ -133,7 +133,8 @@ async function saveProf(){
   if(!b.name)return alert('needs a name');
   if(id)await api('profiles/update',{id:Number(id),...b});
   else await api('profiles',b);
-  clearEd();load();
+  if(!id)clearEd();
+  mpFlashSaved();load();
 }
 async function activate(id){await api('profiles/activate',{id});load()}
 async function del(id){if(confirm('Delete this profile?')){await api('profiles/delete',{id});load()}}
