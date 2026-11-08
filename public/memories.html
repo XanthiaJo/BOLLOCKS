@@ -235,17 +235,39 @@ function renderList(){
   for(const m of mems){ const t=m.type||'fact'; (groups[t]=groups[t]||[]).push(m); }
   const html=TYPE_ORDER.filter(t=>groups[t]?.length).map(t=>`
     <h4 style="margin:12px 0 4px;color:#789;font-size:.85em;text-transform:uppercase;letter-spacing:.04em">${esc(t)} (${groups[t].length})</h4>
-    ${groups[t].map(m=>`
+    ${groups[t].map(m=>editId===m.id?editForm(m):`
     <div class="card">
       <div><div class="desc"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''} · ${esc(memScope(m.cards_id_fk))}</div>
       <input placeholder="trigger keywords — inject only when mentioned" value="${esc(m.triggers||'')}" style="font-size:.8em;margin-top:4px;width:70%" onchange="api('memories/triggers',{id:${m.id},triggers:this.value})"></div>
-      <div class="btns">${curTab==='smart'?`<button onclick="permPick(${m.id})">&rarr; perm</button>`:''}<button class="del" onclick="del(${m.id})">Delete</button></div>
+      <div class="btns"><button onclick="editMem(${m.id})">Edit</button>${curTab==='smart'?`<button onclick="permPick(${m.id})">&rarr; perm</button>`:`<button onclick="toSmart(${m.id})">&rarr; smart</button>`}<button class="del" onclick="del(${m.id})">Delete</button></div>
     </div>
     ${permPicker(m)}</div>`).join('')}`).join('');
   $('list').innerHTML=html||`<small>No ${curTab==='smart'?'smart':'permanent'} memories yet.</small>`;
 }
 
-let roomCards=[];let memProfiles=[];
+let roomCards=[];let memProfiles=[];let editId=0;
+function editMem(id){editId=editId===id?0:id;renderList()}
+function editForm(m){
+  const types=['fact','event','relationship','preference'];
+  const scopeOpts=`<option value="0"${!m.cards_id_fk?' selected':''}>${esc(roomName||'This chat')} (shared)</option>`+
+    roomCards.map(c=>`<option value="${c.id}"${m.cards_id_fk===c.id?' selected':''}>${esc(c.name)}</option>`).join('');
+  return `<div class="card" style="border-color:#3a5ccc">
+    <textarea id="em_content_${m.id}" style="min-height:60px;width:100%">${esc(m.content)}</textarea>
+    <div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap">
+      <select id="em_type_${m.id}" style="width:auto">${types.map(t=>`<option${t===(m.type||'fact')?' selected':''}>${t}</option>`).join('')}</select>
+      <select id="em_scope_${m.id}" style="width:auto">${scopeOpts}</select>
+    </div>
+    <input id="em_trig_${m.id}" placeholder="trigger keywords" value="${esc(m.triggers||'')}" style="width:100%;margin-top:6px;font-size:.85em">
+    <div class="btns" style="margin-top:6px"><button onclick="saveEdit(${m.id})">Save</button><button onclick="editMem(${m.id})">Cancel</button></div>
+  </div>`;
+}
+async function saveEdit(id){
+  const m=allMems.find(x=>x.id===id);if(!m)return;
+  await api('memories/update',{id,content:$('em_content_'+id).value,type:$('em_type_'+id).value,triggers:$('em_trig_'+id).value});
+  const scope=Number($('em_scope_'+id).value)||0;
+  if(scope!==(m.cards_id_fk||0)) await api('memories/move',{id,cardId:scope||null});
+  editId=0;load();
+}
 const memScope=id=>id?(roomCards.find(c=>c.id===id)?.name||'#'+id):'shared';
 async function move(id,cardId){await api('memories/move',{id,cardId:Number(cardId)||null});load();}
 let roomName='';
@@ -293,6 +315,7 @@ async function load(){
 }
 function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') curTab='user';load()}
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
+async function toSmart(id){await api('memories/update',{id,origin:'smart'});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
 let permPickId=0;
 function permPick(id){permPickId=permPickId===id?0:id;renderList()}
