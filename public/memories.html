@@ -18,6 +18,13 @@
 #setpanel .row input:not([type=number]):not([type=checkbox]){width:200px}
 #setpanel .ph{opacity:.45;pointer-events:none;margin-top:4px}
 #setpanel input[type=number]{display:inline-block}
+#setpanel .acc{border:1px solid #3a3b3e;border-radius:4px;margin:8px 0;overflow:hidden}
+#setpanel .acc-h{background:#2a2b2e;padding:7px 10px;cursor:pointer;font-size:.85em;font-weight:700;color:#9ab;display:flex;justify-content:space-between;align-items:center;user-select:none}
+#setpanel .acc-h:hover{background:#33353a}
+#setpanel .acc-h .arrow{transition:transform .15s;font-size:.9em}
+#setpanel .acc-h.open .arrow{transform:rotate(90deg)}
+#setpanel .acc-b{padding:8px 10px;display:none}
+#setpanel .acc-b.open{display:block}
 </style>
 </head>
 <body>
@@ -246,6 +253,25 @@ function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') c
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
 async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0,profileId:Number($('set_profile').value)||null})}
+function setupAcc(){
+  const panel=document.getElementById('setpanel');
+  if(!panel) return;
+  const h4s=[...panel.querySelectorAll('h4')];
+  for(const h of h4s){
+    const wrap=document.createElement('div'); wrap.className='acc';
+    const header=document.createElement('div'); header.className='acc-h';
+    header.innerHTML=esc(h.textContent)+' <span class="arrow">▸</span>';
+    const body=document.createElement('div'); body.className='acc-b';
+    let node=h.nextSibling; const toMove=[];
+    while(node && !(node.nodeType===1 && node.tagName==='H4')){ toMove.push(node); node=node.nextSibling; }
+    h.parentNode.insertBefore(wrap,h);
+    wrap.appendChild(header); wrap.appendChild(body);
+    for(const n of toMove) body.appendChild(n);
+    h.remove();
+    header.onclick=()=>{ header.classList.toggle('open'); body.classList.toggle('open'); };
+  }
+}
+setupAcc();
 load();
 </script>
 </body>
