@@ -159,14 +159,21 @@ export async function generateReply(roomId, card) {
         const overhead = Object.entries(parts).filter(([k]) => k !== 'Chat History')
             .reduce((a, [, v]) => a + v, 0);
         let histTok = parts['Chat History'];
+        const histStart = histTok;
+        const dropped = [];
         // ST-style: keep the opening message (greeting anchors the scene),
         // trim the middle, keep the recent tail.
         while (history.length > 2 && overhead + histTok > maxCtx) {
             const m = history.splice(1, 1)[0];
             histTok -= tok(m.name + ' ' + m.text);
+            dropped.push(`${m.name}: ${m.text}`);
         }
         parts['Chat History'] = histTok;
         parts['(capped)'] = maxCtx;
+        if (dropped.length) {
+            parts['(cut from history)'] = histStart - histTok;
+            texts['(cut from history)'] = dropped.join('\n\n');
+        }
     }
 
     const reqBody = {
@@ -199,7 +206,7 @@ export async function generateReply(roomId, card) {
     if (!text) { console.log('[gen] empty — raw:', JSON.stringify(data).slice(0, 600)); throw new Error('empty AI response'); }
     genStats[roomId] = {
         at: Date.now(), card: card.name,
-        est: Object.values(parts).reduce((a, b) => a + b, 0),
+        est: Object.entries(parts).filter(([k]) => !k.startsWith('(')).reduce((a, [, b]) => a + b, 0),
         prompt_tokens: data?.usage?.prompt_tokens ?? null,
         completion_tokens: data?.usage?.completion_tokens ?? null,
         parts,
