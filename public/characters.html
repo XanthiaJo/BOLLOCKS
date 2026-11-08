@@ -17,7 +17,7 @@ textarea{min-height:90px;font-family:inherit;width:100%}
 .card .btns{display:flex;flex-direction:column;gap:6px}
 .card button{width:auto}
 button.del{background:#7c3a3a}
-#editor{border:1px solid #2b3a5e;border-radius:6px;padding:14px;margin-bottom:18px;background:#191b24}
+#editor{display:none}
 #editor h3{margin-top:0}
 #editor input{width:100%}
 </style>
@@ -137,7 +137,7 @@ function edit(c){
   document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=!mine);
   $('edtitle').textContent=(mine?'Edit ':'')+c.name+(mine?'':` (${c.owner})`);
   $('ed_av').src=c.avatar?'/api/avatar?id='+c.id+'&t='+Date.now():'';
-  if(!mine){$('editor').style.display='block';$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');scrollTo(0,0);return;}$('edtitle').textContent='Edit '+c.name;$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');$('ed_creator').value=c.creator||'';$('ed_profile').value=c.api_profiles_id_fk||'';scrollTo(0,0)}
+  if(!mine){$('editor').style.display='block';$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');mpOpenEditor();return;}$('edtitle').textContent='Edit '+c.name;$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');$('ed_creator').value=c.creator||'';$('ed_profile').value=c.api_profiles_id_fk||'';mpOpenEditor()}
 let cropImg=null,cropX=0,cropY=0,cropSize=0,cropScale=1;
 function pickAvatar(inp){
   const f=inp.files[0];inp.value='';if(!f)return;
@@ -178,7 +178,7 @@ async function saveCard(){
   if(!b.name)return alert('needs a name');
   if(id)await api('cards/update',{id:Number(id),...b});
   else await api('cards',b);
-  clearEd();load();
+  mpCloseEditor();clearEd();load();
 }
 async function del(id){if(confirm('Delete this character?')){await api('cards/delete',{id});load()}}
 async function addToRoom(id){await api('members',{room:Number(localStorage.mp_room||1),cardId:id,kind:'ai'});alert('added to current chat')}
