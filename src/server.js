@@ -10,7 +10,7 @@ const PUB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'publi
 const PORT = Number(process.env.PORT || 8100);
 migrateSchema();
 migrateProfiles();
-if (process.env.BOLLOCKS_SEED !== '0') seed();
+seed();
 
 // ---- SSE fan-out per room ----
 const streams = new Map(); // rooms_id_fk -> Set<res>
@@ -23,8 +23,6 @@ const push = (roomId, evt) => {
 const readBody = req => new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { r(JSON.parse(b)); } catch { r({}); } }); });
 const CARDS_DIR = path.join(process.cwd(), 'data', 'cards');
 fs.mkdirSync(CARDS_DIR, { recursive: true });
-const BG_DIR = path.join(process.cwd(), 'data', 'bg');
-fs.mkdirSync(BG_DIR, { recursive: true });
 const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
 // Local testing mode: no token → ?as=<handle> impersonation, else first user.
 const auth = req =>
@@ -87,7 +85,7 @@ const router = {
         const books = db.prepare(`SELECT b.*, b.world_books_id_pk AS id, u.handle owner,
             (SELECT COUNT(*) FROM book_entries WHERE world_books_id_fk=b.world_books_id_pk) cnt
             FROM world_books b LEFT JOIN users u ON u.users_id_pk=b.owner_users_id_fk ORDER BY b.world_books_id_pk`).all();
-        const rooms = db.prepare(`SELECT r.rooms_id_pk AS id,r.name,rb.world_books_id_fk world_books_id_fk FROM rooms r
+        const rooms = db.prepare(`SELECT r.rooms_id_pk,r.name,rb.world_books_id_fk world_books_id_fk FROM rooms r
             LEFT JOIN room_books rb ON rb.rooms_id_fk=r.rooms_id_pk`).all();
         send(res, 200, { books, rooms });
     },
@@ -183,10 +181,10 @@ const router = {
         send(res, 200, { ok: true });
     },
     'GET /api/users': async (req, res, u) =>
-        send(res, 200, { users: db.prepare('SELECT users_id_pk AS id,handle FROM users ORDER BY users_id_pk').all() }),
+        send(res, 200, { users: db.prepare('SELECT id,handle FROM users ORDER BY users_id_pk').all() }),
     'POST /api/cards/avatar': async (req, res, u) => {
         const b = await readBody(req);
-        const card = db.prepare('SELECT owner_users_id_fk FROM cards WHERE cards_id_pk=?').get(b.world_books_id_pk);
+        const card = db.prepare('SELECT owner_users_id_fk FROM cards WHERE users_id_pk=?').get(b.world_books_id_pk);
         if (!card || card.owner_users_id_fk !== u.users_id_pk) return send(res, 403, { error: 'not your card' });
         const file = `cards/${b.world_books_id_pk}.png`;
         fs.writeFileSync(path.join(CARDS_DIR, `${b.world_books_id_pk}.png`), Buffer.from(b.png_b64, 'base64'));
@@ -316,7 +314,7 @@ const router = {
     'POST /api/users/delete': async (req, res, u) => {
         const b = await readBody(req);
         const target = b.handle
-            ? db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=? COLLATE NOCASE').get(b.handle)?.id
+            ? db.prepare('SELECT id FROM users WHERE handle=? COLLATE NOCASE').get(b.handle)?.id
             : b.world_books_id_pk;
         if (!target || target === u.users_id_pk) return send(res, 400, { error: 'no such user' });
         db.prepare('DELETE FROM sessions WHERE users_id_fk=?').run(target);
@@ -326,8 +324,7 @@ const router = {
         send(res, 200, { ok: true });
     },
     'GET /api/rooms': async (req, res, u) => {
-        const rooms = db.prepare(`SELECT DISTINCT r.rooms_id_pk AS id, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget, r.mem_max, r.max_context,
-            (SELECT COUNT(*) FROM room_members rm2 WHERE rm2.rooms_id_fk=r.rooms_id_pk) AS members, r.bg FROM rooms r
+        const rooms = db.prepare(`SELECT r.rooms_id_pk, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget, r.mem_max, r.max_context FROM rooms r
             JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE c.owner_users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk);
         send(res, 200, { rooms });
     },
@@ -413,10 +410,7 @@ const router = {
     'GET /api/room': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('id') || 1);
         const msgs = db.prepare(MSG_SQL + ' WHERE m.rooms_id_fk=? ORDER BY m.messages_id_pk').all(roomId);
-        const members = db.prepare(`SELECT m.*, c.name card_name, c.avatar card_avatar, u.handle, pc.name persona_name, pc.avatar persona_avatar, pc.cards_id_pk persona_id,
-            CASE WHEN IFNULL(c.is_persona,0)=1 THEN 'human' ELSE 'ai' END kind,
-            CASE WHEN IFNULL(c.is_persona,0)=1 THEN c.owner_users_id_fk END users_id_fk
-            FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
+        const members = db.prepare(`SELECT m.*, c.name card_name, c.avatar card_avatar, u.handle, pc.name persona_name, pc.avatar persona_avatar, pc.cards_id_pk persona_id FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
             LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk LEFT JOIN users u ON u.users_id_pk=c.owner_users_id_fk
             LEFT JOIN cards pc ON pc.owner_users_id_fk=u.users_id_pk AND pc.is_persona=1 WHERE rm.rooms_id_fk=?`).all(roomId);
         const lastMem = db.prepare("SELECT content text FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY memories_id_pk DESC LIMIT 1").get(roomId);
@@ -467,29 +461,6 @@ const router = {
         db.prepare('UPDATE rooms SET ai_trigger=? WHERE rooms_id_pk=?').run(b.mode || 'manual', b.room || 1);
         send(res, 200, { ok: true });
     },
-    'GET /api/roombg': (req, res) => {
-        const id = Number(new URL(req.url, 'http://x').searchParams.get('id'));
-        const r = db.prepare('SELECT bg FROM rooms WHERE rooms_id_pk=?').get(id);
-        const file = r?.bg && path.join(BG_DIR, r.bg);
-        if (!file || !fs.existsSync(file)) return send(res, 404, { error: 'no background' });
-        res.writeHead(200, { 'Content-Type': 'image/png' });
-        fs.createReadStream(file).pipe(res);
-    },
-    'POST /api/room/background': async (req, res, u) => {
-        const b = await readBody(req);
-        if (!b.png_b64) return send(res, 400, { error: 'png_b64 required' });
-        const file = `${b.room || 1}.png`;
-        fs.writeFileSync(path.join(BG_DIR, file), Buffer.from(b.png_b64, 'base64'));
-        db.prepare('UPDATE rooms SET bg=? WHERE rooms_id_pk=?').run(file, b.room || 1);
-        send(res, 200, { ok: true });
-    },
-    'POST /api/room/background/remove': async (req, res, u) => {
-        const b = await readBody(req);
-        const r = db.prepare('SELECT bg FROM rooms WHERE rooms_id_pk=?').get(b.room || 1);
-        if (r?.bg && fs.existsSync(path.join(BG_DIR, r.bg))) fs.unlinkSync(path.join(BG_DIR, r.bg));
-        db.prepare("UPDATE rooms SET bg='' WHERE rooms_id_pk=?").run(b.room || 1);
-        send(res, 200, { ok: true });
-    },
     'POST /api/room/settings': async (req, res, u) => {
         const b = await readBody(req);
         db.prepare('UPDATE rooms SET max_context=COALESCE(?,max_context) WHERE rooms_id_pk=?')
@@ -530,7 +501,7 @@ const router = {
     'POST /api/generate': async (req, res, u) => {
         const b = await readBody(req);
         const roomId = b.room || 1;
-        const npc = db.prepare(`SELECT c.*, c.cards_id_pk AS id FROM members m JOIN room_members rm ON rm.members_id_fk=m.members_id_pk JOIN cards c ON c.cards_id_pk=m.cards_id_fk
+        const npc = db.prepare(`SELECT c.* FROM members m JOIN room_members rm ON rm.members_id_fk=m.members_id_pk JOIN cards c ON c.cards_id_pk=m.cards_id_fk
             WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 ${b.card ? 'AND c.cards_id_pk=?' : ''} ORDER BY m.cards_id_fk`).all(roomId, ...(b.card ? [b.card] : []))[0];
         if (!npc) return send(res, 404, { error: 'no AI member' });
         try {
@@ -553,13 +524,9 @@ http.createServer(async (req, res) => {
     const user = auth(req);
     // Unauthenticated: /api/* is off-limits except login; static files still
     // serve so the login page (and its css/js) can load.
-    const firstUser = key === 'POST /api/register' && !db.prepare('SELECT 1 FROM users LIMIT 1').get();
-    if (!user && url.pathname.startsWith('/api/') && key !== 'POST /api/login' && key !== 'GET /api/avatar' && key !== 'GET /api/roombg' && !firstUser)
+    if (!user && url.pathname.startsWith('/api/') && key !== 'POST /api/login' && key !== 'GET /api/avatar')
         return send(res, 401, { error: 'auth required' });
-    if (router[key]) {
-        try { return await router[key](req, res, user); }
-        catch (e) { console.error(`[${key}]`, e); return send(res, 500, { error: String(e?.message || e) }); }
-    }
+    if (router[key]) return router[key](req, res, user);
     // static
     const file = path.join(PUB, url.pathname === '/' ? 'index.html' : url.pathname);
     if (fs.existsSync(file) && file.startsWith(PUB)) {

@@ -69,10 +69,9 @@ export async function generateReply(roomId, card) {
     const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
     const active = r => !r.triggers || r.triggers.split(/[\s,]+/).filter(Boolean)
         .some(t => recentText.includes(t.toLowerCase()));
-    const roomMems = cap(db.prepare('SELECT content,triggers FROM memories WHERE rooms_id_fk=? AND cards_id_fk IS NULL ORDER BY memories_id_pk DESC').all(roomId).reverse().filter(active), 0);
-    const mems = cap(db.prepare('SELECT content,triggers FROM memories WHERE cards_id_fk=? AND rooms_id_fk=? ORDER BY memories_id_pk DESC')
+    const roomMems = cap(db.prepare('SELECT content,triggers FROM memories WHERE rooms_id_fk=? AND cards_id_fk IS NULL ORDER BY rooms_id_pk DESC').all(roomId).reverse().filter(active), 0);
+    const mems = cap(db.prepare('SELECT content,triggers FROM memories WHERE cards_id_fk=? AND rooms_id_fk=? ORDER BY rooms_id_pk DESC')
         .all(card.id, roomId).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
-
     const memText = (roomMems.length || mems.length)
         ? [
             roomMems.length && 'What happened here:\n' + roomMems.map(m => '- ' + m.content).join('\n'),
@@ -177,7 +176,7 @@ export async function generateReply(roomId, card) {
 export async function maybeSummarize(roomId) {
     const room = db.prepare('SELECT *, rooms_id_pk AS id FROM rooms WHERE rooms_id_pk=?').get(roomId);
     if (!room?.auto_mem) return;
-    const lastId = db.prepare('SELECT MAX(messages_id_pk) m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
+    const lastId = db.prepare('SELECT MAX(id) m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
     if (lastId - room.mem_last_messages_id < (room.mem_every || 10)) return;
     const owner = db.prepare(`SELECT u.users_id_pk FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
         JOIN cards c ON c.cards_id_pk=m.cards_id_fk JOIN users u ON u.users_id_pk=c.owner_users_id_fk
@@ -224,7 +223,7 @@ export async function maybeSummarize(roomId) {
     // call retries on the next message instead of silently skipping.
     db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
     // Cap stored smart memories — oldest auto entries drop off.
-    db.prepare(`DELETE FROM memories WHERE rooms_id_fk=? AND source='auto' AND memories_id_pk NOT IN
-        (SELECT memories_id_pk FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY memories_id_pk DESC LIMIT ?)`)
+    db.prepare(`DELETE FROM memories WHERE rooms_id_fk=? AND source='auto' AND id NOT IN
+        (SELECT id FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY rooms_id_pk  DESC LIMIT ?)`)
         .run(roomId, roomId, room.mem_max || 50);
 }

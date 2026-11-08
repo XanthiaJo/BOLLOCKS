@@ -61,12 +61,12 @@ async function loadRoom() {
             `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
     renderLastMem(r.lastMem);
             `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
-    const cur = new Set((r.members || []).flatMap(m => [m.cards_id_fk ? 'c' + m.cards_id_fk : null, m.users_id_fk ? 'u' + m.users_id_fk : null]).filter(Boolean));
+    const cur = new Set((r.members || []).map(m => m.cards_id_fk ? 'c' + m.cards_id_fk : 'u' + m.users_id_fk));
     const [{ users }, { cards }] = await Promise.all([get('users'), get('cards')]);
     $('addpick').innerHTML =
         (users || []).filter(x => !cur.has('u' + x.id)).map(x => `<option value="u${x.id}">${x.handle}</option>`).join('') +
         (cards || []).filter(x => !cur.has('c' + x.id)).map(x => `<option value="c${x.id}">${x.name} (ai)</option>`).join('') || '<option>— everyone\'s in —</option>';
-    document.title = `BOLLOCKS · room ${room}`;
+    document.title = `RP · room ${room}`;
     if (es) es.close();
     es = new EventSource(`/api/stream?room=${room}&token=${token}`);
     es.onmessage = e => {
@@ -84,15 +84,13 @@ async function loadRoom() {
     get('rooms').then(({ rooms }) => {
         const r = (rooms || []).find(x => x.id === room);
         if (r) { $('trigsel').value = r.ai_trigger || 'manual'; $('ctxmax').value = r.max_context || 0; }
-        $('chat').style.setProperty('--bg', r?.bg ? `url(/api/roombg?id=${room})` : 'none');
     });
 }
 
 async function renderRooms() {
     const { rooms } = await get('rooms');
     $('rooms').innerHTML = (rooms || [])
-        .map(r => `<div class="room${r.id === room ? ' on' : ''}" onclick="pick(${r.id})"><span style="font-size:.85em">${(r.members||0)>2?'👥':'👤'}</span><span class="n">${r.name}</span>` +
-            `${(r.members||0)>2?`<span style="font-size:.72em;color:#789">${r.members}</span>`:''}` +
+        .map(r => `<div class="room${r.id === room ? ' on' : ''}" onclick="pick(${r.id})"><span class="n">${r.name}</span>` +
             `<span class="rbtns"><a href="#" title="Rename" onclick="event.stopPropagation();renameRoom(${r.id});return false">✎</a>` +
             `<a href="#" title="Delete" onclick="event.stopPropagation();delRoom(${r.id});return false" style="color:#a55">✕</a></span></div>`)
         .join('');
@@ -138,13 +136,6 @@ async function setTrig(mode) {
 async function setCtx(v) {
     await api('room/settings', { room, maxContext: Math.max(0, Number(v) || 0) });
 }
-async function uploadBg(inp) {
-    const f = inp.files?.[0]; if (!f) return;
-    const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result.split(',')[1]); fr.readAsDataURL(f); });
-    await api('room/background', { room, png_b64: b64 });
-    loadRoom();
-}
-async function clearBg() { await api('room/background/remove', { room }); loadRoom(); }
 async function setTalk(cardId, value) {
     await api('members/talkativeness', { room, cardId, value });
 }
@@ -214,11 +205,6 @@ async function start() {
     const m = await get('me');
     me = m.handle || 'you';
     persona = m.persona || null;
-    const { rooms } = await get('rooms');
-    if (rooms && rooms.length && !rooms.some(r => r.id === room)) {
-        room = rooms[0].id;
-        localStorage.mp_room = room;
-    }
     await loadRoom();
 }
 
