@@ -79,6 +79,13 @@ const router = {
         if (b.cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, b.cardId);
         send(res, 200, { id });
     },
+    'POST /api/memories/update': async (req, res, u) => {
+        const b = await readBody(req);
+        const id = b.id || b.world_books_id_pk;
+        db.prepare('UPDATE memories SET content=COALESCE(?,content), type=COALESCE(?,type), triggers=COALESCE(?,triggers) WHERE memories_id_pk=?')
+            .run(b.content ?? null, b.type ?? null, b.triggers ?? null, id);
+        send(res, 200, { ok: true });
+    },
     'POST /api/memories/delete': async (req, res, u) => {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
