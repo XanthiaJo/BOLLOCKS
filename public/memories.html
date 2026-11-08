@@ -12,6 +12,8 @@
 .tab{background:#2a2b2e;border:1px solid #3a3b3e;color:#9ab;padding:5px 14px;border-radius:4px;cursor:pointer;width:auto;font-size:.85em}
 .tab.on{background:#3a5ccc;color:#fff;border-color:#3a5ccc}
 #setpanel h4{color:#789;margin:16px 0 4px;font-size:.85em;text-transform:uppercase;letter-spacing:.04em}
+#smartbar{margin:8px 0}
+#smartbar .lbl{font-size:.8em;color:#789;display:block;margin-bottom:3px}
 #setpanel .lbl{font-size:.8em;color:#789}
 #setpanel .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;margin:4px 0}
 #setpanel .row input[type=number]{width:80px}
@@ -57,18 +59,22 @@
       <textarea id="newmem" placeholder="e.g. Fig hates the colour green" style="min-height:60px;width:100%"></textarea>
       <button onclick="add()">Add memory</button>
     </div>
+    <div id="smartbar" style="display:none">
+      <div><span class="lbl" title="Which memory profile (preset of smart-memory settings) this chat follows.">Memory profile for this chat</span></div>
+      <select id="smart_mprof" onchange="pickMProf(this.value)" style="width:240px"><option value="0">— per-chat (custom) —</option></select>
+      <small id="smart_mprof_hint" style="display:block;color:#789;margin-top:4px">Heavier settings live under the profile — make/edit them on the Settings tab.</small>
+    </div>
   </div>
   <div id="list"></div>
   <div class="panel" id="setpanel">
     <h3>Memory settings</h3>
 
     <h4>Profiles</h4>
-    <div class="row"><span class="lbl" title="Follow a saved memory profile instead of per-chat settings.">Memory profile</span><select id="set_mprof" onchange="pickMProf(this.value)" style="width:220px;display:inline-block"><option value="0">— per-chat (custom) —</option></select></div>
     <div id="mprof_list"></div>
     <div style="display:flex;gap:6px;margin-top:6px"><button onclick="newMP()">New profile</button><button onclick="saveAsProfile()">Save current as profile…</button></div>
 
     <div id="setbody">
-    <div id="mpfolownote" style="display:none;color:#9ab;font-size:.8em;margin:6px 0">Settings come from the selected memory profile — switch to <i>per-chat</i> to customise, or edit the profile above.</div>
+    <div id="mpfolownote" style="display:none;color:#9ab;font-size:.8em;margin:6px 0">Settings come from the memory profile this chat follows (pick it on the <b>Smart</b> tab) — switch to <i>per-chat</i> to customise, or edit the profile above.</div>
     <label class="cb"><input type="checkbox" id="set_auto" onchange="saveSet()"> Enable Smart Memory</label>
     <div style="opacity:.45;pointer-events:none"><label class="cb"><input type="checkbox" disabled> Read-only mode — protect memories</label></div>
 
@@ -255,6 +261,7 @@ function renderList(){
   $('t_perm').classList.toggle('on',curTab==='user');
   $('t_auto').classList.toggle('on',curTab==='smart');
   $('t_set').classList.toggle('on',curTab==='settings');
+  const sb=$('smartbar'); if(sb) sb.style.display=curTab==='smart'?'block':'none';
   const mems = curTab==='settings'?[]:allMems.filter(m=>(m.origin||m.source||'user')===curTab);
   $('addbox').style.display=curTab==='user'?'block':'none';
   $('setpanel').style.display=curTab==='settings'?'block':'none';
@@ -296,8 +303,10 @@ async function load(){
   $('set_activity').checked=!!sv.mem_activity;
   $('set_profile').value=sv.mem_extraction_profile_id||0;
   lockSet(!!followed&&sv!==rm);
-  $('set_mprof').innerHTML='<option value="0">— per-chat (custom) —</option>'+(memProfiles||[]).map(p=>`<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
-  $('set_mprof').value=followed?String(followed.mem_profiles_id_pk):'0';
+  const mprofOpts='<option value="0">— per-chat (custom) —</option>'+(memProfiles||[]).map(p=>`<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
+  const mprofVal=followed?String(followed.mem_profiles_id_pk):'0';
+  $('smart_mprof').innerHTML=mprofOpts;$('smart_mprof').value=mprofVal;
+  $('smart_mprof_hint').textContent=followed?`Heavier settings live inside "${followed.name}" — make/edit profiles on the Settings tab.`:'Per-chat settings apply — make/edit presets on the Settings tab.';
   $('mprof_list').innerHTML=(memProfiles||[]).map(p=>
     `<div class="mprofrow"><span class="n">${esc(p.name)}</span><button onclick="editMP(${p.mem_profiles_id_pk})">Edit</button><button class="del" onclick="delMP(${p.mem_profiles_id_pk})">Delete</button></div>`).join('')||'<small>No memory profiles saved yet.</small>';
   $('rchat').innerHTML=
