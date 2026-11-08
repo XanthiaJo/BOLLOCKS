@@ -70,15 +70,15 @@ flowchart TD
     LoadRooms --> SelectRoom["Select room (self-heal stale id)"]
     SelectRoom --> Tabs{Tab}
 
-    Tabs -->|Permanent| PermList[Show manual memories<br/>room-shared + card-scoped]
-    Tabs -->|Smart| SmartList[Show auto memories<br/>room-scoped only]
-    Tabs -->|Settings| Settings[Room memsettings<br/>auto_mem, mem_every, budget, max]
+    Tabs -->|Permanent| PermList["Show manual memories<br/>room-shared + card-scoped"]
+    Tabs -->|Smart| SmartList["Show auto memories<br/>room-scoped only"]
+    Tabs -->|Settings| Settings["Room memsettings<br/>auto_mem, mem_every, budget, max"]
 
     %% Permanent creation
     PermList --> AddMem{Add memory}
     AddMem --> Scope{Scope}
     Scope -->|Shared room| InsShared["INSERT memories<br/>cards_id_fk=NULL, source=manual"]
-    Scope -->|Character card (owned)| InsCard["INSERT memories<br/>cards_id_fk=card, source=manual"]
+    Scope -->|"Character card (owned)"| InsCard["INSERT memories<br/>cards_id_fk=card, source=manual"]
     InsShared --> PermList
     InsCard --> PermList
 
@@ -89,24 +89,24 @@ flowchart TD
     Update --> PermList
 
     %% Smart extraction
-    Chat([Chat message sent]) --> MaybeSum[MaybeSummarize room]
+    Chat([Chat message sent]) --> MaybeSum["MaybeSummarize room"]
     MaybeSum --> CheckAuto{auto_mem=1?}
     CheckAuto -- no --> Skip[Skip]
     CheckAuto -- yes --> CheckInterval{"messages since watermark >= mem_every?"}
     CheckInterval -- no --> Skip
-    CheckInterval -- yes --> Extract[LLM extracts facts<br/>room owner's profile]
+    CheckInterval -- yes --> Extract["LLM extracts facts<br/>room owner's profile"]
     Extract --> StoreShared["INSERT as shared room memories<br/>source=auto, cards_id_fk=NULL"]
-    StoreShared --> Cap[Cap to mem_max<br/>drop oldest auto]
+    StoreShared --> Cap["Cap to mem_max<br/>drop oldest auto"]
     Cap --> Watermark[Advance watermark]
     Watermark --> SmartList
 
     %% Injection
-    Gen([Generate reply for card]) --> Inject[Load shared + card memories<br/>trigger-filtered, budget-capped]
-    Inject --> Prompt[Inject into system prompt]
+    Gen([Generate reply for card]) --> Inject["Load shared + card memories<br/>trigger-filtered, budget-capped"]
+    Inject --> Prompt["Inject into system prompt"]
 
     %% Move
     PermList --> Move{Move memory?}
-    Move -->|User owns target scope| MoveMem[UPDATE cards_id_fk<br/>card <-> NULL]
+    Move -->|User owns target scope| MoveMem["UPDATE cards_id_fk<br/>card <-> NULL"]
     MoveMem --> PermList
 ```
 
