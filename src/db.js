@@ -148,7 +148,7 @@ export function migrateSchema() {
     const cols = db.prepare('PRAGMA table_info(cards)').all().map(c => c.name);
     // SillyTavern character-card (V2) field parity.
     const v2 = {
-        api_profiles_id_fk: 'INTEGER REFERENCES api_profiles(id)',
+        api_profiles_id_fk: 'INTEGER REFERENCES api_profiles(api_profiles_id_pk)',
         personality: "TEXT DEFAULT ''",
         scenario: "TEXT DEFAULT ''",
         mes_example: "TEXT DEFAULT ''",
@@ -167,11 +167,13 @@ export function migrateSchema() {
         if (!cols.includes(col)) db.exec(`ALTER TABLE cards ADD COLUMN ${col} ${def}`);
     // World lorebook model: books own entries; rooms link to one book.
     const wcols = db.prepare('PRAGMA table_info(world_entries)').all().map(c => c.name);
-    if (!wcols.includes('world_books_id_fk')) db.exec('ALTER TABLE world_entries ADD COLUMN world_books_id_fk INTEGER REFERENCES world_books(id)');
+    if (!wcols.includes('world_books_id_fk')) db.exec('ALTER TABLE world_entries ADD COLUMN world_books_id_fk INTEGER REFERENCES world_books(world_books_id_pk)');
     if (!wcols.includes('comment')) db.exec("ALTER TABLE world_entries ADD COLUMN comment TEXT DEFAULT ''");
     if (!wcols.includes('keysecondary')) db.exec("ALTER TABLE world_entries ADD COLUMN keysecondary TEXT DEFAULT '[]'");
+    if (!wcols.includes('keys')) db.exec("ALTER TABLE world_entries ADD COLUMN keys TEXT DEFAULT '[]'");
     const rcols = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);
     if (!rcols.includes('ai_trigger')) db.exec("ALTER TABLE rooms ADD COLUMN ai_trigger TEXT DEFAULT 'manual'");
+    if (!rcols.includes('bg')) db.exec("ALTER TABLE rooms ADD COLUMN bg TEXT DEFAULT ''");
     if (!rcols.includes('auto_mem')) db.exec('ALTER TABLE rooms ADD COLUMN auto_mem INTEGER DEFAULT 0');
     if (!rcols.includes('mem_every')) db.exec('ALTER TABLE rooms ADD COLUMN mem_every INTEGER DEFAULT 10');
     if (!rcols.includes('mem_last_messages_id')) db.exec('ALTER TABLE rooms ADD COLUMN mem_last_messages_id INTEGER DEFAULT 0');
@@ -244,10 +246,12 @@ export function migrateSchema() {
             for (const w of JSON.parse(e.keysecondary || '[]')) ik.run(e.world_entries_id_pk, w, 'secondary');
         }
         db.exec(`CREATE TABLE world_entries_new3 (world_entries_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+            keys TEXT DEFAULT '[]', keysecondary TEXT DEFAULT '[]',
+            world_books_id_fk INTEGER REFERENCES world_books(world_books_id_pk),
             content TEXT DEFAULT '', constant INTEGER DEFAULT 0,
             enabled INTEGER DEFAULT 1, ord INTEGER DEFAULT 0, comment TEXT DEFAULT '')`);
-        db.exec(`INSERT INTO world_entries_new3 (world_entries_id_pk,content,constant,enabled,ord,comment)
-            SELECT world_entries_id_pk,content,constant,enabled,ord,comment FROM world_entries`);
+        db.exec(`INSERT INTO world_entries_new3 (world_entries_id_pk,keys,keysecondary,world_books_id_fk,content,constant,enabled,ord,comment)
+            SELECT world_entries_id_pk,keys,keysecondary,world_books_id_fk,content,constant,enabled,ord,comment FROM world_entries`);
         db.exec('PRAGMA foreign_keys=OFF; DROP TABLE world_entries; ALTER TABLE world_entries_new3 RENAME TO world_entries; PRAGMA foreign_keys=ON');
     }
     // Existing tables predate the CHECK — rebuild to enforce it.
@@ -312,10 +316,12 @@ export function migrateSchema() {
     const mi = db.prepare('PRAGMA table_info(memories)').all().find(c => c.name === 'cards_id_fk');
     if (mi?.notnull) db.exec(`BEGIN;
         CREATE TABLE memories_new (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-            cards_id_fk INTEGER REFERENCES cards(id),
-            rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
-            content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')));
-        INSERT INTO memories_new SELECT *, memories_id_pk AS id FROM memories;
+            cards_id_fk INTEGER REFERENCES cards(cards_id_pk),
+            rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+            content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')),
+            type TEXT DEFAULT 'fact', source TEXT DEFAULT 'manual', triggers TEXT DEFAULT '');
+        INSERT INTO memories_new (memories_id_pk,cards_id_fk,rooms_id_fk,content,created,type,source,triggers)
+            SELECT memories_id_pk,cards_id_fk,rooms_id_fk,content,created,type,source,triggers FROM memories;
         DROP TABLE memories; ALTER TABLE memories_new RENAME TO memories; COMMIT;`);
     // Duplicate-member dedupe removed — membership lives in room_members
     // junction (UNIQUE on room+member) so dupes can't form.
