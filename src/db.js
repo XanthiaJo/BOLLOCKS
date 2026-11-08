@@ -123,6 +123,9 @@ export function activeProfile(userId) {
 
 /** Schema touch-ups for existing DBs (CREATE TABLE only applies on fresh). */
 export function migrateSchema() {
+    for (const col of ['profile_id','api_profiles_id_fk'])
+        if (db.prepare('PRAGMA table_info(cards)').all().some(c => c.name === col))
+            db.exec('ALTER TABLE cards DROP COLUMN ' + col);
     // rooms.world_book_id + duplicate world_books_id_fk are dead — junction handles links.
     for (const col of ['world_book_id','world_books_id_fk','mem_last_id','mem_profile_id','api_profiles_id_fk'])
         if (db.prepare('PRAGMA table_info(rooms)').all().some(c => c.name === col))
@@ -134,7 +137,7 @@ export function migrateSchema() {
       sessions:{token:'sessions_token_pk',user_id:'users_id_fk'},
       rooms:{id:'rooms_id_pk',mem_profile_id:'api_profiles_id_fk',mem_last_id:'mem_last_messages_id'},
       members:{id:'members_id_pk',room_id:'rooms_id_fk',user_id:'users_id_fk',card_id:'cards_id_fk'},
-      cards:{id:'cards_id_pk',owner_id:'owner_users_id_fk',profile_id:'api_profiles_id_fk'},
+      cards:{id:'cards_id_pk',owner_id:'owner_users_id_fk'},
       messages:{id:'messages_id_pk',room_id:'rooms_id_fk',sender_user_id:'sender_users_id_fk',card_id:'cards_id_fk'},
       world_books:{id:'world_books_id_pk',owner_id:'owner_users_id_fk'},
       world_entries:{id:'world_entries_id_pk',book_id:'world_books_id_fk'},

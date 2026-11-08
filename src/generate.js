@@ -14,11 +14,8 @@ export async function generateReply(roomId, card) {
     const owner = db.prepare(`SELECT u.users_id_pk FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
         JOIN cards c ON c.cards_id_pk=m.cards_id_fk JOIN users u ON u.users_id_pk=c.owner_users_id_fk
         WHERE rm.rooms_id_fk=? AND c.is_persona=1 ORDER BY c.owner_users_id_fk LIMIT 1`).get(roomId);
-    // Card's own profile wins; otherwise the room owner's active profile.
-    const p = card.api_profiles_id_fk
-        ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(card.api_profiles_id_fk)
-        : null;
-    const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(owner?.id);
+    // The card owner's active profile drives generation.
+    const conn = activeProfile(card.owner_users_id_fk || owner?.id);
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(
