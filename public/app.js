@@ -2,6 +2,7 @@ let token = localStorage.mp_token || '';
 let me = '';
 let room = Number(localStorage.mp_room || 1);
 let es = null;
+let roomIsOwner = false;
 
 const AS = '';
 const $ = id => document.getElementById(id);
@@ -91,6 +92,8 @@ async function loadRoom() {
     renderToks();
     get('rooms').then(({ rooms }) => {
         const r = (rooms || []).find(x => x.id === room);
+        roomIsOwner = !!r?.is_owner;
+        applyOwnerUI();
         if (r) { $('trigsel').value = r.ai_trigger || 'manual'; $('ctxmax').value = r.max_context || 0; }
         $('chat').style.setProperty('--bg', r?.bg ? `url(/api/roombg?id=${room})` : 'none');
     });
@@ -101,9 +104,15 @@ async function renderRooms() {
     $('rooms').innerHTML = (rooms || [])
         .map(r => `<div class="room${r.id === room ? ' on' : ''}" onclick="pick(${r.id})"><span style="font-size:.85em">${(r.members||0)>2?'👥':'👤'}</span><span class="n">${r.name}</span>` +
             `${(r.members||0)>2?`<span style="font-size:.72em;color:#789">${r.members}</span>`:''}` +
-            `<span class="rbtns"><a href="#" title="Rename" onclick="event.stopPropagation();renameRoom(${r.id});return false">✎</a>` +
-            `<a href="#" title="Delete" onclick="event.stopPropagation();delRoom(${r.id});return false" style="color:#a55">✕</a></span></div>`)
+            (r.is_owner ? `<span class="rbtns"><a href="#" title="Rename" onclick="event.stopPropagation();renameRoom(${r.id});return false">✎</a>` +
+            `<a href="#" title="Delete" onclick="event.stopPropagation();delRoom(${r.id});return false" style="color:#a55">✕</a></span>` : '') + `</div>`)
         .join('');
+}
+function applyOwnerUI() {
+    for (const id of ['trigsel', 'worldsel', 'ctxmax', 'bgfile', 'addpick']) {
+        const el = $(id); if (el) el.disabled = !roomIsOwner;
+    }
+    document.querySelectorAll('#members .talk').forEach(el => el.disabled = !roomIsOwner);
 }
 function pick(id) { room = id; localStorage.mp_room = id; loadRoom(); }
 async function renameRoom(id) {
