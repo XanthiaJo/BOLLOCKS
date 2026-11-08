@@ -306,7 +306,6 @@ const router = {
         db.prepare('DELETE FROM sessions WHERE users_id_fk=?').run(target);
         db.prepare('DELETE FROM room_members WHERE members_id_fk IN (SELECT members_id_pk FROM members WHERE cards_id_fk IN (SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=?))').run(target);
             db.prepare('DELETE FROM members WHERE cards_id_fk IN (SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=?)').run(target);
-        db.prepare('UPDATE messages SET sender_users_id_fk=NULL WHERE sender_users_id_fk=?').run(target);
         db.prepare('DELETE FROM users WHERE users_id_pk=?').run(target);
         send(res, 200, { ok: true });
     },
@@ -412,8 +411,9 @@ const router = {
     },
     'POST /api/say': async (req, res, u) => {
         const b = await readBody(req);
-        const r = db.prepare(`INSERT INTO messages (rooms_id_fk,sender_users_id_fk,cards_id_fk,text)
-            VALUES (?,?,?,?)`).run(b.room || 1, u.users_id_pk, b.cardId ?? null, b.text);
+        const cardId = b.cardId ?? db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk)?.cards_id_pk ?? null;
+        const r = db.prepare(`INSERT INTO messages (rooms_id_fk,cards_id_fk,text)
+            VALUES (?,?,?)`).run(b.room || 1, cardId, b.text);
         const msg = db.prepare(MSG_SQL + ' WHERE m.messages_id_pk=?').get(r.lastInsertRowid);
         push(b.room || 1, { type: 'message', message: msg });
         send(res, 200, msg);

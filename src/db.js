@@ -42,7 +42,6 @@ CREATE TABLE IF NOT EXISTS cards (
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
-    sender_users_id_fk INTEGER REFERENCES users(id),
     cards_id_fk INTEGER REFERENCES cards(id),
     kind TEXT DEFAULT 'say',             -- say | narration | ai
     name TEXT NOT NULL, text TEXT NOT NULL,
@@ -101,14 +100,12 @@ export function login(handle, password) {
     return { token, user: u };
 }
 export const MSG_SQL = `SELECT m.*, m.messages_id_pk AS id,
-    COALESCE(c.name, pc.name, u.handle, 'sys') name,
-    CASE WHEN m.cards_id_fk IS NOT NULL THEN 'ai'
-         WHEN m.sender_users_id_fk IS NOT NULL THEN 'say'
-         ELSE 'sys' END kind
+    COALESCE(c.name, 'sys') name,
+    CASE WHEN m.cards_id_fk IS NULL THEN 'sys'
+         WHEN c.is_persona=1 THEN 'say'
+         ELSE 'ai' END kind
 FROM messages m
-LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk
-LEFT JOIN users u ON u.users_id_pk=m.sender_users_id_fk
-LEFT JOIN cards pc ON pc.owner_users_id_fk=u.users_id_pk AND pc.is_persona=1`;
+LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk`;
 
 export const userForToken = t =>
     t && db.prepare('SELECT u.*, u.users_id_pk AS id FROM sessions s JOIN users u ON u.users_id_pk=s.users_id_fk WHERE s.sessions_token_pk=?').get(t);
@@ -130,6 +127,8 @@ export function migrateSchema() {
     for (const col of ['world_book_id','world_books_id_fk','mem_last_id','mem_profile_id','api_profiles_id_fk'])
         if (db.prepare('PRAGMA table_info(rooms)').all().some(c => c.name === col))
             db.exec('ALTER TABLE rooms DROP COLUMN ' + col);
+    if (db.prepare('PRAGMA table_info(messages)').all().some(c => c.name === 'sender_users_id_fk'))
+        db.exec('ALTER TABLE messages DROP COLUMN sender_users_id_fk');
     // Proper key naming: {table}_id_pk / {ref}_id_fk � runs first so the
     // rest of the schema + migrations see the new names.
     const REN = {
@@ -138,7 +137,7 @@ export function migrateSchema() {
       rooms:{id:'rooms_id_pk',mem_profile_id:'api_profiles_id_fk',mem_last_id:'mem_last_messages_id'},
       members:{id:'members_id_pk',room_id:'rooms_id_fk',user_id:'users_id_fk',card_id:'cards_id_fk'},
       cards:{id:'cards_id_pk',owner_id:'owner_users_id_fk',profile_id:'api_profiles_id_fk'},
-      messages:{id:'messages_id_pk',room_id:'rooms_id_fk',sender_user_id:'sender_users_id_fk',card_id:'cards_id_fk'},
+      messages:{id:'messages_id_pk',room_id:'rooms_id_fk',card_id:'cards_id_fk'},
       world_books:{id:'world_books_id_pk',owner_id:'owner_users_id_fk'},
       world_entries:{id:'world_entries_id_pk',book_id:'world_books_id_fk'},
       room_books:{room_id:'rooms_id_fk',book_id:'world_books_id_fk'},
@@ -229,12 +228,11 @@ export function migrateSchema() {
     if (msgCols.includes('name') || msgCols.includes('kind')) {
         db.exec(`CREATE TABLE messages_new (messages_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
             rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
-            sender_users_id_fk INTEGER REFERENCES users(id),
             cards_id_fk INTEGER REFERENCES cards(id),
             text TEXT NOT NULL, send_date TEXT DEFAULT (datetime('now')),
             supersedes INTEGER)`);
-        db.exec(`INSERT INTO messages_new (id,rooms_id_fk,sender_users_id_fk,cards_id_fk,text,send_date,supersedes)
-            SELECT id,rooms_id_fk,sender_users_id_fk,cards_id_fk,text,send_date,supersedes FROM messages`);
+        db.exec(`INSERT INTO messages_new (id,rooms_id_fk,cards_id_fk,text,send_date,supersedes)
+            SELECT id,rooms_id_fk,cards_id_fk,text,send_date,supersedes FROM messages`);
         db.exec('DROP TABLE messages; ALTER TABLE messages_new RENAME TO messages');
     }
     // Entries are standalone; book_entries junction links entries to books.
