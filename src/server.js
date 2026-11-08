@@ -83,7 +83,7 @@ const router = {
     },
     'GET /api/world/books': async (req, res, u) => {
         const books = db.prepare(`SELECT b.*, u.handle owner,
-            (SELECT COUNT(*) FROM world_entries WHERE world_books_id_fk=b.world_books_id_pk) cnt
+            (SELECT COUNT(*) FROM book_entries WHERE world_books_id_fk=b.world_books_id_pk) cnt
             FROM world_books b LEFT JOIN users u ON u.users_id_pk=b.owner_users_id_fk ORDER BY b.world_books_id_pk`).all();
         const rooms = db.prepare(`SELECT r.rooms_id_pk,r.name,rb.world_books_id_fk world_books_id_fk FROM rooms r
             LEFT JOIN room_books rb ON rb.rooms_id_fk=r.rooms_id_pk`).all();
@@ -97,7 +97,8 @@ const router = {
     },
     'POST /api/world/books/delete': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('DELETE FROM world_entries WHERE world_books_id_fk=?').run(b.world_books_id_pk);
+        db.prepare('DELETE FROM world_entries WHERE world_entries_id_pk IN (SELECT world_entries_id_fk FROM book_entries WHERE world_books_id_fk=?)').run(b.world_books_id_pk);
+        db.prepare('DELETE FROM book_entries WHERE world_books_id_fk=?').run(b.world_books_id_pk);
         db.prepare('DELETE FROM world_books WHERE world_books_id_pk=? AND owner_users_id_fk=?').run(b.world_books_id_pk, u.users_id_pk);
         db.prepare('DELETE FROM room_books WHERE world_books_id_fk=?').run(b.world_books_id_pk);
         send(res, 200, { ok: true });
@@ -116,17 +117,19 @@ const router = {
         if (!list.length) return send(res, 400, { error: 'no entries found' });
         const bid = db.prepare('INSERT INTO world_books (owner_users_id_fk,name) VALUES (?,?)')
             .run(u.users_id_pk, b.name || raw.name || 'Imported book').lastInsertRowid;
-        const ins = db.prepare(`INSERT INTO world_entries (world_books_id_fk,keys,keysecondary,comment,content,constant,enabled,ord)
-            VALUES (?,?,?,?,?,?,?,?)`);
+        const ins = db.prepare(`INSERT INTO world_entries (keys,keysecondary,comment,content,constant,enabled,ord)
+            VALUES (?,?,?,?,?,?,?)`);
+        const link = db.prepare('INSERT INTO book_entries (world_books_id_fk,world_entries_id_fk) VALUES (?,?)');
         for (const e of list) {
-            ins.run(bid, JSON.stringify(e.key || []), JSON.stringify(e.keysecondary || []),
-                e.comment || '', e.content || '', e.constant ? 1 : 0, e.disable ? 0 : 1, e.order || 0);
+            const eid = ins.run(JSON.stringify(e.key || []), JSON.stringify(e.keysecondary || []),
+                e.comment || '', e.content || '', e.constant ? 1 : 0, e.disable ? 0 : 1, e.order || 0).lastInsertRowid;
+            link.run(bid, eid);
         }
         send(res, 200, { id: bid, count: list.length });
     },
     'GET /api/world': async (req, res, u) => {
         const bookId = Number(new URL(req.url, 'http://x').searchParams.get('book') || 0);
-        const entries = db.prepare('SELECT *, world_entries_id_pk AS id FROM world_entries WHERE world_books_id_fk=? ORDER BY ord, world_entries_id_pk').all(bookId);
+        const entries = db.prepare('SELECT e.*, e.world_entries_id_pk AS id FROM world_entries e JOIN book_entries be ON be.world_entries_id_fk=e.world_entries_id_pk WHERE be.world_books_id_fk=? ORDER BY e.ord, e.world_entries_id_pk').all(bookId);
         send(res, 200, { entries });
     },
     'POST /api/world': async (req, res, u) => {
@@ -135,9 +138,10 @@ const router = {
             ? b.keys.split(',').map(k => k.trim()).filter(Boolean) : (b.keys || []);
         const secondary = typeof b.keysecondary === 'string'
             ? b.keysecondary.split(',').map(k => k.trim()).filter(Boolean) : (b.keysecondary || []);
-        const id = db.prepare('INSERT INTO world_entries (world_books_id_fk,keys,keysecondary,comment,content,constant,enabled,ord) VALUES (?,?,?,?,?,?,?,?)')
-            .run(b.book || null, JSON.stringify(keys), JSON.stringify(secondary),
+        const id = db.prepare('INSERT INTO world_entries (keys,keysecondary,comment,content,constant,enabled,ord) VALUES (?,?,?,?,?,?,?)')
+            .run(JSON.stringify(keys), JSON.stringify(secondary),
                 b.comment || '', b.content || '', b.constant ? 1 : 0, b.enabled === false ? 0 : 1, b.ord || 0).lastInsertRowid;
+        if (b.book) db.prepare('INSERT OR IGNORE INTO book_entries (world_books_id_fk,world_entries_id_fk) VALUES (?,?)').run(b.book, id);
         send(res, 200, { id });
     },
     'POST /api/world/update': async (req, res, u) => {
@@ -158,6 +162,7 @@ const router = {
     },
     'POST /api/world/delete': async (req, res, u) => {
         const b = await readBody(req);
+        db.prepare('DELETE FROM book_entries WHERE world_entries_id_fk=?').run(b.world_books_id_pk);
         db.prepare('DELETE FROM world_entries WHERE world_entries_id_pk=?').run(b.world_books_id_pk);
         send(res, 200, { ok: true });
     },

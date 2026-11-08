@@ -46,7 +46,8 @@ export async function generateReply(roomId, card) {
     const scanText = (history.map(m => `${m.name} ${m.text}`).join('\n')
         + ' ' + (card.name || '') + ' ' + (card.description || '')).toLowerCase();
     const world = db.prepare(`SELECT e.* FROM world_entries e
-        JOIN room_books rb ON rb.world_books_id_fk=e.world_books_id_fk
+        JOIN book_entries be ON be.world_entries_id_fk=e.world_entries_id_pk
+        JOIN room_books rb ON rb.world_books_id_fk=be.world_books_id_fk
         WHERE rb.rooms_id_fk=? AND e.enabled=1 ORDER BY e.ord,e.world_entries_id_pk`).all(roomId)
         .filter(e => e.constant || (
             JSON.parse(e.keys || '[]').some(k => k && scanText.includes(k.toLowerCase()))

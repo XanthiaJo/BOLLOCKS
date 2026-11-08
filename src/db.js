@@ -213,6 +213,22 @@ export function migrateSchema() {
             SELECT id,rooms_id_fk,sender_users_id_fk,cards_id_fk,text,send_date,supersedes FROM messages`);
         db.exec('DROP TABLE messages; ALTER TABLE messages_new RENAME TO messages');
     }
+    // Entries are standalone; book_entries junction links entries to books.
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='book_entries'").get()) {
+        db.exec(`CREATE TABLE book_entries (
+            world_books_id_fk INTEGER NOT NULL REFERENCES world_books(world_books_id_pk),
+            world_entries_id_fk INTEGER NOT NULL REFERENCES world_entries(world_entries_id_pk),
+            UNIQUE(world_books_id_fk, world_entries_id_fk))`);
+        db.exec(`INSERT OR IGNORE INTO book_entries (world_books_id_fk,world_entries_id_fk)
+            SELECT world_books_id_fk, world_entries_id_pk FROM world_entries WHERE world_books_id_fk IS NOT NULL`);
+        db.exec(`CREATE TABLE world_entries_new (world_entries_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+            keys TEXT DEFAULT '[]', keysecondary TEXT DEFAULT '[]',
+            content TEXT DEFAULT '', constant INTEGER DEFAULT 0,
+            enabled INTEGER DEFAULT 1, ord INTEGER DEFAULT 0, comment TEXT DEFAULT '')`);
+        db.exec(`INSERT INTO world_entries_new (world_entries_id_pk,keys,keysecondary,content,constant,enabled,ord,comment)
+            SELECT world_entries_id_pk,keys,keysecondary,content,constant,enabled,ord,comment FROM world_entries`);
+        db.exec('PRAGMA foreign_keys=OFF; DROP TABLE world_entries; ALTER TABLE world_entries_new RENAME TO world_entries; PRAGMA foreign_keys=ON');
+    }
     // Books ↔ rooms is many-to-many — junction replaces rooms.world_books_id_fk.
     db.exec(`CREATE TABLE IF NOT EXISTS room_books (
         rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
@@ -251,10 +267,8 @@ export function migrateSchema() {
             content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')));
         INSERT INTO memories_new SELECT *, memories_id_pk AS id FROM memories;
         DROP TABLE memories; ALTER TABLE memories_new RENAME TO memories; COMMIT;`);
-    // NULL-keyed UNIQUE never deduped — purge duplicate human members.
-    db.exec(`DELETE FROM members WHERE members_id_pk NOT IN (
-        SELECT MIN(members_id_pk) FROM members
-        GROUP BY rooms_id_fk, IFNULL(users_id_fk,-1), IFNULL(cards_id_fk,-1))`);
+    // Duplicate-member dedupe removed — membership lives in room_members
+    // junction (UNIQUE on room+member) so dupes can't form.
 }
 
 /** One-time: import legacy settings-JSON connections as a "Default" profile. */
