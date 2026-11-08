@@ -64,7 +64,11 @@ export async function generateReply(roomId, card) {
 
     // Long-term memories: shared room facts + this character's own.
     // Capped at the room's injection token budget (chars/4 estimate).
-    const budget = db.prepare('SELECT mem_budget FROM rooms WHERE rooms_id_pk=?').get(roomId)?.mem_budget ?? 800;
+    const room = db.prepare('SELECT *, rooms_id_pk AS id FROM rooms WHERE rooms_id_pk=?').get(roomId);
+    const budget = room?.mem_budget ?? 800;
+    const refreshN = room?.mem_refresh || 1;
+    const refreshKey = room?.mem_refresh_count || 0;
+    const injectMem = refreshN <= 1 || refreshKey % refreshN === 0;
     const cap = (rows, acc) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= budget); };
     const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
     const active = r => !r.triggers || r.triggers.split(/[\s,]+/).filter(Boolean)
@@ -73,11 +77,13 @@ export async function generateReply(roomId, card) {
     const mems = cap(db.prepare('SELECT m.content,m.triggers FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? ORDER BY m.memories_id_pk DESC')
         .all(roomId, card.id).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
 
-    const memText = (roomMems.length || mems.length)
-        ? [
-            roomMems.length && 'What happened here:\n' + roomMems.map(m => '- ' + m.content).join('\n'),
-            mems.length && `Things ${card.name} remembers:\n` + mems.map(m => '- ' + m.content).join('\n'),
-        ].filter(Boolean).join('\n\n')
+    const memText = (injectMem && (roomMems.length || mems.length))
+        ? (room?.mem_unified
+            ? ['Memories:\n' + [...roomMems.map(m => '- ' + m.content), ...mems.map(m => '- ' + m.content)].join('\n')].join('')
+            : [
+                roomMems.length && 'What happened here:\n' + roomMems.map(m => '- ' + m.content).join('\n'),
+                mems.length && `Things ${card.name} remembers:\n` + mems.map(m => '- ' + m.content).join('\n'),
+            ].filter(Boolean).join('\n\n'))
         : null;
 
     const system = [
@@ -167,6 +173,7 @@ export async function generateReply(roomId, card) {
         const esc = card.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         text = text.replace(new RegExp(`^\\**\\[?${esc}\\]?\\**\\s*:\\s*`, 'i'), '').trimStart();
     }
+    if (refreshN > 1) db.prepare('UPDATE rooms SET mem_refresh_count=? WHERE rooms_id_pk=?').run(refreshKey + 1, roomId);
     return text;
 }
 
@@ -191,7 +198,9 @@ export async function maybeSummarize(roomId) {
     const owner = db.prepare(`SELECT u.users_id_pk FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
         JOIN cards c ON c.cards_id_pk=m.cards_id_fk JOIN users u ON u.users_id_pk=c.owner_users_id_fk
         WHERE rm.rooms_id_fk=? AND c.is_persona=1 ORDER BY c.owner_users_id_fk LIMIT 1`).get(roomId);
-    const conn = activeProfile(owner?.id);
+    const conn = room.mem_extraction_profile_id
+        ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(room.mem_extraction_profile_id)
+        : activeProfile(owner?.id);
     if (!conn?.apiUrl) return;
     const excerpt = db.prepare(
         MSG_SQL + ' WHERE m.rooms_id_fk=? AND m.messages_id_pk>? ORDER BY m.messages_id_pk LIMIT 30')
@@ -204,15 +213,15 @@ export async function maybeSummarize(roomId) {
         body: JSON.stringify({
             model: conn.model || 'local',
             messages: [
-                { role: 'system', content: room.mem_extraction_prompt?.trim() || `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Each bullet must be a complete, self-contained sentence that names its subject (e.g. "Blake has a pending review pile for API configurations including Venice API."). Start with a type tag [fact], [event], [relationship] or [preference]. Use [shared] only for room-wide facts, and include the subject in the sentence. No narration, no pronouns without a named subject.` },
+                { role: 'system', content: room.mem_extraction_prompt?.trim() || `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Each bullet must be a complete, self-contained sentence that names its subject (e.g. "Blake has a pending review pile for API configurations including Venice API."). Start with a type tag [fact], [event], [relationship] or [preference]. Use [shared] only for room-wide facts, and include the subject in the sentence. No narration, no pronouns without a named subject.${room.mem_triggers ? ' For each memory also append its trigger keywords in parentheses, e.g. "- [fact] Blake has a pending review pile. (triggers: pending, review)"' : ''}` },
                 { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
             ],
-            temperature: 0.3, max_tokens: room.mem_response_length || 2000,
+            temperature: 0.3, max_tokens: room.mem_unlimited ? -1 : (room.mem_gen_budget || room.mem_response_length || 2000),
         }),
     });
     if (!resp.ok) return;
     const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
-    const ins = db.prepare("INSERT INTO memories (content,type,origin) VALUES (?,?, 'smart')");
+    const ins = db.prepare("INSERT INTO memories (content,type,origin,triggers) VALUES (?,?, 'smart', ?)");
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
     for (const line of text.split('\n')) {
         let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
@@ -220,11 +229,15 @@ export async function maybeSummarize(roomId) {
         const tag = fact.match(/^\[(fact|event|relationship|preference)\]\s*/i);
         const type = tag ? tag[1].toLowerCase() : 'fact';
         if (tag) fact = fact.slice(tag[0].length);
-        if (fact.length > 10) { const mid = ins.run(fact, type).lastInsertRowid; linkRoom.run(roomId, mid); }
+        let triggers = '';
+        const tr = fact.match(/\(([^)]*)\)\s*$/);
+        if (tr) { triggers = tr[1].split(',').map(s => s.trim().toLowerCase()).filter(Boolean).join(','); fact = fact.slice(0, tr.index).trim(); }
+        if (fact.length > 10) { const mid = ins.run(fact, type, triggers).lastInsertRowid; linkRoom.run(roomId, mid); }
     }
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
     db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
+    if (room.mem_activity) console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
     // Cap stored smart memories per type — oldest entries of each type drop off.
     for (const [type, col] of [['fact','mem_max_fact'],['event','mem_max_event'],['relationship','mem_max_relationship'],['preference','mem_max_preference']]) {
         const cap = room[col] || 0;
@@ -247,5 +260,12 @@ export async function maybeSummarize(roomId) {
                 (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
                  WHERE rm2.rooms_id_fk=? AND m2.origin='smart' ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
             .run(roomId, roomId, totalCap);
+    }
+    // Auto-tune: when enabled, raise the injection budget so stored smart
+    // memories aren't dropped purely for exceeding the current budget.
+    if (room.mem_autotune) {
+        const used = db.prepare(`SELECT COALESCE(SUM(LENGTH(m.content)/4.0),0) AS s FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart'`).get(roomId)?.s || 0;
+        const b = room.mem_budget || 800;
+        if (used > b && b < 8000) db.prepare('UPDATE rooms SET mem_budget=? WHERE rooms_id_pk=?').run(Math.ceil(used), roomId);
     }
 }

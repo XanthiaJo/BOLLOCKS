@@ -57,14 +57,14 @@
     <h4>Memory LLM</h4>
     <div class="lbl" title="Which API profile runs memory extraction — pick a cheaper model here if you like.">Extraction profile (default = active)</div>
     <select id="set_profile" onchange="saveSet()" style="width:220px"></select>
-    <div class="ph">
-      <div class="row"><span class="lbl" title="Max tokens the memory LLM may use per extraction call. Unlimited warns it may be slow/costly." title="Max tokens the memory LLM may use per extraction call. Unlimited warns it may be slow/costly.">Generation budget (tokens)</span><input value="8192" disabled style="width:80px;display:inline-block"></div>
-      <label class="cb"><input type="checkbox" disabled> Unlimited (-1)</label>
-      <label class="cb"><input type="checkbox" disabled> Show activity indicator</label>
-      <label class="cb"><input type="checkbox" disabled> Unified injection</label>
-      <label class="cb"><input type="checkbox" disabled> Generate contextual triggers</label>
-      <label class="cb"><input type="checkbox" disabled> Auto-tune budgets</label>
-      <div class="row"><span class="lbl" title="How often the injected memory block is rebuilt. 1 = every generation." title="How often the injected memory block is rebuilt. 1 = every generation.">Injection refresh every N AI messages</span><input value="1" disabled style="width:80px"></div>
+    <div>
+      <div class="row"><span class="lbl" title="Max tokens the memory LLM may use per extraction call. Unlimited (-1) warns it may be slow/costly.">Generation budget (tokens)</span><input type="number" id="set_genbudget" min="256" max="32768" value="8192" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+      <label class="cb"><input type="checkbox" id="set_unlimited" onchange="saveSet()"> Unlimited (-1)</label>
+      <label class="cb"><input type="checkbox" id="set_activity" onchange="saveSet()"> Show activity indicator</label>
+      <label class="cb"><input type="checkbox" id="set_unified" onchange="saveSet()"> Unified injection</label>
+      <label class="cb"><input type="checkbox" id="set_triggers" onchange="saveSet()"> Generate contextual triggers</label>
+      <label class="cb"><input type="checkbox" id="set_autotune" onchange="saveSet()"> Auto-tune budgets</label>
+      <div class="row"><span class="lbl" title="How often the injected memory block is rebuilt. 1 = every generation.">Injection refresh every N AI messages</span><input type="number" id="set_refresh" min="1" max="50" value="1" onchange="saveSet()" style="width:80px;display:inline-block"></div>
     </div>
 
     <h4>Extraction</h4>
@@ -236,7 +236,8 @@ async function load(){
   $('set_auto').checked=!!rm?.auto_mem;$('set_every').value=rm?.mem_every||10;$('set_budget').value=rm?.mem_budget||500;$('set_max').value=rm?.mem_max||50;
   $('set_max_fact').value=rm?.mem_max_fact||50;$('set_max_event').value=rm?.mem_max_event||50;$('set_max_rel').value=rm?.mem_max_relationship||50;$('set_max_pref').value=rm?.mem_max_preference||50;
   $('set_prompt').value=rm?.mem_extraction_prompt||'';$('set_ctx').value=rm?.mem_context_threshold||80;$('set_resplen').value=rm?.mem_response_length||2000;
-  $('set_profile').value=rm?.api_profiles_id_fk||0;
+  $('set_genbudget').value=rm?.mem_gen_budget||8192;$('set_unlimited').checked=!!rm?.mem_unlimited;$('set_unified').checked=!!rm?.mem_unified;$('set_triggers').checked=!!rm?.mem_triggers;$('set_autotune').checked=!!rm?.mem_autotune;$('set_refresh').value=rm?.mem_refresh||1;$('set_activity').checked=!!rm?.mem_activity;
+  $('set_profile').value=rm?.mem_extraction_profile_id||0;
   $('rchat').innerHTML=
     `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div>`;
   $('rcards').innerHTML=(cards||[]).map(c=>
@@ -254,7 +255,7 @@ async function load(){
 function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') curTab='user';load()}
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
-async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0,extractionPrompt:$('set_prompt').value,contextThreshold:Number($('set_ctx').value)||80,responseLength:Number($('set_resplen').value)||2000,profileId:Number($('set_profile').value)||null})}
+async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0,extractionPrompt:$('set_prompt').value,contextThreshold:Number($('set_ctx').value)||80,responseLength:Number($('set_resplen').value)||2000,profileId:Number($('set_profile').value)||null,genBudget:Number($('set_genbudget').value)||8192,unlimited:$('set_unlimited').checked?1:0,unified:$('set_unified').checked?1:0,triggers:$('set_triggers').checked?1:0,autotune:$('set_autotune').checked?1:0,refresh:Number($('set_refresh').value)||1,activity:$('set_activity').checked?1:0})}
 function setupAcc(){
   const panel=document.getElementById('setpanel');
   if(!panel) return;
