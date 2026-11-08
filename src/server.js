@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, seed, login, userForToken, createUser, activeProfile, migrateProfiles, migrateSchema } from './db.js';
+import { db, seed, login, userForToken, createUser, activeProfile, migrateProfiles, migrateSchema, MSG_SQL } from './db.js';
 import { generateReply, genStats, maybeSummarize } from './generate.js';
 import { extractCardJson, normalizeCard } from './pngcard.js';
 
@@ -370,7 +370,7 @@ const router = {
     },
     'GET /api/room': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('id') || 1);
-        const msgs = db.prepare('SELECT * FROM messages WHERE room_id=? ORDER BY id').all(roomId);
+        const msgs = db.prepare(MSG_SQL + ' WHERE m.room_id=? ORDER BY m.id').all(roomId);
         const members = db.prepare(`SELECT m.*, c.name card_name, c.avatar card_avatar, u.handle, pc.name persona_name, pc.avatar persona_avatar, pc.id persona_id FROM members m
             LEFT JOIN cards c ON c.id=m.card_id LEFT JOIN users u ON u.id=m.user_id
             LEFT JOIN cards pc ON pc.owner_id=m.user_id AND pc.is_persona=1 WHERE m.room_id=?`).all(roomId);
@@ -386,11 +386,9 @@ const router = {
     },
     'POST /api/say': async (req, res, u) => {
         const b = await readBody(req);
-        const cardId = b.cardId ?? null;
-        const name = b.name || u.handle;
-        const r = db.prepare(`INSERT INTO messages (room_id,sender_user_id,card_id,name,text)
-            VALUES (?,?,?,?,?)`).run(b.room || 1, u.id, cardId, name, b.text);
-        const msg = db.prepare('SELECT * FROM messages WHERE id=?').get(r.lastInsertRowid);
+        const r = db.prepare(`INSERT INTO messages (room_id,sender_user_id,card_id,text)
+            VALUES (?,?,?,?)`).run(b.room || 1, u.id, b.cardId ?? null, b.text);
+        const msg = db.prepare(MSG_SQL + ' WHERE m.id=?').get(r.lastInsertRowid);
         push(b.room || 1, { type: 'message', message: msg });
         send(res, 200, msg);
         // AI trigger policy for this room.
@@ -409,9 +407,9 @@ const router = {
                 generateReply(msg.room_id, card)
                     .then(text => {
                         if (!text?.trim()) return;
-                        const r2 = db.prepare(`INSERT INTO messages (room_id,card_id,name,text,kind) VALUES (?,?,?,?,'ai')`)
-                            .run(msg.room_id, card.id, card.name, text);
-                        const m2 = db.prepare('SELECT * FROM messages WHERE id=?').get(r2.lastInsertRowid);
+                        const r2 = db.prepare(`INSERT INTO messages (room_id,card_id,text) VALUES (?,?,?)`)
+                            .run(msg.room_id, card.id, text);
+                        const m2 = db.prepare(MSG_SQL + ' WHERE m.id=?').get(r2.lastInsertRowid);
                         push(msg.room_id, { type: 'message', message: m2 });
                     })
                     .catch(e => console.error('[gen]', e.message));
@@ -468,9 +466,9 @@ const router = {
         if (!npc) return send(res, 404, { error: 'no AI member' });
         try {
             const text = await generateReply(roomId, npc);
-            const r = db.prepare(`INSERT INTO messages (room_id,card_id,name,text,kind) VALUES (?,?,?,?,'ai')`)
-                .run(roomId, npc.id, npc.name, text);
-            const msg = db.prepare('SELECT * FROM messages WHERE id=?').get(r.lastInsertRowid);
+            const r = db.prepare(`INSERT INTO messages (room_id,card_id,text) VALUES (?,?,?)`)
+                .run(roomId, npc.id, text);
+            const msg = db.prepare(MSG_SQL + ' WHERE m.id=?').get(r.lastInsertRowid);
             push(roomId, { type: 'message', message: msg });
             send(res, 200, msg);
             maybeSummarize(roomId).catch(e => console.error('[mem]', e.message));

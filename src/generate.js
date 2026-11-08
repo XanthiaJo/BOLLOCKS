@@ -1,4 +1,4 @@
-import { db, activeProfile } from './db.js';
+import { db, activeProfile, MSG_SQL } from './db.js';
 
 // Latest prompt composition per room — exposed for the chat sidebar.
 export const genStats = {};
@@ -21,7 +21,7 @@ export async function generateReply(roomId, card) {
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(
-        'SELECT name, text, kind, card_id, sender_user_id FROM messages WHERE room_id=? ORDER BY id DESC LIMIT 30'
+        MSG_SQL + ' WHERE m.room_id=? ORDER BY m.id DESC LIMIT 30'
     ).all(roomId).reverse();
     const lastSpeaker = [...history].reverse().find(m => m.kind === 'say')?.name || 'the user';
 
@@ -179,7 +179,7 @@ export async function maybeSummarize(roomId) {
     const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(owner?.id);
     if (!conn?.apiUrl) return;
     const excerpt = db.prepare(
-        'SELECT name,text FROM messages WHERE room_id=? AND id>? ORDER BY id LIMIT 30')
+        MSG_SQL + ' WHERE m.room_id=? AND m.id>? ORDER BY m.id LIMIT 30')
         .all(roomId, room.mem_last_id);
     if (!excerpt.length) return;
     const roomCards = [

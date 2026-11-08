@@ -96,6 +96,16 @@ export function login(handle, password) {
     db.prepare('INSERT INTO sessions (token,user_id) VALUES (?,?)').run(token, u.id);
     return { token, user: u };
 }
+export const MSG_SQL = `SELECT m.*,
+    COALESCE(c.name, pc.name, u.handle, 'sys') name,
+    CASE WHEN m.card_id IS NOT NULL THEN 'ai'
+         WHEN m.sender_user_id IS NOT NULL THEN 'say'
+         ELSE 'sys' END kind
+FROM messages m
+LEFT JOIN cards c ON c.id=m.card_id
+LEFT JOIN users u ON u.id=m.sender_user_id
+LEFT JOIN cards pc ON pc.owner_id=u.id AND pc.is_persona=1`;
+
 export const userForToken = t =>
     t && db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=?').get(t);
 
@@ -148,6 +158,19 @@ export function migrateSchema() {
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
     if (!mecols.includes('source')) db.exec("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'manual'");
     if (!mecols.includes('triggers')) db.exec("ALTER TABLE memories ADD COLUMN triggers TEXT DEFAULT ''");
+    // messages.name/kind are derivable (card/persona/user) — drop them.
+    const msgCols = db.prepare('PRAGMA table_info(messages)').all().map(c => c.name);
+    if (msgCols.includes('name') || msgCols.includes('kind')) {
+        db.exec(`CREATE TABLE messages_new (id INTEGER PRIMARY KEY AUTOINCREMENT,
+            room_id INTEGER NOT NULL REFERENCES rooms(id),
+            sender_user_id INTEGER REFERENCES users(id),
+            card_id INTEGER REFERENCES cards(id),
+            text TEXT NOT NULL, send_date TEXT DEFAULT (datetime('now')),
+            supersedes INTEGER)`);
+        db.exec(`INSERT INTO messages_new (id,room_id,sender_user_id,card_id,text,send_date,supersedes)
+            SELECT id,room_id,sender_user_id,card_id,text,send_date,supersedes FROM messages`);
+        db.exec('DROP TABLE messages; ALTER TABLE messages_new RENAME TO messages');
+    }
     const pcols = db.prepare('PRAGMA table_info(api_profiles)').all().map(c => c.name);
     if (!pcols.includes('strip_prefix')) db.exec('ALTER TABLE api_profiles ADD COLUMN strip_prefix INTEGER DEFAULT 1');
     if (!pcols.includes('headers')) db.exec("ALTER TABLE api_profiles ADD COLUMN headers TEXT DEFAULT '{}'");
