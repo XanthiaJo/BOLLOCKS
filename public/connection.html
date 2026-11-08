@@ -37,12 +37,12 @@ button.act{background:#4a7c3a}
     <input id="ed_model" placeholder="Model e.g. openrouter/free">
     <input id="ed_key" type="password" placeholder="API key (blank keeps existing)">
     <input id="ed_headers" placeholder='Extra headers — JSON or "name: value" lines' title="Merged into every request (e.g. OpenRouter HTTP-Referer)">
-    <h4 style="margin:14px 0 4px;color:#789">Chat Completion <small>(coming soon)</small></h4>
+    <h4 style="margin:14px 0 4px;color:#789">Chat Completion</h4>
+    <label class="cap">Context Size <small>— prompt token cap, 0 = unlimited</small></label>
+    <input id="ed_ctx" type="number" min="0" step="512">
+    <label class="cap">Max Response Length <small>— tokens</small></label>
+    <input id="ed_maxr" type="number" min="128" step="128">
     <div style="opacity:.45;pointer-events:none">
-      <label class="cap">Context Size <small>— prompt token cap, 0 = unlimited</small></label>
-      <input id="ed_ctx" type="number" min="0" step="512">
-      <label class="cap">Max Response Length <small>— tokens</small></label>
-      <input id="ed_maxr" type="number" min="128" step="128">
       <input placeholder="Multiple swipes per generation" disabled>
       <label class="cb"><input type="checkbox" disabled> Streaming</label>
       <input placeholder="Temperature" disabled>
