@@ -82,7 +82,7 @@ const router = {
         send(res, 200, { stats: genStats[roomId] || null });
     },
     'GET /api/world/books': async (req, res, u) => {
-        const books = db.prepare(`SELECT b.*, u.handle owner,
+        const books = db.prepare(`SELECT b.*, b.world_books_id_pk AS id, u.handle owner,
             (SELECT COUNT(*) FROM book_entries WHERE world_books_id_fk=b.world_books_id_pk) cnt
             FROM world_books b LEFT JOIN users u ON u.users_id_pk=b.owner_users_id_fk ORDER BY b.world_books_id_pk`).all();
         const rooms = db.prepare(`SELECT r.rooms_id_pk,r.name,rb.world_books_id_fk world_books_id_fk FROM rooms r
