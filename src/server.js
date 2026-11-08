@@ -301,21 +301,22 @@ const router = {
     'POST /api/members': async (req, res, u) => {
         const b = await readBody(req);
         const rid = b.room || b.id || 1;
-        if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
         if (b.userId) {
+            if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
             const pc = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(b.userId)?.cards_id_pk;
             if (!pc) return send(res, 400, { error: 'user has no persona card' });
             let mid = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc)?.members_id_pk;
             if (!mid) mid = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(pc).lastInsertRowid;
-            db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(b.room || 1, mid);
+            db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(rid, mid);
             return send(res, 200, { ok: true });
         }
+        // Anyone may seat a card they own; the room owner may seat any card.
         const card = db.prepare('SELECT owner_users_id_fk FROM cards WHERE cards_id_pk=?').get(b.cardId);
         if (!card) return send(res, 404, { error: 'card not found' });
-        if (card.owner_users_id_fk !== u.users_id_pk) return send(res, 403, { error: 'not your character' });
+        if (card.owner_users_id_fk !== u.users_id_pk && !roomOwnerOnly(rid, u)) return send(res, 403, { error: 'not your character' });
         let mid2 = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(b.cardId)?.members_id_pk;
         if (!mid2) mid2 = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(b.cardId).lastInsertRowid;
-        db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(b.room || 1, mid2);
+        db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(rid, mid2);
         send(res, 200, { ok: true });
     },
     'POST /api/members/remove': async (req, res, u) => {
@@ -489,10 +490,11 @@ const router = {
         const msgs = db.prepare(MSG_SQL + ' WHERE m.rooms_id_fk=? ORDER BY m.messages_id_pk').all(roomId);
         const members = db.prepare(`SELECT m.*, c.name card_name, c.avatar card_avatar, u.handle, pc.name persona_name, pc.avatar persona_avatar, pc.cards_id_pk persona_id,
             CASE WHEN IFNULL(c.is_persona,0)=1 THEN 'human' ELSE 'ai' END kind,
-            CASE WHEN IFNULL(c.is_persona,0)=1 THEN c.owner_users_id_fk END users_id_fk
+            CASE WHEN IFNULL(c.is_persona,0)=1 THEN c.owner_users_id_fk END users_id_fk,
+            (c.owner_users_id_fk=?) AS mine
             FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
             LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk LEFT JOIN users u ON u.users_id_pk=c.owner_users_id_fk
-            LEFT JOIN cards pc ON pc.owner_users_id_fk=u.users_id_pk AND pc.is_persona=1 WHERE rm.rooms_id_fk=?`).all(roomId);
+            LEFT JOIN cards pc ON pc.owner_users_id_fk=u.users_id_pk AND pc.is_persona=1 WHERE rm.rooms_id_fk=?`).all(u.users_id_pk, roomId);
         const lastMem = db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId);
         send(res, 200, { messages: msgs, members, lastMem });
     },
@@ -612,9 +614,11 @@ const router = {
     'POST /api/members/talkativeness': async (req, res, u) => {
         const b = await readBody(req);
         const rid = b.room || b.id || 1;
-        if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
+        // Room owner sets anyone's; a member sets their own characters.
+        const ownCard = b.cardId && db.prepare('SELECT 1 FROM cards WHERE cards_id_pk=? AND owner_users_id_fk=?').get(b.cardId, u.users_id_pk);
+        if (!roomOwnerOnly(rid, u) && !ownCard) return send(res, 403, { error: 'room owner only' });
         db.prepare(`UPDATE members SET talkativeness=? WHERE cards_id_fk=? AND members_id_pk IN (SELECT members_id_fk FROM room_members WHERE rooms_id_fk=?)`)
-            .run(Math.max(0, Math.min(100, Number(b.value) || 0)), b.room || 1, b.cardId);
+            .run(Math.max(0, Math.min(100, Number(b.value) || 0)), b.cardId, rid);
         send(res, 200, { ok: true });
     },
     'POST /api/generate': async (req, res, u) => {

@@ -3,6 +3,7 @@ let me = '';
 let room = Number(localStorage.mp_room || 1);
 let es = null;
 let roomIsOwner = false;
+let allUsers = [], allCards = [], memberCur = new Set();
 
 const AS = '';
 const $ = id => document.getElementById(id);
@@ -59,7 +60,7 @@ async function loadRoom() {
             `<img class="mav" src="/api/avatar?id=${m.cards_id_fk || m.persona_id || 0}" onerror="this.style.display='none'">` +
             (m.kind === 'ai' && m.cards_id_fk
                 ? `<span class="mname">${m.card_name}</span>` +
-                  `<input type="range" class="talk" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setTalk(${m.cards_id_fk},this.value)">` +
+                  `<input type="range" class="talk" data-mine="${m.mine ? 1 : 0}" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setTalk(${m.cards_id_fk},this.value)">` +
                   `<span class="tv">${m.talkativeness ?? 50}%</span>` +
                   `<button class="fgen" title="Generate" onclick="genCard(${m.cards_id_fk},this)">▶</button>` +
                   `<button class="frem" title="Remove" onclick="remMember(${m.cards_id_fk},null,this)">✕</button>`
@@ -69,12 +70,10 @@ async function loadRoom() {
         .join('') + `<div class="member" style="margin-top:6px"><select id="addpick" style="flex:1;font-size:.85em"></select>` +
             `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
     renderLastMem(r.lastMem);
-            `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
-    const cur = new Set((r.members || []).flatMap(m => [m.cards_id_fk ? 'c' + m.cards_id_fk : null, m.users_id_fk ? 'u' + m.users_id_fk : null]).filter(Boolean));
+    memberCur = new Set((r.members || []).flatMap(m => [m.cards_id_fk ? 'c' + m.cards_id_fk : null, m.users_id_fk ? 'u' + m.users_id_fk : null]).filter(Boolean));
     const [{ users }, { cards }] = await Promise.all([get('users'), get('cards')]);
-    $('addpick').innerHTML =
-        (users || []).filter(x => !cur.has('u' + x.id)).map(x => `<option value="u${x.id}">${x.handle}</option>`).join('') +
-        (cards || []).filter(x => !cur.has('c' + x.id)).map(x => `<option value="c${x.id}">${x.name} (ai)</option>`).join('') || '<option>— everyone\'s in —</option>';
+    allUsers = users || []; allCards = cards || [];
+    fillAddPick();
     document.title = `BOLLOCKS · room ${room}`;
     if (es) es.close();
     es = new EventSource(`/api/stream?room=${room}&token=${token}`);
@@ -109,10 +108,20 @@ async function renderRooms() {
         .join('');
 }
 function applyOwnerUI() {
-    for (const id of ['trigsel', 'worldsel', 'ctxmax', 'bgfile', 'addpick']) {
+    for (const id of ['trigsel', 'worldsel', 'ctxmax', 'bgfile']) {
         const el = $(id); if (el) el.disabled = !roomIsOwner;
     }
-    document.querySelectorAll('#members .talk').forEach(el => el.disabled = !roomIsOwner);
+    document.querySelectorAll('#members .talk').forEach(el => el.disabled = !(roomIsOwner || el.dataset.mine === '1'));
+    fillAddPick();
+}
+function fillAddPick() {
+    const sel = $('addpick'); if (!sel) return;
+    // Non-owners may only seat their own characters; seating other users is owner-only.
+    const users = roomIsOwner ? allUsers : [];
+    const cards = roomIsOwner ? allCards : allCards.filter(c => c.owner === me);
+    sel.innerHTML =
+        users.filter(x => !memberCur.has('u' + x.id)).map(x => `<option value="u${x.id}">${x.handle}</option>`).join('') +
+        cards.filter(x => !memberCur.has('c' + x.id)).map(x => `<option value="c${x.id}">${x.name} (ai)</option>`).join('') || '<option>— everyone\'s in —</option>';
 }
 function pick(id) { room = id; localStorage.mp_room = id; loadRoom(); }
 async function renameRoom(id) {
@@ -141,7 +150,8 @@ async function addMember() {
     const v = $('addpick').value;
     if (!v) return;
     const [kind, id] = [v[0], Number(v.slice(1))];
-    await api('members', kind === 'c' ? { room, cardId: id, kind: 'ai' } : { room, userId: id });
+    const r = await api('members', kind === 'c' ? { room, cardId: id, kind: 'ai' } : { room, userId: id });
+    if (r.error) alert(r.error);
     loadRoom();
 }
 async function remMember(cardId, userId, btn) {
