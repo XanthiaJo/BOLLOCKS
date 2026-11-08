@@ -36,12 +36,14 @@ There are two kinds of memory, distinguished by `source`:
 ## Scoping model
 
 ```
-memory
+memory (memories)
 ├── rooms_id_fk  (always set — the chat it lives in)
-└── cards_id_fk
-    ├── NULL      → shared room memory (visible to everyone in the room)
-    └── <card>    → character memory (visible when that card is in the room)
+└── memory_cards (junction, 0 or 1 row per memory)
+    └── cards_id_fk → character memory (visible when that card is in the room)
+        (no row)    → shared room memory (visible to everyone in the room)
 ```
+
+Scope is derived from junction presence — no nullable FK, no NULL encoding.
 
 Injection at generation time (see `generateReply`):
 1. Shared room memories (`cards_id_fk IS NULL`, trigger-filtered, budget-capped).
@@ -77,7 +79,7 @@ flowchart TD
     %% Permanent creation
     PermList --> AddMem{Add memory}
     AddMem --> Scope{Scope}
-    Scope -->|Shared room| InsShared["INSERT memories<br/>cards_id_fk=NULL, source=manual"]
+    Scope -->|Shared room| InsShared["INSERT memories (no memory_cards row)"]
     Scope -->|"Character card (owned)"| InsCard["INSERT memories<br/>cards_id_fk=card, source=manual"]
     InsShared --> PermList
     InsCard --> PermList
@@ -95,7 +97,7 @@ flowchart TD
     CheckAuto -- yes --> CheckInterval{"messages since watermark >= mem_every?"}
     CheckInterval -- no --> Skip
     CheckInterval -- yes --> Extract["LLM extracts facts<br/>room owner's profile"]
-    Extract --> StoreShared["INSERT as shared room memories<br/>source=auto, cards_id_fk=NULL"]
+    Extract --> StoreShared["INSERT as shared room memory<br/>(no memory_cards row)"]
     StoreShared --> Cap["Cap to mem_max<br/>drop oldest auto"]
     Cap --> Watermark[Advance watermark]
     Watermark --> SmartList

@@ -69,8 +69,8 @@ export async function generateReply(roomId, card) {
     const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
     const active = r => !r.triggers || r.triggers.split(/[\s,]+/).filter(Boolean)
         .some(t => recentText.includes(t.toLowerCase()));
-    const roomMems = cap(db.prepare('SELECT content,triggers FROM memories WHERE rooms_id_fk=? AND cards_id_fk IS NULL ORDER BY memories_id_pk DESC').all(roomId).reverse().filter(active), 0);
-    const mems = cap(db.prepare('SELECT content,triggers FROM memories WHERE cards_id_fk=? AND rooms_id_fk=? ORDER BY memories_id_pk DESC')
+    const roomMems = cap(db.prepare('SELECT content,triggers FROM memories m WHERE m.rooms_id_fk=? AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memory_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC').all(roomId).reverse().filter(active), 0);
+    const mems = cap(db.prepare('SELECT m.content,m.triggers FROM memories m JOIN memory_cards mc ON mc.memory_id_fk=m.memories_id_pk WHERE mc.cards_id_fk=? AND m.rooms_id_fk=? ORDER BY m.memories_id_pk DESC')
         .all(card.id, roomId).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
 
     const memText = (roomMems.length || mems.length)
@@ -211,7 +211,7 @@ export async function maybeSummarize(roomId) {
     });
     if (!resp.ok) return;
     const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
-    const ins = db.prepare("INSERT INTO memories (cards_id_fk,rooms_id_fk,content,type,source) VALUES (NULL,?,?,?,'auto')");
+    const ins = db.prepare("INSERT INTO memories (rooms_id_fk,content,type,source) VALUES (?,?,?,'auto')");
     for (const line of text.split('\n')) {
         let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
         fact = fact.replace(/^\[[^\]]+\]\s*/, ''); // strip any [Name] prefix — shared scope only

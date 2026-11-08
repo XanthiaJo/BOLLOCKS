@@ -61,22 +61,26 @@ const router = {
         const q = new URL(req.url, 'http://x').searchParams;
         const card = Number(q.get('card') ?? -1);
         const room = Number(q.get('room') || 0);
-        const rows = db.prepare(`SELECT m.*, m.memories_id_pk AS id, c.name card_name, r.name room_name FROM memories m
-            LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk JOIN rooms r ON r.rooms_id_pk=m.rooms_id_fk
-            WHERE (?<0 OR (?=0 AND m.cards_id_fk IS NULL) OR m.cards_id_fk=?)
+        const rows = db.prepare(`SELECT m.*, m.memories_id_pk AS id, c.name card_name, r.name room_name, mc.cards_id_fk AS cards_id_fk FROM memories m
+            LEFT JOIN memory_cards mc ON mc.memory_id_fk=m.memories_id_pk
+            LEFT JOIN cards c ON c.cards_id_pk=mc.cards_id_fk JOIN rooms r ON r.rooms_id_pk=m.rooms_id_fk
+            WHERE (?<0 OR (?=0 AND mc.memory_id_fk IS NULL) OR mc.cards_id_fk=?)
               AND (?=0 OR m.rooms_id_fk=?) ORDER BY m.memories_id_pk`)
             .all(card, card, card, room, room);
         send(res, 200, { memories: rows });
     },
     'POST /api/memories': async (req, res, u) => {
         const b = await readBody(req);
-        const id = db.prepare('INSERT INTO memories (cards_id_fk,rooms_id_fk,content) VALUES (?,?,?)')
-            .run(b.cardId || null, b.room || 1, b.content || '').lastInsertRowid;
+        const id = db.prepare('INSERT INTO memories (rooms_id_fk,content,type,triggers,source) VALUES (?,?,?,?,?)')
+            .run(b.room || 1, b.content || '', b.type || 'fact', b.triggers || '', 'manual').lastInsertRowid;
+        if (b.cardId) db.prepare('INSERT INTO memory_cards (memory_id_fk,cards_id_fk) VALUES (?,?)').run(id, b.cardId);
         send(res, 200, { id });
     },
     'POST /api/memories/delete': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('DELETE FROM memories WHERE memories_id_pk=?').run(b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+    db.prepare('DELETE FROM memory_cards WHERE memory_id_fk=?').run(id);
+    db.prepare('DELETE FROM memories WHERE memories_id_pk=?').run(id);
         send(res, 200, { ok: true });
     },
     'GET /api/genstats': async (req, res, u) => {
@@ -498,12 +502,15 @@ const router = {
     },
     'POST /api/memories/triggers': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('UPDATE memories SET triggers=? WHERE rooms_id_pk=?').run(b.triggers || '', b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+    db.prepare('UPDATE memories SET triggers=? WHERE memories_id_pk=?').run(b.triggers || '', id);
         send(res, 200, { ok: true });
     },
     'POST /api/memories/move': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('UPDATE memories SET cards_id_fk=? WHERE memories_id_pk=?').run(b.cardId || null, b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+    db.prepare('DELETE FROM memory_cards WHERE memory_id_fk=?').run(id);
+    if (b.cardId) db.prepare('INSERT INTO memory_cards (memory_id_fk,cards_id_fk) VALUES (?,?)').run(id, b.cardId);
         send(res, 200, { ok: true });
     },
     'POST /api/messages/delete': async (req, res, u) => {

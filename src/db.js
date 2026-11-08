@@ -61,10 +61,16 @@ CREATE TABLE IF NOT EXISTS world_entries (
 );
 CREATE TABLE IF NOT EXISTS memories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    cards_id_fk INTEGER NOT NULL REFERENCES cards(id),
     rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
     content TEXT NOT NULL,
-    created TEXT DEFAULT (datetime('now'))
+    created TEXT DEFAULT (datetime('now')),
+    type TEXT DEFAULT 'fact',
+    source TEXT DEFAULT 'manual',
+    triggers TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS memory_cards (
+    memory_id_fk INTEGER PRIMARY KEY REFERENCES memories(memories_id_pk) ON DELETE CASCADE,
+    cards_id_fk INTEGER NOT NULL REFERENCES cards(cards_id_pk)
 );
 CREATE TABLE IF NOT EXISTS api_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,7 +142,7 @@ export function migrateSchema() {
       world_books:{id:'world_books_id_pk',owner_id:'owner_users_id_fk'},
       world_entries:{id:'world_entries_id_pk',book_id:'world_books_id_fk'},
       room_books:{room_id:'rooms_id_fk',book_id:'world_books_id_fk'},
-      memories:{id:'memories_id_pk',card_id:'cards_id_fk',room_id:'rooms_id_fk'},
+      memories:{id:'memories_id_pk',room_id:'rooms_id_fk'},
       api_profiles:{id:'api_profiles_id_pk',user_id:'users_id_fk'}};
     for (const [t,rs] of Object.entries(REN))
         for (const [old,nw] of Object.entries(rs)) {
@@ -313,16 +319,44 @@ export function migrateSchema() {
     const mcols = db.prepare('PRAGMA table_info(members)').all().map(c => c.name);
     if (!mcols.includes('talkativeness')) db.exec('ALTER TABLE members ADD COLUMN talkativeness INTEGER DEFAULT 50');
     // memories.cards_id_fk must be nullable — NULL = shared room memory.
-    const mi = db.prepare('PRAGMA table_info(memories)').all().find(c => c.name === 'cards_id_fk');
-    if (mi?.notnull) db.exec(`BEGIN;
-        CREATE TABLE memories_new (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-            cards_id_fk INTEGER REFERENCES cards(cards_id_pk),
-            rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
-            content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')),
-            type TEXT DEFAULT 'fact', source TEXT DEFAULT 'manual', triggers TEXT DEFAULT '');
-        INSERT INTO memories_new (memories_id_pk,cards_id_fk,rooms_id_fk,content,created,type,source,triggers)
-            SELECT memories_id_pk,cards_id_fk,rooms_id_fk,content,created,type,source,triggers FROM memories;
-        DROP TABLE memories; ALTER TABLE memories_new RENAME TO memories; COMMIT;`);
+    const mecols2 = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
+    const hasCardsFk = mecols2.includes('cards_id_fk');
+    // Collect card-scoped rows before dropping the column.
+    const cardScoped = hasCardsFk
+        ? db.prepare('SELECT memories_id_pk, cards_id_fk FROM memories WHERE cards_id_fk IS NOT NULL').all()
+        : [];
+    // Fix stale memory_cards FK (older builds referenced memories(id)).
+    const mcSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='memory_cards'").get()?.sql || '';
+    if (mcSql && mcSql.includes('memories(id)')) {
+        db.exec('CREATE TABLE IF NOT EXISTS memory_cards_backup (memory_id_fk INTEGER, cards_id_fk INTEGER)');
+        db.exec('INSERT INTO memory_cards_backup (memory_id_fk, cards_id_fk) SELECT memory_id_fk, cards_id_fk FROM memory_cards');
+        db.exec('DROP TABLE memory_cards');
+        db.exec(`CREATE TABLE memory_cards (
+            memory_id_fk INTEGER PRIMARY KEY REFERENCES memories(memories_id_pk) ON DELETE CASCADE,
+            cards_id_fk INTEGER NOT NULL REFERENCES cards(cards_id_pk))`);
+        db.exec('INSERT OR IGNORE INTO memory_cards (memory_id_fk, cards_id_fk) SELECT memory_id_fk, cards_id_fk FROM memory_cards_backup');
+        db.exec('DROP TABLE memory_cards_backup');
+    }
+    if (hasCardsFk) {
+        db.exec(`BEGIN;
+            CREATE TABLE memories_new (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+                rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+                content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')),
+                type TEXT DEFAULT 'fact', source TEXT DEFAULT 'manual', triggers TEXT DEFAULT '');
+            INSERT INTO memories_new (memories_id_pk,rooms_id_fk,content,created,type,source,triggers)
+                SELECT memories_id_pk,rooms_id_fk,content,created,type,source,triggers FROM memories;
+            DROP TABLE memories; ALTER TABLE memories_new RENAME TO memories; COMMIT;`);
+    }
+    // Junction table (created after memories rebuild so FK targets the final table).
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_cards'").get()) {
+        db.exec(`CREATE TABLE memory_cards (
+            memory_id_fk INTEGER PRIMARY KEY REFERENCES memories(memories_id_pk) ON DELETE CASCADE,
+            cards_id_fk INTEGER NOT NULL REFERENCES cards(cards_id_pk))`);
+    }
+    if (cardScoped.length) {
+        const ins = db.prepare('INSERT OR IGNORE INTO memory_cards (memory_id_fk, cards_id_fk) VALUES (?,?)');
+        for (const r of cardScoped) ins.run(r.memories_id_pk, r.cards_id_fk);
+    }
     // Duplicate-member dedupe removed — membership lives in room_members
     // junction (UNIQUE on room+member) so dupes can't form.
 }
