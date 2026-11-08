@@ -311,6 +311,23 @@ const router = {
         db.prepare('DELETE FROM rooms WHERE id=?').run(b.id);
         send(res, 200, { ok: true });
     },
+    'POST /api/models': async (req, res, u) => {
+        const b = await readBody(req);
+        let apiUrl = b.apiUrl || '', key = b.key || '', headers = b.headers;
+        if (b.profileId) {
+            const p = db.prepare('SELECT * FROM api_profiles WHERE id=? AND user_id=?').get(b.profileId, u.id);
+            if (p) { apiUrl = apiUrl || p.api_url; key = key || p.key; headers = headers === undefined ? p.headers : headers; }
+        }
+        if (!apiUrl) return send(res, 400, { error: 'api url required' });
+        try {
+            const r = await fetch(`${apiUrl.replace(/\/$/, '')}/models`, {
+                headers: { ...(key ? { Authorization: `Bearer ${key}` } : {}),
+                    ...(() => { try { return JSON.parse(headers || '{}'); } catch { return {}; } })() },
+            });
+            const d = await r.json();
+            send(res, 200, { models: (d.data || []).map(m => m.id).sort() });
+        } catch (e) { send(res, 502, { error: String(e.message || e) }); }
+    },
     'GET /api/profiles': async (req, res, u) => {
         const profiles = db.prepare('SELECT id,name,api_url,model,active,strip_prefix,headers,context_size,max_response,(key!=\'\') has_key FROM api_profiles WHERE user_id=? ORDER BY id').all(u.id);
         send(res, 200, { profiles });

@@ -34,7 +34,11 @@ button.act{background:#4a7c3a}
     <input type="hidden" id="ed_id">
     <input id="ed_name" placeholder="Profile name e.g. OpenRouter free">
     <input id="ed_url" placeholder="API URL e.g. https://openrouter.ai/api/v1">
-    <input id="ed_model" placeholder="Model e.g. openrouter/free">
+    <div style="display:flex;gap:6px">
+      <input id="ed_model" list="modelist" placeholder="Model e.g. openrouter/free" style="flex:1">
+      <datalist id="modelist"></datalist>
+      <button onclick="fetchModels()" style="white-space:nowrap">Models ▾</button>
+    </div>
     <input id="ed_key" type="password" placeholder="API key (blank keeps existing)">
     <input id="ed_headers" placeholder='Extra headers — JSON or "name: value" lines' title="Merged into every request (e.g. OpenRouter HTTP-Referer)">
     <h4 style="margin:14px 0 4px;color:#789">Chat Completion</h4>
@@ -101,6 +105,13 @@ async function load(){
 
 function edit(p){document.querySelectorAll('.prof').forEach(el=>el.classList.remove('sel'));event?.target?.closest?.('.prof')?.classList.add('sel');
   $('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';$('ed_headers').value=p.headers&&p.headers!=='{}'?p.headers:'';$('ed_ctx').value=p.context_size||0;$('ed_maxr').value=p.max_response||2048;scrollTo(0,0)}
+async function fetchModels(){
+  const r=await api('models',{profileId:$('ed_id').value?Number($('ed_id').value):null,
+    apiUrl:$('ed_url').value.trim(),key:$('ed_key').value.trim(),headers:$('ed_headers').value.trim()||'{}'});
+  if(r.error)return alert(r.error);
+  $('modelist').innerHTML=(r.models||[]).map(m=>`<option value="${m}">`).join('');
+  $('ed_model').focus();
+}
 function clearEd(){$('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value=''}
 
 async function saveProf(){
