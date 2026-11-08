@@ -57,6 +57,8 @@ async function loadRoom() {
             `</div>`)
         .join('') + `<div class="member" style="margin-top:6px"><select id="addpick" style="flex:1;font-size:.85em"></select>` +
             `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
+    renderLastMem(r.lastMem);
+            `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
     const cur = new Set((r.members || []).map(m => m.card_id ? 'c' + m.card_id : 'u' + m.user_id));
     const [{ users }, { cards }] = await Promise.all([get('users'), get('cards')]);
     $('addpick').innerHTML =
@@ -162,6 +164,9 @@ async function genCard(cardId, btn) {
     renderToks();
 }
 
+function renderLastMem(m) {
+    $('lastmem').innerHTML = m ? `<div style="font-size:.8em;color:#9ab;line-height:1.4">${m.text}</div>` : '<div style="font-size:.8em;color:#555">none yet</div>';
+}
 async function renderToks() {
     const { stats } = await get('genstats?room=' + room);
     if (!stats) { $('toks').innerHTML = '<small>generate to see</small>'; return; }
