@@ -23,9 +23,7 @@ CREATE TABLE IF NOT EXISTS rooms (
 );
 CREATE TABLE IF NOT EXISTS members (
     members_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-    users_id_fk INTEGER REFERENCES users(id),
-    kind TEXT DEFAULT 'human',           -- 'human' player | 'ai' NPC
-    cards_id_fk INTEGER REFERENCES cards(id),
+    cards_id_fk INTEGER NOT NULL REFERENCES cards(cards_id_pk),
     talkativeness INTEGER DEFAULT 50
 );
 CREATE TABLE IF NOT EXISTS room_members (
@@ -237,7 +235,7 @@ export function migrateSchema() {
         db.exec(`CREATE TABLE world_entry_keys (
             world_entries_id_fk INTEGER NOT NULL REFERENCES world_entries(world_entries_id_pk),
             word TEXT NOT NULL,
-            kind TEXT NOT NULL DEFAULT 'primary',
+            kind TEXT NOT NULL DEFAULT 'primary' CHECK(kind IN ('primary','secondary')),
             UNIQUE(world_entries_id_fk, word, kind))`);
         const ekeys = db.prepare('SELECT world_entries_id_pk, keys, keysecondary FROM world_entries').all();
         const ik = db.prepare('INSERT OR IGNORE INTO world_entry_keys (world_entries_id_fk,word,kind) VALUES (?,?,?)');
@@ -251,6 +249,18 @@ export function migrateSchema() {
         db.exec(`INSERT INTO world_entries_new3 (world_entries_id_pk,content,constant,enabled,ord,comment)
             SELECT world_entries_id_pk,content,constant,enabled,ord,comment FROM world_entries`);
         db.exec('PRAGMA foreign_keys=OFF; DROP TABLE world_entries; ALTER TABLE world_entries_new3 RENAME TO world_entries; PRAGMA foreign_keys=ON');
+    }
+    // Existing tables predate the CHECK — rebuild to enforce it.
+    const wek = db.prepare("SELECT sql FROM sqlite_master WHERE name='world_entry_keys'").get();
+    if (wek && !wek.sql.includes('CHECK')) {
+        db.exec(`PRAGMA foreign_keys=OFF;
+            CREATE TABLE wek2 (world_entries_id_fk INTEGER NOT NULL REFERENCES world_entries(world_entries_id_pk),
+                word TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'primary' CHECK(kind IN ('primary','secondary')),
+                UNIQUE(world_entries_id_fk, word, kind));
+            INSERT INTO wek2 SELECT * FROM world_entry_keys;
+            DROP TABLE world_entry_keys; ALTER TABLE wek2 RENAME TO world_entry_keys;
+            PRAGMA foreign_keys=ON`);
     }
     // Entries are standalone; book_entries junction links entries to books.
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='book_entries'").get()) {
