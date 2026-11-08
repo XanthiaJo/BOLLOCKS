@@ -200,7 +200,7 @@ export async function maybeSummarize(roomId) {
                 { role: 'system', content: `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Start each with the character it belongs to: [${roomCards.map(c => c.name).join('] [')}] or [shared] if room-wide. Then a type tag [fact], [event], [relationship] or [preference]. No narration.` },
                 { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
             ],
-            temperature: 0.3, max_tokens: 400,
+            temperature: 0.3, max_tokens: 2048,
         }),
     });
     if (!resp.ok) return;
