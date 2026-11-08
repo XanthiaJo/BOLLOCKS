@@ -94,3 +94,27 @@ jobs:
           git push origin "$TAG"
           gh release create "$TAG" --title "$TAG" --prerelease \
             --notes-file .github/beta-notes.md --target "$SHA"
+
+  # Keep only the newest 8 beta pre-releases — older ones (and their tags)
+  # are deleted so the prerelease list stays readable.
+  prune:
+    name: Prune old beta pre-releases
+    needs: [plan, mirror, tag-beta]
+    if: always() && needs.plan.result == 'success' && needs.mirror.result != 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete beta pre-releases beyond the newest 8
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP: 8
+        run: |
+          gh release list --limit 100 --json tagName,isPrerelease \
+            | jq -r --argjson keep "$KEEP" \
+                '[.[] | select(.isPrerelease == true and (.tagName | test("-beta\.[0-9]+$")))] | .[keep:] | .[].tagName' \
+            | while read -r tag; do
+                [ -z "$tag" ] && continue
+                echo "pruning $tag"
+                gh release delete "$tag" --yes --cleanup-tag
+              done

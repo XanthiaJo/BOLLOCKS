@@ -72,3 +72,27 @@ jobs:
       release-branch: main
       deploy: false
     secrets: inherit
+
+  # Keep only the newest 5 stable releases — older ones (and their tags)
+  # are deleted so the release list stays readable.
+  prune:
+    name: Prune old stable releases
+    needs: [plan, release]
+    if: always() && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete stable releases beyond the newest 5
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP: 5
+        run: |
+          gh release list --limit 100 --json tagName,isPrerelease \
+            | jq -r --argjson keep "$KEEP" \
+                '[.[] | select(.isPrerelease == false)] | .[keep:] | .[].tagName' \
+            | while read -r tag; do
+                [ -z "$tag" ] && continue
+                echo "pruning $tag"
+                gh release delete "$tag" --yes --cleanup-tag
+              done
