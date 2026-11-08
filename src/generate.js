@@ -17,7 +17,7 @@ export async function generateReply(roomId, card) {
     const p = card.profile_id
         ? db.prepare('SELECT * FROM api_profiles WHERE id=?').get(card.profile_id)
         : null;
-    const conn = p ? { apiUrl: p.api_url, model: p.model, key: p.key } : activeProfile(owner?.id);
+    const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(owner?.id);
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(
@@ -173,7 +173,7 @@ export async function maybeSummarize(roomId) {
     const owner = db.prepare(`SELECT u.id FROM members m JOIN users u ON u.id=m.user_id
         WHERE m.room_id=? AND m.kind='human' ORDER BY m.user_id LIMIT 1`).get(roomId);
     const p = room.mem_profile_id ? db.prepare('SELECT * FROM api_profiles WHERE id=?').get(room.mem_profile_id) : null;
-    const conn = p ? { apiUrl: p.api_url, model: p.model, key: p.key } : activeProfile(owner?.id);
+    const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(owner?.id);
     if (!conn?.apiUrl) return;
     const excerpt = db.prepare(
         'SELECT name,text FROM messages WHERE room_id=? AND id>? ORDER BY id LIMIT 30')

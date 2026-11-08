@@ -102,7 +102,7 @@ export const userForToken = t =>
 /** The caller's active connection profile (falls back to legacy settings JSON). */
 export function activeProfile(userId) {
     const p = db.prepare('SELECT * FROM api_profiles WHERE user_id=? AND active=1').get(userId);
-    if (p) return { apiUrl: p.api_url, model: p.model, key: p.key };
+    if (p) return { ...p, apiUrl: p.api_url };
     const s = JSON.parse(db.prepare('SELECT settings FROM users WHERE id=?').get(userId)?.settings || '{}');
     return s.apiUrl ? s : null;
 }
