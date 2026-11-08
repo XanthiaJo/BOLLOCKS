@@ -5,8 +5,11 @@ name: PR Autofill
 # - Body: replaces/inserts an autofilled commit-list block above the manual body.
 #   Merge commits can inherit the body via repo squash/merge settings (PR_BODY).
 
+# pull_request_target so fork PRs get a write token — safe here because the
+# job only calls the GitHub API (gh pr view/edit) and never checks out or
+# executes code from the PR head.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
 
 permissions:
@@ -17,10 +20,6 @@ jobs:
   autofill:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Fill commit list
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
