@@ -180,8 +180,14 @@ export async function maybeSummarize(roomId) {
         .all(roomId, room.mem_last_id);
     if (!excerpt.length) return;
     db.prepare('UPDATE rooms SET mem_last_id=? WHERE id=?').run(lastId, roomId);
-    const roomCards = db.prepare(`SELECT c.id,c.name FROM members m JOIN cards c ON c.id=m.card_id
-        WHERE m.room_id=? AND m.kind='ai'`).all(roomId);
+    const roomCards = [
+        ...db.prepare(`SELECT c.id,c.name FROM members m JOIN cards c ON c.id=m.card_id
+            WHERE m.room_id=? AND m.kind='ai'`).all(roomId),
+        // Human members' persona cards — facts about players belong to them too.
+        ...db.prepare(`SELECT pc.id,pc.name FROM members m JOIN cards pc
+            ON pc.owner_id=m.user_id AND pc.is_persona=1
+            WHERE m.room_id=? AND m.kind='human'`).all(roomId),
+    ];
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
