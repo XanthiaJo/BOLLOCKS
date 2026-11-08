@@ -198,6 +198,20 @@ function renderLastMem(m) {
 }
 let lastStats = null;
 const PAGE_LINKS = { 'World Info': '/world.html', 'Memories': '/memories.html' };
+function showJson(title, obj) {
+    let v = document.getElementById('partview');
+    if (!v) {
+        v = document.createElement('div');
+        v.id = 'partview'; v.className = 'mp-veil';
+        v.onclick = e => { if (e.target === v) v.remove(); };
+        document.body.appendChild(v);
+    }
+    v.innerHTML = `<div class="card" style="width:min(720px,94vw);max-height:82vh;overflow-y:auto;background:#191b24;padding:16px">
+        <h3 style="margin:0 0 10px">${title}</h3>
+        <pre style="white-space:pre-wrap;font-size:.8em;color:#cde;margin:0 0 14px">${String(obj ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+        <button onclick="document.getElementById('partview').remove()">Close</button></div>`;
+}
+function showRequest() { showJson('Request JSON', JSON.stringify(lastStats?.request, null, 2)); }
 function showPart(k) {
     const txt = (lastStats?.texts || {})[k];
     let v = document.getElementById('partview');
@@ -219,7 +233,7 @@ async function renderToks() {
     if (!stats) { $('toks').innerHTML = '<small>generate to see</small>'; return; }
     const total = stats.prompt_tokens ?? stats.est;
     $('toks').innerHTML =
-        `<small style="color:#789">${stats.card} · ${stats.prompt_tokens ? 'actual' : 'estimated'}</small>` +
+        `<small style="color:#789">${stats.card} · <a href="#" onclick="showRequest();return false" style="color:#9ab" title="View full request JSON">${stats.prompt_tokens ? 'actual' : 'estimated'}</a></small>` +
         `<div style="display:flex;justify-content:space-between;font-weight:600;font-size:.85em"><span>Prompt tokens</span><span>${total}</span></div>` +
         (stats.completion_tokens ? `<div style="display:flex;justify-content:space-between;font-size:.8em;color:#789"><span>Reply tokens</span><span>${stats.completion_tokens}</span></div>` : '') +
         Object.entries(stats.parts).filter(([, v]) => v).map(([k, v]) => {
