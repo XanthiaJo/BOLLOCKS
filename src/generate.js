@@ -179,7 +179,6 @@ export async function maybeSummarize(roomId) {
         'SELECT name,text FROM messages WHERE room_id=? AND id>? ORDER BY id LIMIT 30')
         .all(roomId, room.mem_last_id);
     if (!excerpt.length) return;
-    db.prepare('UPDATE rooms SET mem_last_id=? WHERE id=?').run(lastId, roomId);
     const roomCards = [
         ...db.prepare(`SELECT c.id,c.name FROM members m JOIN cards c ON c.id=m.card_id
             WHERE m.room_id=? AND m.kind='ai'`).all(roomId),
@@ -212,6 +211,9 @@ export async function maybeSummarize(roomId) {
         if (tag) fact = fact.slice(tag[0].length);
         if (fact.length > 10) ins.run(roomId, fact, type);
     }
+    // Only advance the watermark once extraction actually ran — a failed
+    // call retries on the next message instead of silently skipping.
+    db.prepare('UPDATE rooms SET mem_last_id=? WHERE id=?').run(lastId, roomId);
     // Cap stored smart memories — oldest auto entries drop off.
     db.prepare(`DELETE FROM memories WHERE room_id=? AND source='auto' AND id NOT IN
         (SELECT id FROM memories WHERE room_id=? AND source='auto' ORDER BY id DESC LIMIT ?)`)
