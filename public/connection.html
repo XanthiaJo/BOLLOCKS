@@ -135,7 +135,7 @@ async function saveProf(){
 }
 async function activate(id){await api('profiles/activate',{id});load()}
 async function del(id){if(confirm('Delete this profile?')){await api('profiles/delete',{id});load()}}
-load();
+load().then(newProf);
 </script>
 </body>
 </html>

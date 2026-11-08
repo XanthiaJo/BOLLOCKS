@@ -198,7 +198,7 @@ async function importCard(input){
   if(r.error)return alert(r.error);
   alert('imported '+r.name);load();
 }
-Promise.all([load(),loadProfs()]);
+Promise.all([load(),loadProfs()]).then(newCard);
 </script>
 </body>
 </html>

@@ -85,7 +85,7 @@ async function saveEnt(){
 }
 async function toggle(id,en){await api('world/update',{id,enabled:!!en});load()}
 async function del(id){if(confirm('Delete this entry?')){await api('world/delete',{id});load()}}
-load();
+load().then(newEntry);
 </script>
 </body>
 </html>
