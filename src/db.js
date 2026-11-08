@@ -424,7 +424,9 @@ export function migrateSchema() {
     }
     const roomLinks = hasRoomsFk
         ? db.prepare('SELECT memories_id_pk, rooms_id_fk FROM memories').all()
-        : [];
+        : (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='room_memories'").get()
+            ? db.prepare('SELECT memories_id_fk AS memories_id_pk, rooms_id_fk FROM room_memories').all()
+            : []);
     // Fix stale memory_cards FK (older builds referenced memories(id)).
     const mcSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='memory_cards'").get()?.sql || '';
     if (mcSql && mcSql.includes('memories(id)')) {
