@@ -202,6 +202,25 @@ export function migrateSchema() {
         db.exec('DROP TABLE members; ALTER TABLE members_new RENAME TO members');
     }
         if (!mecols.includes('triggers')) db.exec("ALTER TABLE memories ADD COLUMN triggers TEXT DEFAULT ''");
+    // members = a card in a room; kind/users_id_fk derive from the card.
+    if (db.prepare('PRAGMA table_info(members)').all().some(c => c.name === 'users_id_fk')) {
+        // human members get their owner's persona card (create one if needed)
+        for (const m of db.prepare('SELECT members_id_pk,users_id_fk FROM members WHERE users_id_fk IS NOT NULL').all()) {
+            let pc = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(m.users_id_fk)?.cards_id_pk;
+            if (!pc) {
+                const h = db.prepare('SELECT handle FROM users WHERE users_id_pk=?').get(m.users_id_fk)?.handle || 'user';
+                pc = db.prepare("INSERT INTO cards (owner_users_id_fk,name,description,is_persona) VALUES (?,?,?,1)")
+                    .run(m.users_id_fk, h, '').lastInsertRowid;
+            }
+            db.prepare('UPDATE members SET cards_id_fk=? WHERE members_id_pk=?').run(pc, m.members_id_pk);
+        }
+        db.exec(`CREATE TABLE members_new2 (members_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+            cards_id_fk INTEGER NOT NULL REFERENCES cards(cards_id_pk),
+            talkativeness INTEGER DEFAULT 50)`);
+        db.exec(`INSERT INTO members_new2 (members_id_pk,cards_id_fk,talkativeness)
+            SELECT members_id_pk,cards_id_fk,talkativeness FROM members WHERE cards_id_fk IS NOT NULL`);
+        db.exec('PRAGMA foreign_keys=OFF; DROP TABLE members; ALTER TABLE members_new2 RENAME TO members; PRAGMA foreign_keys=ON');
+    }
     // messages.name/kind are derivable (card/persona/user) — drop them.
     const msgCols = db.prepare('PRAGMA table_info(messages)').all().map(c => c.name);
     if (msgCols.includes('name') || msgCols.includes('kind')) {
@@ -296,21 +315,23 @@ export function seed() {
             createUser(h, 'changeme');
     }
     // Only auto-join the test users on a fresh install (no humans anywhere).
-    const memberFor = uid => {
-        let mid = db.prepare('SELECT members_id_pk FROM members WHERE users_id_fk=? AND cards_id_fk IS NULL').get(uid)?.members_id_pk;
-        if (!mid) mid = db.prepare("INSERT INTO members (users_id_fk,kind) VALUES (?,'human')").run(uid).lastInsertRowid;
+    const memberFor = (uid, handle) => {
+        let pc = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(uid)?.cards_id_pk;
+        if (!pc) pc = db.prepare('INSERT INTO cards (owner_users_id_fk,name,is_persona) VALUES (?,?,1)').run(uid, handle).lastInsertRowid;
+        let mid = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc)?.members_id_pk;
+        if (!mid) mid = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(pc).lastInsertRowid;
         return mid;
     };
-    if (!db.prepare('SELECT 1 FROM members WHERE users_id_fk IS NOT NULL LIMIT 1').get()) {
+    if (!db.prepare('SELECT 1 FROM members LIMIT 1').get()) {
         for (const h of ['creamms', 'karima', 'blake', 'entropy75']) {
             const uid = db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get(h).id;
             db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)')
-                .run(room, memberFor(uid));
+                .run(room, memberFor(uid, h));
         }
     }
     if (db.prepare('SELECT COUNT(*) c FROM messages').get().c) return;
     const mptest = db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get('mptest')?.id;
     if (mptest) db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)')
-        .run(room, memberFor(mptest));
+        .run(room, memberFor(mptest, 'mptest'));
     console.log('[db] users + room ensured');
 }

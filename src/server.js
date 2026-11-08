@@ -186,14 +186,15 @@ const router = {
                 SELECT m2.cards_id_fk FROM members m2
                 JOIN room_members r2 ON r2.members_id_fk=m2.members_id_pk
                 JOIN room_members re ON re.rooms_id_fk = r2.rooms_id_fk
-                JOIN members me ON me.members_id_pk=re.members_id_fk AND me.users_id_fk = ?
+                JOIN members me ON me.members_id_pk=re.members_id_fk JOIN cards cc ON cc.cards_id_pk=me.cards_id_fk AND cc.owner_users_id_fk = ?
                 WHERE m2.cards_id_fk IS NOT NULL
             ) OR (c.is_persona=1 AND c.owner_users_id_fk IN (
-                SELECT m3.users_id_fk FROM members m3
+                SELECT c3.owner_users_id_fk FROM members m3 JOIN cards c3 ON c3.cards_id_pk=m3.cards_id_fk
                 JOIN room_members r3 ON r3.members_id_fk=m3.members_id_pk
                 JOIN room_members re2 ON re2.rooms_id_fk = r3.rooms_id_fk
-                JOIN members me2 ON me2.members_id_pk=re2.members_id_fk AND me2.users_id_fk = ?
-                WHERE m3.users_id_fk IS NOT NULL
+                JOIN members me2 ON me2.members_id_pk=re2.members_id_fk
+                JOIN cards cc2 ON cc2.cards_id_pk=me2.cards_id_fk AND cc2.owner_users_id_fk = ?
+                WHERE c3.owner_users_id_fk IS NOT NULL
             )) ORDER BY c.name`).all(u.users_id_pk, u.users_id_pk, u.users_id_pk);
         send(res, 200, { cards });
     },
@@ -272,8 +273,10 @@ const router = {
     'POST /api/members': async (req, res, u) => {
         const b = await readBody(req);
         if (b.userId) {
-            let mid = db.prepare('SELECT members_id_pk FROM members WHERE users_id_fk=? AND cards_id_fk IS NULL').get(b.userId)?.members_id_pk;
-            if (!mid) mid = db.prepare("INSERT INTO members (users_id_fk,kind) VALUES (?,'human')").run(b.userId).lastInsertRowid;
+            const pc = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(b.userId)?.cards_id_pk;
+            if (!pc) return send(res, 400, { error: 'user has no persona card' });
+            let mid = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc)?.members_id_pk;
+            if (!mid) mid = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(pc).lastInsertRowid;
             db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(b.room || 1, mid);
             return send(res, 200, { ok: true });
         }
@@ -281,14 +284,17 @@ const router = {
         if (!card) return send(res, 404, { error: 'card not found' });
         if (card.owner_users_id_fk !== u.users_id_pk) return send(res, 403, { error: 'not your character' });
         let mid2 = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(b.cardId)?.members_id_pk;
-        if (!mid2) mid2 = db.prepare('INSERT INTO members (cards_id_fk,kind) VALUES (?,?)').run(b.cardId, b.kind || 'ai').lastInsertRowid;
+        if (!mid2) mid2 = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(b.cardId).lastInsertRowid;
         db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(b.room || 1, mid2);
         send(res, 200, { ok: true });
     },
     'POST /api/members/remove': async (req, res, u) => {
         const b = await readBody(req);
         if (b.cardId) db.prepare('DELETE FROM room_members WHERE rooms_id_fk=? AND members_id_fk IN (SELECT members_id_pk FROM members WHERE cards_id_fk=?)').run(b.room || 1, b.cardId);
-        else if (b.userId) db.prepare('DELETE FROM room_members WHERE rooms_id_fk=? AND members_id_fk IN (SELECT members_id_pk FROM members WHERE users_id_fk=? AND cards_id_fk IS NULL)').run(b.room || 1, b.userId);
+        else if (b.userId) {
+            const pc = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(b.userId)?.cards_id_pk;
+            if (pc) db.prepare('DELETE FROM room_members WHERE rooms_id_fk=? AND members_id_fk IN (SELECT members_id_pk FROM members WHERE cards_id_fk=?)').run(b.room || 1, pc);
+        }
         send(res, 200, { ok: true });
     },
     'POST /api/users/delete': async (req, res, u) => {
@@ -298,24 +304,27 @@ const router = {
             : b.world_books_id_pk;
         if (!target || target === u.users_id_pk) return send(res, 400, { error: 'no such user' });
         db.prepare('DELETE FROM sessions WHERE users_id_fk=?').run(target);
-        db.prepare('DELETE FROM room_members WHERE members_id_fk IN (SELECT members_id_pk FROM members WHERE users_id_fk=?)').run(target);
-            db.prepare('DELETE FROM members WHERE users_id_fk=?').run(target);
+        db.prepare('DELETE FROM room_members WHERE members_id_fk IN (SELECT members_id_pk FROM members WHERE cards_id_fk IN (SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=?))').run(target);
+            db.prepare('DELETE FROM members WHERE cards_id_fk IN (SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=?)').run(target);
         db.prepare('UPDATE messages SET sender_users_id_fk=NULL WHERE sender_users_id_fk=?').run(target);
         db.prepare('DELETE FROM users WHERE users_id_pk=?').run(target);
         send(res, 200, { ok: true });
     },
     'GET /api/rooms': async (req, res, u) => {
         const rooms = db.prepare(`SELECT r.rooms_id_pk, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget, r.mem_max, r.max_context FROM rooms r
-            JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN members m ON m.members_id_pk=rm.members_id_fk WHERE m.users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk);
+            JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE c.owner_users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk);
         send(res, 200, { rooms });
     },
     'POST /api/rooms': async (req, res, u) => {
         const b = await readBody(req);
         if (!b.name) return send(res, 400, { error: 'name required' });
         const id = db.prepare('INSERT INTO rooms (name) VALUES (?)').run(b.name).lastInsertRowid;
-        const mid3 = db.prepare('SELECT members_id_pk FROM members WHERE users_id_fk=? AND cards_id_fk IS NULL').get(u.users_id_pk)?.members_id_pk
-            ?? db.prepare('INSERT INTO members (users_id_fk,kind) VALUES (?,?)').run(u.users_id_pk,'human').lastInsertRowid;
-        db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(id, mid3);
+        const pc0 = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk)?.cards_id_pk;
+        if (pc0) {
+            const mid3 = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc0)?.members_id_pk
+                ?? db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(pc0).lastInsertRowid;
+            db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(id, mid3);
+        }
         send(res, 200, { id, name: b.name });
     },
     'POST /api/rooms/update': async (req, res, u) => {
@@ -389,8 +398,8 @@ const router = {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('id') || 1);
         const msgs = db.prepare(MSG_SQL + ' WHERE m.rooms_id_fk=? ORDER BY m.messages_id_pk').all(roomId);
         const members = db.prepare(`SELECT m.*, c.name card_name, c.avatar card_avatar, u.handle, pc.name persona_name, pc.avatar persona_avatar, pc.cards_id_pk persona_id FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
-            LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk LEFT JOIN users u ON u.users_id_pk=m.users_id_fk
-            LEFT JOIN cards pc ON pc.owner_users_id_fk=m.users_id_fk AND pc.is_persona=1 WHERE rm.rooms_id_fk=?`).all(roomId);
+            LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk LEFT JOIN users u ON u.users_id_pk=c.owner_users_id_fk
+            LEFT JOIN cards pc ON pc.owner_users_id_fk=u.users_id_pk AND pc.is_persona=1 WHERE rm.rooms_id_fk=?`).all(roomId);
         const lastMem = db.prepare("SELECT content text FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY memories_id_pk DESC LIMIT 1").get(roomId);
         send(res, 200, { messages: msgs, members, lastMem });
     },
@@ -412,7 +421,7 @@ const router = {
         const roomRow = db.prepare('SELECT ai_trigger FROM rooms WHERE rooms_id_pk=?').get(msg.rooms_id_fk);
         if (roomRow?.ai_trigger && roomRow.ai_trigger !== 'manual') {
             const ais = db.prepare(`SELECT c.*, c.cards_id_pk AS id, m.talkativeness FROM members m JOIN room_members rm ON rm.members_id_fk=m.members_id_pk JOIN cards c ON c.cards_id_pk=m.cards_id_fk
-                WHERE rm.rooms_id_fk=? AND m.kind='ai' ORDER BY m.cards_id_fk`).all(msg.rooms_id_fk);
+                WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 ORDER BY m.cards_id_fk`).all(msg.rooms_id_fk);
             // Talkativeness: per-member 0–100% chance to reply (named always fires).
             const roll = c => Math.random() * 100 < (c.talkativeness ?? 50);
             let picks = [];
@@ -479,7 +488,7 @@ const router = {
         const b = await readBody(req);
         const roomId = b.room || 1;
         const npc = db.prepare(`SELECT c.* FROM members m JOIN room_members rm ON rm.members_id_fk=m.members_id_pk JOIN cards c ON c.cards_id_pk=m.cards_id_fk
-            WHERE m.rooms_id_fk=? AND m.kind='ai' ${b.card ? 'AND c.cards_id_pk=?' : ''} ORDER BY m.cards_id_fk`).all(roomId, ...(b.card ? [b.card] : []))[0];
+            WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 ${b.card ? 'AND c.cards_id_pk=?' : ''} ORDER BY m.cards_id_fk`).all(roomId, ...(b.card ? [b.card] : []))[0];
         if (!npc) return send(res, 404, { error: 'no AI member' });
         try {
             const text = await generateReply(roomId, npc);
