@@ -53,3 +53,16 @@ function activateProf(id) {
     }).then(() => document.querySelectorAll('.rprof').forEach(el =>
         el.classList.toggle('on', el.getAttribute('onclick') === `activateProf(${id})`)));
 }
+
+/* Centralized editor: pages keep their #editor markup; this wraps it in a
+   modal veil so editing always surfaces as a card — one place to restyle. */
+function mpOpenEditor(){
+  if (!document.getElementById('mpveil')) {
+    const v = document.createElement('div');
+    v.id = 'mpveil'; v.className = 'mp-veil';
+    v.addEventListener('click', e => { if (e.target === v) mpCloseEditor(); });
+    document.body.appendChild(v);
+    v.appendChild(document.getElementById('editor'));
+  }
+}
+function mpCloseEditor(){ document.getElementById('mpveil')?.remove(); }
