@@ -56,13 +56,21 @@ function activateProf(id) {
 
 /* Centralized editor: pages keep their #editor markup; this wraps it in a
    modal veil so editing always surfaces as a card — one place to restyle. */
-function mpOpenEditor(){
+function mpOpenEditor(mode){
+  const ed = document.getElementById('editor'); if (!ed) return;
+  if (mode === 'inline') { ed.style.display = 'block'; ed.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   if (!document.getElementById('mpveil')) {
+    if (!ed._home) { ed._home = ed.parentNode; ed._next = ed.nextSibling; }
     const v = document.createElement('div');
     v.id = 'mpveil'; v.className = 'mp-veil';
     v.addEventListener('click', e => { if (e.target === v) mpCloseEditor(); });
     document.body.appendChild(v);
-    v.appendChild(document.getElementById('editor'));
+    v.appendChild(ed);
   }
 }
-function mpCloseEditor(){ document.getElementById('mpveil')?.remove(); }
+function mpCloseEditor(){
+  const v = document.getElementById('mpveil'); if (!v) return;
+  const ed = document.getElementById('editor');
+  if (ed && ed._home) { ed._home.insertBefore(ed, ed._next || null); }
+  v.remove();
+}
