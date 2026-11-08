@@ -69,7 +69,10 @@ async function loadRoom() {
     es = new EventSource(`/api/stream?room=${room}&token=${token}`);
     es.onmessage = e => {
         const d = JSON.parse(e.data);
-        if (d.type === 'message' && d.message.room_id === room) addMsg(d.message);
+        if (d.type === 'message' && d.message.room_id === room) {
+            addMsg(d.message);
+            get(`lastmem?room=${room}`).then(renderLastMem);
+        }
     };
     renderRooms();
     renderWorld();

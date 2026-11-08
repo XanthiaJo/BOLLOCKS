@@ -41,6 +41,10 @@ const router = {
         try { send(res, 200, { id: createUser(b.handle, b.password) }); }
         catch { send(res, 409, { error: 'handle taken' }); }
     },
+    'GET /api/lastmem': async (req, res, u) => {
+        const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room')) || 1;
+        send(res, 200, db.prepare("SELECT content text FROM memories WHERE room_id=? AND source='auto' ORDER BY id DESC LIMIT 1").get(roomId) || null);
+    },
     'GET /api/me': async (req, res, u) => {
         const persona = db.prepare('SELECT id,name FROM cards WHERE owner_id=? AND is_persona=1').get(u.id);
         send(res, 200, { handle: u.handle, persona: persona || null });
