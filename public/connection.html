@@ -8,6 +8,7 @@
 main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto}
 .prof{display:grid;grid-template-columns:1fr auto;gap:10px;padding:12px;border:1px solid #2a2b2e;border-radius:6px;margin-bottom:10px;background:#141517}
 .prof.on{border-color:#4a7c3a}
+.prof.sel{border-color:#3a5ccc}
 .prof .name{font-weight:700}
 .prof .url{color:#abc;font-size:.9em}
 .prof .meta{color:#567;font-size:.8em;margin-top:4px}
@@ -97,7 +98,8 @@ async function load(){
     </div>`).join('')||'<small>No profiles yet.</small>';
 }
 
-function edit(p){$('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';$('ed_headers').value=p.headers&&p.headers!=='{}'?p.headers:'';scrollTo(0,0)}
+function edit(p){document.querySelectorAll('.prof').forEach(el=>el.classList.remove('sel'));event?.target?.closest?.('.prof')?.classList.add('sel');
+  $('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';$('ed_headers').value=p.headers&&p.headers!=='{}'?p.headers:'';scrollTo(0,0)}
 function clearEd(){$('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value=''}
 
 async function saveProf(){
