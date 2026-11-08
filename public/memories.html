@@ -76,7 +76,7 @@
     <div class="row"><span class="lbl">Max per type — event</span><input type="number" id="set_max_event" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
     <div class="row"><span class="lbl">Max per type — relationship</span><input type="number" id="set_max_rel" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
     <div class="row"><span class="lbl">Max per type — preference</span><input type="number" id="set_max_pref" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
-    <div class="ph">
+    <div>
       <div class="lbl" title="The instruction sent to the memory LLM when summarizing chat into memories. Leave blank for default.">Extraction prompt template</div>
       <textarea id="set_prompt" placeholder="(default extraction prompt)" style="min-height:60px" onchange="saveSet()"></textarea>
       <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><input type="number" id="set_ctx" min="10" max="100" onchange="saveSet()" style="width:80px;display:inline-block"></div>
