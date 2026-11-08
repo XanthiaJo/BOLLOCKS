@@ -82,8 +82,9 @@ const router = {
     'POST /api/memories/update': async (req, res, u) => {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
-        db.prepare('UPDATE memories SET content=COALESCE(?,content), type=COALESCE(?,type), triggers=COALESCE(?,triggers) WHERE memories_id_pk=?')
-            .run(b.content ?? null, b.type ?? null, b.triggers ?? null, id);
+        const origin = b.origin === 'smart' || b.origin === 'user' ? b.origin : null;
+        db.prepare('UPDATE memories SET content=COALESCE(?,content), type=COALESCE(?,type), triggers=COALESCE(?,triggers), origin=COALESCE(?,origin) WHERE memories_id_pk=?')
+            .run(b.content ?? null, b.type ?? null, b.triggers ?? null, origin, id);
         send(res, 200, { ok: true });
     },
     'POST /api/memories/delete': async (req, res, u) => {
