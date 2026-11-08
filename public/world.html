@@ -51,7 +51,7 @@ async function newBook(){
   const name=$('newname').value.trim();if(!name)return;
   $('newname').value='';
   const r=await api('world/books',{name});
-  if(r.id)location='/world-edit.html?id='+r.id+;
+  if(r.id)location='/world-edit.html?id='+r.id;
 }
 async function delBook(id){if(confirm('Delete this book and all its entries?')){await api('world/books/delete',{id});load()}}
 async function importBook(input){
