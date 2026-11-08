@@ -11,17 +11,17 @@ const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
  * { apiUrl, model, key }) — read from DB, never reaches clients.
  */
 export async function generateReply(roomId, card) {
-    const owner = db.prepare(`SELECT u.id FROM members m JOIN users u ON u.id=m.user_id
-        WHERE m.room_id=? AND m.kind='human' ORDER BY m.user_id LIMIT 1`).get(roomId);
+    const owner = db.prepare(`SELECT u.users_id_pk FROM members m JOIN users u ON u.users_id_pk=m.users_id_fk
+        WHERE m.rooms_id_fk=? AND m.kind='human' ORDER BY m.users_id_fk LIMIT 1`).get(roomId);
     // Card's own profile wins; otherwise the room owner's active profile.
-    const p = card.profile_id
-        ? db.prepare('SELECT * FROM api_profiles WHERE id=?').get(card.profile_id)
+    const p = card.api_profiles_id_fk
+        ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE users_id_pk=?').get(card.api_profiles_id_fk)
         : null;
     const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(owner?.id);
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(
-        MSG_SQL + ' WHERE m.room_id=? ORDER BY m.id DESC LIMIT 30'
+        MSG_SQL + ' WHERE m.rooms_id_fk=? ORDER BY m.messages_id_pk  DESC LIMIT 30'
     ).all(roomId).reverse();
     const lastSpeaker = [...history].reverse().find(m => m.kind === 'say')?.name || 'the user';
 
@@ -38,7 +38,7 @@ export async function generateReply(roomId, card) {
     // Other characters in the scene — ST injects member context so NPCs
     // know who's present. Descriptions only; no full cards.
     const others = db.prepare(`SELECT c.name, c.description FROM members m
-        JOIN cards c ON c.id=m.card_id WHERE m.room_id=? AND m.kind='ai' AND c.id!=?`)
+        JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE m.rooms_id_fk=? AND m.kind='ai' AND c.cards_id_pk!=?`)
         .all(roomId, card.id);
 
     // Keyword-triggered world entries: constant entries always in; keyed
@@ -46,8 +46,8 @@ export async function generateReply(roomId, card) {
     const scanText = (history.map(m => `${m.name} ${m.text}`).join('\n')
         + ' ' + (card.name || '') + ' ' + (card.description || '')).toLowerCase();
     const world = db.prepare(`SELECT e.* FROM world_entries e
-        JOIN room_books rb ON rb.book_id=e.book_id
-        WHERE rb.room_id=? AND e.enabled=1 ORDER BY e.ord,e.id`).all(roomId)
+        JOIN room_books rb ON rb.world_books_id_fk=e.world_books_id_fk
+        WHERE rb.rooms_id_fk=? AND e.enabled=1 ORDER BY e.ord,e.world_entries_id_pk`).all(roomId)
         .filter(e => e.constant || (
             JSON.parse(e.keys || '[]').some(k => k && scanText.includes(k.toLowerCase()))
             && JSON.parse(e.keysecondary || '[]').every(k => !k || scanText.includes(k.toLowerCase()))));
@@ -57,13 +57,13 @@ export async function generateReply(roomId, card) {
 
     // Long-term memories: shared room facts + this character's own.
     // Capped at the room's injection token budget (chars/4 estimate).
-    const budget = db.prepare('SELECT mem_budget FROM rooms WHERE id=?').get(roomId)?.mem_budget ?? 500;
+    const budget = db.prepare('SELECT mem_budget FROM rooms WHERE rooms_id_pk=?').get(roomId)?.mem_budget ?? 500;
     const cap = (rows, acc) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= budget); };
     const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
     const active = r => !r.triggers || r.triggers.split(/[\s,]+/).filter(Boolean)
         .some(t => recentText.includes(t.toLowerCase()));
-    const roomMems = cap(db.prepare('SELECT content,triggers FROM memories WHERE room_id=? AND card_id IS NULL ORDER BY id DESC').all(roomId).reverse().filter(active), 0);
-    const mems = cap(db.prepare('SELECT content,triggers FROM memories WHERE card_id=? AND room_id=? ORDER BY id DESC')
+    const roomMems = cap(db.prepare('SELECT content,triggers FROM memories WHERE rooms_id_fk=? AND cards_id_fk IS NULL ORDER BY rooms_id_pk DESC').all(roomId).reverse().filter(active), 0);
+    const mems = cap(db.prepare('SELECT content,triggers FROM memories WHERE cards_id_fk=? AND rooms_id_fk=? ORDER BY rooms_id_pk DESC')
         .all(card.id, roomId).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
     const memText = (roomMems.length || mems.length)
         ? [
@@ -102,7 +102,7 @@ export async function generateReply(roomId, card) {
     parts.Memories = tok(memText);
 
     // Context cap: drop oldest history lines until the prompt fits.
-    const roomCtx = db.prepare('SELECT max_context FROM rooms WHERE id=?').get(roomId)?.max_context || 0;
+    const roomCtx = db.prepare('SELECT max_context FROM rooms WHERE rooms_id_pk=?').get(roomId)?.max_context || 0;
     const caps = [roomCtx, conn.context_size || 0].filter(v => v > 0);
     const maxCtx = caps.length ? Math.min(...caps) : 0;
     if (maxCtx > 0) {
@@ -132,7 +132,7 @@ export async function generateReply(roomId, card) {
                 { role: 'system', content: system },
                 // The card's own past lines are its voice (assistant);
                 // everyone else's lines are tagged context (user).
-                ...history.map(m => m.card_id === card.id
+                ...history.map(m => m.cards_id_fk === card.id
                     ? { role: 'assistant', content: m.text }
                     : { role: 'user', content: `${m.name}: ${m.text}` }),
                 // Final nudge — primes the model to continue as this character.
@@ -167,26 +167,26 @@ export async function generateReply(roomId, card) {
  * stored as shared room memories. Runs after every N messages per room.
  */
 export async function maybeSummarize(roomId) {
-    const room = db.prepare('SELECT * FROM rooms WHERE id=?').get(roomId);
+    const room = db.prepare('SELECT *, rooms_id_pk AS id FROM rooms WHERE rooms_id_pk=?').get(roomId);
     if (!room?.auto_mem) return;
-    const lastId = db.prepare('SELECT MAX(id) m FROM messages WHERE room_id=?').get(roomId).m || 0;
-    if (lastId - room.mem_last_id < (room.mem_every || 10)) return;
-    const owner = db.prepare(`SELECT u.id FROM members m JOIN users u ON u.id=m.user_id
-        WHERE m.room_id=? AND m.kind='human' ORDER BY m.user_id LIMIT 1`).get(roomId);
-    const p = room.mem_profile_id ? db.prepare('SELECT * FROM api_profiles WHERE id=?').get(room.mem_profile_id) : null;
+    const lastId = db.prepare('SELECT MAX(id) m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
+    if (lastId - room.mem_last_messages_id < (room.mem_every || 10)) return;
+    const owner = db.prepare(`SELECT u.users_id_pk FROM members m JOIN users u ON u.users_id_pk=m.users_id_fk
+        WHERE m.rooms_id_fk=? AND m.kind='human' ORDER BY m.users_id_fk LIMIT 1`).get(roomId);
+    const p = room.api_profiles_id_fk ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE users_id_pk=?').get(room.api_profiles_id_fk) : null;
     const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(owner?.id);
     if (!conn?.apiUrl) return;
     const excerpt = db.prepare(
-        MSG_SQL + ' WHERE m.room_id=? AND m.id>? ORDER BY m.id LIMIT 30')
-        .all(roomId, room.mem_last_id);
+        MSG_SQL + ' WHERE m.rooms_id_fk=? AND m.messages_id_pk>? ORDER BY m.messages_id_pk LIMIT 30')
+        .all(roomId, room.mem_last_messages_id);
     if (!excerpt.length) return;
     const roomCards = [
-        ...db.prepare(`SELECT c.id,c.name FROM members m JOIN cards c ON c.id=m.card_id
-            WHERE m.room_id=? AND m.kind='ai'`).all(roomId),
+        ...db.prepare(`SELECT c.cards_id_pk,c.name FROM members m JOIN cards c ON c.cards_id_pk=m.cards_id_fk
+            WHERE m.rooms_id_fk=? AND m.kind='ai'`).all(roomId),
         // Human members' persona cards — facts about players belong to them too.
         ...db.prepare(`SELECT pc.id,pc.name FROM members m JOIN cards pc
-            ON pc.owner_id=m.user_id AND pc.is_persona=1
-            WHERE m.room_id=? AND m.kind='human'`).all(roomId),
+            ON pc.owner_users_id_fk=m.users_id_fk AND pc.is_persona=1
+            WHERE m.rooms_id_fk=? AND m.kind='human'`).all(roomId),
     ];
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
@@ -203,7 +203,7 @@ export async function maybeSummarize(roomId) {
     });
     if (!resp.ok) return;
     const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
-    const ins = db.prepare("INSERT INTO memories (card_id,room_id,content,type,source) VALUES (NULL,?,?,?,'auto')");
+    const ins = db.prepare("INSERT INTO memories (cards_id_fk,rooms_id_fk,content,type,source) VALUES (NULL,?,?,?,'auto')");
     for (const line of text.split('\n')) {
         let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
         fact = fact.replace(/^\[[^\]]+\]\s*/, ''); // strip any [Name] prefix — shared scope only
@@ -214,9 +214,9 @@ export async function maybeSummarize(roomId) {
     }
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
-    db.prepare('UPDATE rooms SET mem_last_id=? WHERE id=?').run(lastId, roomId);
+    db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
     // Cap stored smart memories — oldest auto entries drop off.
-    db.prepare(`DELETE FROM memories WHERE room_id=? AND source='auto' AND id NOT IN
-        (SELECT id FROM memories WHERE room_id=? AND source='auto' ORDER BY id DESC LIMIT ?)`)
+    db.prepare(`DELETE FROM memories WHERE rooms_id_fk=? AND source='auto' AND id NOT IN
+        (SELECT id FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY rooms_id_pk  DESC LIMIT ?)`)
         .run(roomId, roomId, room.mem_max || 50);
 }

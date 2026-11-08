@@ -33,7 +33,7 @@ function addMsg(m) {
     const li = document.createElement('li');
     li.dataset.mid = m.id;
     li.className = 'mes' + (m.kind === 'ai' ? ' ai' : m.kind === 'sys' ? ' sys' : '');
-    li.innerHTML = `<div class="who">${m.card_id ? `<img class="mav" src="/api/avatar?id=${m.card_id}" onerror="this.remove()">` : ''}<span class="n"></span></div><div class="body"><span class="t"></span></div>` +
+    li.innerHTML = `<div class="who">${m.cards_id_fk ? `<img class="mav" src="/api/avatar?id=${m.cards_id_fk}" onerror="this.remove()">` : ''}<span class="n"></span></div><div class="body"><span class="t"></span></div>` +
         `<button class="delm" title="Delete" onclick="delMsg(${m.id},this)">✕</button>`;
     li.querySelector('.n').textContent = m.name;
     li.querySelector('.t').innerHTML = md(m.text);
@@ -47,21 +47,21 @@ async function loadRoom() {
     (r.messages || []).forEach(addMsg);
     $('members').innerHTML = (r.members || [])
         .map(m => `<div class="member">` +
-            `<img class="mav" src="/api/avatar?id=${m.card_id || m.persona_id || 0}" onerror="this.style.display='none'">` +
-            (m.kind === 'ai' && m.card_id
+            `<img class="mav" src="/api/avatar?id=${m.cards_id_fk || m.persona_id || 0}" onerror="this.style.display='none'">` +
+            (m.kind === 'ai' && m.cards_id_fk
                 ? `<span class="mname">${m.card_name}</span>` +
-                  `<input type="range" class="talk" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setTalk(${m.card_id},this.value)">` +
+                  `<input type="range" class="talk" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setTalk(${m.cards_id_fk},this.value)">` +
                   `<span class="tv">${m.talkativeness ?? 50}%</span>` +
-                  `<button class="fgen" title="Generate" onclick="genCard(${m.card_id},this)">▶</button>` +
-                  `<button class="frem" title="Remove" onclick="remMember(${m.card_id},null,this)">✕</button>`
+                  `<button class="fgen" title="Generate" onclick="genCard(${m.cards_id_fk},this)">▶</button>` +
+                  `<button class="frem" title="Remove" onclick="remMember(${m.cards_id_fk},null,this)">✕</button>`
                 : `<span>${m.card_name || m.persona_name || m.handle || '?'} <small>${m.kind}</small></span>` +
-                  `<button class="frem" title="Remove" onclick="remMember(null,${m.user_id},this)">✕</button>`) +
+                  `<button class="frem" title="Remove" onclick="remMember(null,${m.users_id_fk},this)">✕</button>`) +
             `</div>`)
         .join('') + `<div class="member" style="margin-top:6px"><select id="addpick" style="flex:1;font-size:.85em"></select>` +
             `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
     renderLastMem(r.lastMem);
             `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
-    const cur = new Set((r.members || []).map(m => m.card_id ? 'c' + m.card_id : 'u' + m.user_id));
+    const cur = new Set((r.members || []).map(m => m.cards_id_fk ? 'c' + m.cards_id_fk : 'u' + m.users_id_fk));
     const [{ users }, { cards }] = await Promise.all([get('users'), get('cards')]);
     $('addpick').innerHTML =
         (users || []).filter(x => !cur.has('u' + x.id)).map(x => `<option value="u${x.id}">${x.handle}</option>`).join('') +
@@ -71,7 +71,7 @@ async function loadRoom() {
     es = new EventSource(`/api/stream?room=${room}&token=${token}`);
     es.onmessage = e => {
         const d = JSON.parse(e.data);
-        if (d.type === 'message' && d.message.room_id === room) {
+        if (d.type === 'message' && d.message.rooms_id_fk === room) {
             addMsg(d.message);
             get(`lastmem?room=${room}`).then(renderLastMem);
             renderToks();
@@ -113,7 +113,7 @@ async function renderWorld() {
     const { books, rooms } = await get('world/books');
     const r = rooms.find(x => x.id === room);
     $('worldsel').innerHTML = '<option value="0">— no world —</option>' +
-        (books || []).map(b => `<option value="${b.id}"${r?.world_book_id === b.id ? ' selected' : ''}>${b.name}</option>`).join('');
+        (books || []).map(b => `<option value="${b.id}"${r?.world_books_id_fk === b.id ? ' selected' : ''}>${b.name}</option>`).join('');
 }
 async function setWorld(bookId) {
     await api('world/link', { room, book: Number(bookId) || null });

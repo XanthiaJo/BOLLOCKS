@@ -12,7 +12,7 @@
 
 - SillyTavern is a dumb backend that relies on the frontend to do all the work. This is OK if you are wanting to run the server on a potato however the frontend is very heavy and slow.
 - BOLLOCKS uses a SQLite database for all data storage, making it much faster and more reliable.
-- ST's chat is a JSON file appended per message. Two humans writing at once is last-write-wins — one save clobbers the other's messages, and multi-account "mirror" chats were a hack on top of that, not a fix.
+- ST's chat is a JSON file appended per message. Two humans writing at once is last-write-wins — one save clobbers the other's messages, and multi-account "mirror" chats were an attampted hack on top of that, not a fix.
 - True multiplayer needs a real database as source of truth, server-side auth and ownership, and thin clients — none of which bolt onto ST cleanly without fighting the file model.
 
 ## Features
@@ -135,10 +135,13 @@ erDiagram
         string name
         string created
     }
+    ROOM_BOOKS {
+        int room_id PK,FK
+        int book_id PK,FK
+    }
     WORLD_ENTRIES {
         int id PK
         int book_id FK
-        int room_id FK
         string keys
         string keysecondary
         string content
@@ -157,7 +160,8 @@ erDiagram
     ROOMS ||--o{ MEMBERS : contains
     ROOMS ||--o{ MESSAGES : holds
     ROOMS ||--o{ MEMORIES : has
-    ROOMS }o--|| WORLD_BOOKS : "links one"
+    ROOMS ||--o{ ROOM_BOOKS : links
+    WORLD_BOOKS ||--o{ ROOM_BOOKS : linked
     CARDS ||--o{ MEMBERS : "joins (ai)"
     CARDS }o--o| API_PROFILES : "uses (optional)"
     CARDS ||--o{ MEMORIES : "scoped (null = room)"

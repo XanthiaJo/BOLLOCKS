@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     settings TEXT DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS sessions (
-    token TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
+    token TEXT PRIMARY KEY, users_id_fk INTEGER NOT NULL REFERENCES users(id),
     created TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS rooms (
@@ -23,38 +23,38 @@ CREATE TABLE IF NOT EXISTS rooms (
 );
 CREATE TABLE IF NOT EXISTS members (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    room_id INTEGER REFERENCES rooms(id),
-    user_id INTEGER REFERENCES users(id),
+    rooms_id_fk INTEGER REFERENCES rooms(id),
+    users_id_fk INTEGER REFERENCES users(id),
     kind TEXT DEFAULT 'human',           -- 'human' player | 'ai' NPC
-    card_id INTEGER REFERENCES cards(id),
-    UNIQUE (room_id, user_id, card_id)
+    cards_id_fk INTEGER REFERENCES cards(id),
+    UNIQUE (rooms_id_fk, users_id_fk, cards_id_fk)
 );
 CREATE TABLE IF NOT EXISTS cards (
-    id INTEGER PRIMARY KEY, owner_id INTEGER REFERENCES users(id),
+    id INTEGER PRIMARY KEY, owner_users_id_fk INTEGER REFERENCES users(id),
     name TEXT NOT NULL, description TEXT DEFAULT '',
     first_message TEXT DEFAULT '',
-    profile_id INTEGER REFERENCES api_profiles(id)
+    api_profiles_id_fk INTEGER REFERENCES api_profiles(id)
 );
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    room_id INTEGER NOT NULL REFERENCES rooms(id),
-    sender_user_id INTEGER REFERENCES users(id),
-    card_id INTEGER REFERENCES cards(id),
+    rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
+    sender_users_id_fk INTEGER REFERENCES users(id),
+    cards_id_fk INTEGER REFERENCES cards(id),
     kind TEXT DEFAULT 'say',             -- say | narration | ai
     name TEXT NOT NULL, text TEXT NOT NULL,
     send_date TEXT DEFAULT (datetime('now')),
     supersedes INTEGER REFERENCES messages(id)
 );
-CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, id);
+CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(rooms_id_fk, id);
 CREATE TABLE IF NOT EXISTS world_books (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_id INTEGER REFERENCES users(id),
+    owner_users_id_fk INTEGER REFERENCES users(id),
     name TEXT NOT NULL,
     created TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS world_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    room_id INTEGER NOT NULL REFERENCES rooms(id),
+    rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
     keys TEXT DEFAULT '[]',          -- JSON array of trigger keywords
     content TEXT NOT NULL DEFAULT '',
     constant INTEGER DEFAULT 0,      -- 1 = always injected, no keyword needed
@@ -63,14 +63,14 @@ CREATE TABLE IF NOT EXISTS world_entries (
 );
 CREATE TABLE IF NOT EXISTS memories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    card_id INTEGER NOT NULL REFERENCES cards(id),
-    room_id INTEGER NOT NULL REFERENCES rooms(id),
+    cards_id_fk INTEGER NOT NULL REFERENCES cards(id),
+    rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
     content TEXT NOT NULL,
     created TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS api_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL REFERENCES users(id),
+    users_id_fk INTEGER NOT NULL REFERENCES users(id),
     name TEXT NOT NULL,
     api_url TEXT NOT NULL DEFAULT '',
     model TEXT NOT NULL DEFAULT '',
@@ -90,39 +90,60 @@ export function createUser(handle, password) {
         .run(handle, h, salt).lastInsertRowid;
 }
 export function login(handle, password) {
-    const u = db.prepare('SELECT * FROM users WHERE handle = ? COLLATE NOCASE').get(handle);
+    const u = db.prepare('SELECT *, users_id_pk AS id FROM users WHERE handle = ? COLLATE NOCASE').get(handle);
     if (!u || !verify(password, u.salt, u.password_hash)) return null;
     const token = crypto.randomBytes(24).toString('hex');
-    db.prepare('INSERT INTO sessions (token,user_id) VALUES (?,?)').run(token, u.id);
+    db.prepare('INSERT INTO sessions (sessions_token_pk,users_id_fk) VALUES (?,?)').run(token, u.users_id_pk);
     return { token, user: u };
 }
-export const MSG_SQL = `SELECT m.*,
+export const MSG_SQL = `SELECT m.*, m.messages_id_pk AS id,
     COALESCE(c.name, pc.name, u.handle, 'sys') name,
-    CASE WHEN m.card_id IS NOT NULL THEN 'ai'
-         WHEN m.sender_user_id IS NOT NULL THEN 'say'
+    CASE WHEN m.cards_id_fk IS NOT NULL THEN 'ai'
+         WHEN m.sender_users_id_fk IS NOT NULL THEN 'say'
          ELSE 'sys' END kind
 FROM messages m
-LEFT JOIN cards c ON c.id=m.card_id
-LEFT JOIN users u ON u.id=m.sender_user_id
-LEFT JOIN cards pc ON pc.owner_id=u.id AND pc.is_persona=1`;
+LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk
+LEFT JOIN users u ON u.users_id_pk=m.sender_users_id_fk
+LEFT JOIN cards pc ON pc.owner_users_id_fk=u.users_id_pk AND pc.is_persona=1`;
 
 export const userForToken = t =>
-    t && db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=?').get(t);
+    t && db.prepare('SELECT u.*, u.users_id_pk AS id FROM sessions s JOIN users u ON u.users_id_pk=s.users_id_fk WHERE s.sessions_token_pk=?').get(t);
 
 /** The caller's active connection profile (falls back to legacy settings JSON). */
 export function activeProfile(userId) {
-    const p = db.prepare('SELECT * FROM api_profiles WHERE user_id=? AND active=1').get(userId);
+    const p = db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE users_id_fk=? AND active=1').get(userId);
     if (p) return { ...p, apiUrl: p.api_url };
-    const s = JSON.parse(db.prepare('SELECT settings FROM users WHERE id=?').get(userId)?.settings || '{}');
+    const s = JSON.parse(db.prepare('SELECT settings FROM users WHERE users_id_pk=?').get(userId)?.settings || '{}');
     return s.apiUrl ? s : null;
 }
 
 /** Schema touch-ups for existing DBs (CREATE TABLE only applies on fresh). */
 export function migrateSchema() {
+    // Proper key naming: {table}_id_pk / {ref}_id_fk � runs first so the
+    // rest of the schema + migrations see the new names.
+    const REN = {
+      users:{id:'users_id_pk'},
+      sessions:{token:'sessions_token_pk',user_id:'users_id_fk'},
+      rooms:{id:'rooms_id_pk',world_book_id:'world_books_id_fk',mem_profile_id:'api_profiles_id_fk',mem_last_id:'mem_last_messages_id'},
+      members:{id:'members_id_pk',room_id:'rooms_id_fk',user_id:'users_id_fk',card_id:'cards_id_fk'},
+      cards:{id:'cards_id_pk',owner_id:'owner_users_id_fk',profile_id:'api_profiles_id_fk'},
+      messages:{id:'messages_id_pk',room_id:'rooms_id_fk',sender_user_id:'sender_users_id_fk',card_id:'cards_id_fk'},
+      world_books:{id:'world_books_id_pk',owner_id:'owner_users_id_fk'},
+      world_entries:{id:'world_entries_id_pk',book_id:'world_books_id_fk'},
+      room_books:{room_id:'rooms_id_fk',book_id:'world_books_id_fk'},
+      memories:{id:'memories_id_pk',card_id:'cards_id_fk',room_id:'rooms_id_fk'},
+      api_profiles:{id:'api_profiles_id_pk',user_id:'users_id_fk'}};
+    for (const [t,rs] of Object.entries(REN))
+        for (const [old,nw] of Object.entries(rs)) {
+            const cols = db.prepare('PRAGMA table_info('+t+')').all().map(c=>c.name);
+            if (cols.includes(old) && !cols.includes(nw))
+                db.exec('ALTER TABLE '+t+' RENAME COLUMN '+old+' TO '+nw);
+        }
+
     const cols = db.prepare('PRAGMA table_info(cards)').all().map(c => c.name);
     // SillyTavern character-card (V2) field parity.
     const v2 = {
-        profile_id: 'INTEGER REFERENCES api_profiles(id)',
+        api_profiles_id_fk: 'INTEGER REFERENCES api_profiles(id)',
         personality: "TEXT DEFAULT ''",
         scenario: "TEXT DEFAULT ''",
         mes_example: "TEXT DEFAULT ''",
@@ -141,18 +162,18 @@ export function migrateSchema() {
         if (!cols.includes(col)) db.exec(`ALTER TABLE cards ADD COLUMN ${col} ${def}`);
     // World lorebook model: books own entries; rooms link to one book.
     const wcols = db.prepare('PRAGMA table_info(world_entries)').all().map(c => c.name);
-    if (!wcols.includes('book_id')) db.exec('ALTER TABLE world_entries ADD COLUMN book_id INTEGER REFERENCES world_books(id)');
+    if (!wcols.includes('world_books_id_fk')) db.exec('ALTER TABLE world_entries ADD COLUMN world_books_id_fk INTEGER REFERENCES world_books(id)');
     if (!wcols.includes('comment')) db.exec("ALTER TABLE world_entries ADD COLUMN comment TEXT DEFAULT ''");
     if (!wcols.includes('keysecondary')) db.exec("ALTER TABLE world_entries ADD COLUMN keysecondary TEXT DEFAULT '[]'");
     const rcols = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);
-    if (!rcols.includes('world_book_id')) db.exec('ALTER TABLE rooms ADD COLUMN world_book_id INTEGER REFERENCES world_books(id)');
+    if (!rcols.includes('world_books_id_fk')) db.exec('ALTER TABLE rooms ADD COLUMN world_books_id_fk INTEGER REFERENCES world_books(id)');
     if (!rcols.includes('ai_trigger')) db.exec("ALTER TABLE rooms ADD COLUMN ai_trigger TEXT DEFAULT 'manual'");
     if (!rcols.includes('auto_mem')) db.exec('ALTER TABLE rooms ADD COLUMN auto_mem INTEGER DEFAULT 0');
     if (!rcols.includes('mem_every')) db.exec('ALTER TABLE rooms ADD COLUMN mem_every INTEGER DEFAULT 10');
-    if (!rcols.includes('mem_last_id')) db.exec('ALTER TABLE rooms ADD COLUMN mem_last_id INTEGER DEFAULT 0');
+    if (!rcols.includes('mem_last_messages_id')) db.exec('ALTER TABLE rooms ADD COLUMN mem_last_messages_id INTEGER DEFAULT 0');
     if (!rcols.includes('mem_budget')) db.exec('ALTER TABLE rooms ADD COLUMN mem_budget INTEGER DEFAULT 500');
     if (!rcols.includes('mem_max')) db.exec('ALTER TABLE rooms ADD COLUMN mem_max INTEGER DEFAULT 50');
-    if (!rcols.includes('mem_profile_id')) db.exec('ALTER TABLE rooms ADD COLUMN mem_profile_id INTEGER');
+    if (!rcols.includes('api_profiles_id_fk')) db.exec('ALTER TABLE rooms ADD COLUMN api_profiles_id_fk INTEGER');
     if (!rcols.includes('max_context')) db.exec('ALTER TABLE rooms ADD COLUMN max_context INTEGER DEFAULT 0');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
@@ -161,34 +182,34 @@ export function migrateSchema() {
     // messages.name/kind are derivable (card/persona/user) — drop them.
     const msgCols = db.prepare('PRAGMA table_info(messages)').all().map(c => c.name);
     if (msgCols.includes('name') || msgCols.includes('kind')) {
-        db.exec(`CREATE TABLE messages_new (id INTEGER PRIMARY KEY AUTOINCREMENT,
-            room_id INTEGER NOT NULL REFERENCES rooms(id),
-            sender_user_id INTEGER REFERENCES users(id),
-            card_id INTEGER REFERENCES cards(id),
+        db.exec(`CREATE TABLE messages_new (messages_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+            rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
+            sender_users_id_fk INTEGER REFERENCES users(id),
+            cards_id_fk INTEGER REFERENCES cards(id),
             text TEXT NOT NULL, send_date TEXT DEFAULT (datetime('now')),
             supersedes INTEGER)`);
-        db.exec(`INSERT INTO messages_new (id,room_id,sender_user_id,card_id,text,send_date,supersedes)
-            SELECT id,room_id,sender_user_id,card_id,text,send_date,supersedes FROM messages`);
+        db.exec(`INSERT INTO messages_new (id,rooms_id_fk,sender_users_id_fk,cards_id_fk,text,send_date,supersedes)
+            SELECT id,rooms_id_fk,sender_users_id_fk,cards_id_fk,text,send_date,supersedes FROM messages`);
         db.exec('DROP TABLE messages; ALTER TABLE messages_new RENAME TO messages');
     }
-    // Books ↔ rooms is many-to-many — junction replaces rooms.world_book_id.
+    // Books ↔ rooms is many-to-many — junction replaces rooms.world_books_id_fk.
     db.exec(`CREATE TABLE IF NOT EXISTS room_books (
-        room_id INTEGER NOT NULL REFERENCES rooms(id),
-        book_id INTEGER NOT NULL REFERENCES world_books(id),
-        UNIQUE(room_id, book_id))`);
-    db.exec(`INSERT OR IGNORE INTO room_books (room_id,book_id)
-        SELECT id, world_book_id FROM rooms WHERE world_book_id IS NOT NULL`);
+        rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
+        world_books_id_fk INTEGER NOT NULL REFERENCES world_books(id),
+        UNIQUE(rooms_id_fk, world_books_id_fk))`);
+    db.exec(`INSERT OR IGNORE INTO room_books (rooms_id_fk,world_books_id_fk)
+        SELECT rooms_id_pk, world_books_id_fk FROM rooms WHERE world_books_id_fk IS NOT NULL`);
     // Entries belong to books, not rooms — drop the column.
     const wecols = db.prepare('PRAGMA table_info(world_entries)').all().map(c => c.name);
-    if (wecols.includes('room_id')) {
-        db.exec(`CREATE TABLE world_entries_new (id INTEGER PRIMARY KEY AUTOINCREMENT,
-            book_id INTEGER NOT NULL REFERENCES world_books(id),
+    if (wecols.includes('rooms_id_fk')) {
+        db.exec(`CREATE TABLE world_entries_new (world_entries_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+            world_books_id_fk INTEGER NOT NULL REFERENCES world_books(id),
             keys TEXT DEFAULT '[]', keysecondary TEXT DEFAULT '[]',
             content TEXT DEFAULT '', constant INTEGER DEFAULT 0,
             enabled INTEGER DEFAULT 1, ord INTEGER DEFAULT 0,
             comment TEXT DEFAULT '')`);
-        db.exec(`INSERT INTO world_entries_new (id,book_id,keys,keysecondary,content,constant,enabled,ord,comment)
-            SELECT id,book_id,keys,keysecondary,content,constant,enabled,ord,comment FROM world_entries`);
+        db.exec(`INSERT INTO world_entries_new (id,world_books_id_fk,keys,keysecondary,content,constant,enabled,ord,comment)
+            SELECT id,world_books_id_fk,keys,keysecondary,content,constant,enabled,ord,comment FROM world_entries`);
         db.exec('DROP TABLE world_entries; ALTER TABLE world_entries_new RENAME TO world_entries');
     }
     const pcols = db.prepare('PRAGMA table_info(api_profiles)').all().map(c => c.name);
@@ -200,51 +221,51 @@ export function migrateSchema() {
     // only; rooms link via room_books junction.
     const mcols = db.prepare('PRAGMA table_info(members)').all().map(c => c.name);
     if (!mcols.includes('talkativeness')) db.exec('ALTER TABLE members ADD COLUMN talkativeness INTEGER DEFAULT 50');
-    // memories.card_id must be nullable — NULL = shared room memory.
-    const mi = db.prepare('PRAGMA table_info(memories)').all().find(c => c.name === 'card_id');
+    // memories.cards_id_fk must be nullable — NULL = shared room memory.
+    const mi = db.prepare('PRAGMA table_info(memories)').all().find(c => c.name === 'cards_id_fk');
     if (mi?.notnull) db.exec(`BEGIN;
-        CREATE TABLE memories_new (id INTEGER PRIMARY KEY AUTOINCREMENT,
-            card_id INTEGER REFERENCES cards(id),
-            room_id INTEGER NOT NULL REFERENCES rooms(id),
+        CREATE TABLE memories_new (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+            cards_id_fk INTEGER REFERENCES cards(id),
+            rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
             content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')));
-        INSERT INTO memories_new SELECT * FROM memories;
+        INSERT INTO memories_new SELECT *, memories_id_pk AS id FROM memories;
         DROP TABLE memories; ALTER TABLE memories_new RENAME TO memories; COMMIT;`);
     // NULL-keyed UNIQUE never deduped — purge duplicate human members.
-    db.exec(`DELETE FROM members WHERE id NOT IN (
-        SELECT MIN(id) FROM members
-        GROUP BY room_id, IFNULL(user_id,-1), IFNULL(card_id,-1))`);
+    db.exec(`DELETE FROM members WHERE members_id_pk NOT IN (
+        SELECT MIN(members_id_pk) FROM members
+        GROUP BY rooms_id_fk, IFNULL(users_id_fk,-1), IFNULL(cards_id_fk,-1))`);
 }
 
 /** One-time: import legacy settings-JSON connections as a "Default" profile. */
 export function migrateProfiles() {
-    for (const u of db.prepare('SELECT * FROM users').all()) {
+    for (const u of db.prepare('SELECT *, users_id_pk AS id FROM users').all()) {
         const s = JSON.parse(u.settings || '{}');
         if (!s.apiUrl) continue;
-        const exists = db.prepare('SELECT 1 FROM api_profiles WHERE user_id=?').get(u.id);
+        const exists = db.prepare('SELECT 1 FROM api_profiles WHERE users_id_fk=?').get(u.users_id_pk);
         if (exists) continue;
-        db.prepare(`INSERT INTO api_profiles (user_id,name,api_url,model,key,active)
-            VALUES (?,?,?,?,?,1)`).run(u.id, 'ST OpenRouter', s.apiUrl, s.model || '', s.key || '');
+        db.prepare(`INSERT INTO api_profiles (users_id_fk,name,api_url,model,key,active)
+            VALUES (?,?,?,?,?,1)`).run(u.users_id_pk, 'ST OpenRouter', s.apiUrl, s.model || '', s.key || '');
         console.log(`[db] imported connection profile for ${u.handle}`);
     }
 }
 
 export function seed() {
     // Test users — every account gets membership in room 1.
-    const room = db.prepare('SELECT id FROM rooms ORDER BY id LIMIT 1').get()?.id
+    const room = db.prepare('SELECT rooms_id_pk AS id FROM rooms ORDER BY rooms_id_pk LIMIT 1').get()?.id
         || db.prepare('INSERT INTO rooms (name) VALUES (?)').run('The House').lastInsertRowid;
     for (const h of ['creamms', 'karima', 'blake', 'entropy75']) {
-        if (!db.prepare('SELECT id FROM users WHERE handle=?').get(h))
+        if (!db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get(h))
             createUser(h, 'changeme');
     }
     // Only auto-join the test users on a fresh install (no humans anywhere).
-    if (!db.prepare('SELECT 1 FROM members WHERE user_id IS NOT NULL LIMIT 1').get()) {
+    if (!db.prepare('SELECT 1 FROM members WHERE users_id_fk IS NOT NULL LIMIT 1').get()) {
         for (const h of ['creamms', 'karima', 'blake', 'entropy75']) {
-            const uid = db.prepare('SELECT id FROM users WHERE handle=?').get(h).id;
-            db.prepare('INSERT INTO members (room_id,user_id,kind) VALUES (?,?,?)').run(room, uid, 'human');
+            const uid = db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get(h).id;
+            db.prepare('INSERT INTO members (rooms_id_fk,users_id_fk,kind) VALUES (?,?,?)').run(room, uid, 'human');
         }
     }
     if (db.prepare('SELECT COUNT(*) c FROM messages').get().c) return;
-    const mptest = db.prepare('SELECT id FROM users WHERE handle=?').get('mptest')?.id;
-    if (mptest) db.prepare('INSERT OR IGNORE INTO members (room_id,user_id,kind) VALUES (?,?,?)').run(room, mptest, 'human');
+    const mptest = db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get('mptest')?.id;
+    if (mptest) db.prepare('INSERT OR IGNORE INTO members (rooms_id_fk,users_id_fk,kind) VALUES (?,?,?)').run(room, mptest, 'human');
     console.log('[db] users + room ensured');
 }

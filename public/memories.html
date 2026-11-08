@@ -196,7 +196,7 @@ function renderList(){
   $('list').innerHTML=curTab==='settings'?'':
     mems.map(m=>`
     <div class="card">
-      <div><div class="desc"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''} · ${esc(memScope(m.card_id))}</div>
+      <div><div class="desc"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''} · ${esc(memScope(m.cards_id_fk))}</div>
       <input placeholder="trigger keywords — inject only when mentioned" value="${esc(m.triggers||'')}" style="font-size:.8em;margin-top:4px;width:70%" onchange="api('memories/triggers',{id:${m.id},triggers:this.value})"></div>
       <div class="btns"><button class="del" onclick="del(${m.id})">Delete</button></div>
     </div>`).join('')||`<small>No ${curTab==='auto'?'smart':'permanent'} memories yet.</small>`;
@@ -213,7 +213,7 @@ async function load(){
     (profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   const rm=(rooms||[]).find(r=>r.id===ROOM);
   roomName=rm?.name||'Chat';
-  $('set_auto').checked=!!rm?.auto_mem;$('set_every').value=rm?.mem_every||10;$('set_budget').value=rm?.mem_budget||500;$('set_max').value=rm?.mem_max||50;$('set_profile').value=rm?.mem_profile_id||0;
+  $('set_auto').checked=!!rm?.auto_mem;$('set_every').value=rm?.mem_every||10;$('set_budget').value=rm?.mem_budget||500;$('set_max').value=rm?.mem_max||50;$('set_profile').value=rm?.api_profiles_id_fk||0;
   $('rchat').innerHTML=
     `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div>`;
   $('rcards').innerHTML=(cards||[]).map(c=>

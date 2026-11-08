@@ -35,7 +35,7 @@ async function load(){
   me=who.handle;
   const room=rooms.find(r=>r.id===ROOM);
   $('list').innerHTML=(books||[]).map(b=>{
-    const usedIn=rooms.filter(r=>r.world_book_id===b.id).map(r=>r.name);
+    const usedIn=rooms.filter(r=>r.world_books_id_fk===b.id).map(r=>r.name);
     const mine=!b.owner||b.owner===me;
     return `
     <div class="rprof" onclick="location='/world-edit.html?id=${b.id}'">
