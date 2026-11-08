@@ -178,7 +178,16 @@ export async function maybeSummarize(roomId) {
     const room = db.prepare('SELECT *, rooms_id_pk AS id FROM rooms WHERE rooms_id_pk=?').get(roomId);
     if (!room?.auto_mem) return;
     const lastId = db.prepare('SELECT MAX(messages_id_pk) m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
-    if (lastId - room.mem_last_messages_id < (room.mem_every || 10)) return;
+    const interval = room.mem_every || 10;
+    const threshold = room.mem_context_threshold || 80;
+    const maxCtx = room.max_context || 6400;
+    // Messages since last extraction.
+    const since = db.prepare('SELECT text FROM messages WHERE rooms_id_fk=? AND messages_id_pk>?').all(roomId, room.mem_last_messages_id);
+    const sinceTokens = since.reduce((a, m) => a + tok(m.text), 0);
+    const contextPct = maxCtx > 0 ? (sinceTokens / maxCtx) * 100 : 0;
+    const intervalMet = lastId - room.mem_last_messages_id >= interval;
+    const thresholdMet = contextPct >= threshold;
+    if (!intervalMet && !thresholdMet) return;
     const owner = db.prepare(`SELECT u.users_id_pk FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
         JOIN cards c ON c.cards_id_pk=m.cards_id_fk JOIN users u ON u.users_id_pk=c.owner_users_id_fk
         WHERE rm.rooms_id_fk=? AND c.is_persona=1 ORDER BY c.owner_users_id_fk LIMIT 1`).get(roomId);
