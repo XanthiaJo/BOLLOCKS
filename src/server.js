@@ -107,10 +107,18 @@ const router = {
     },
     'POST /api/world/books/delete': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('DELETE FROM world_entries WHERE world_entries_id_pk IN (SELECT world_entries_id_fk FROM book_entries WHERE world_books_id_fk=?)').run(b.world_books_id_pk);
-        db.prepare('DELETE FROM book_entries WHERE world_books_id_fk=?').run(b.world_books_id_pk);
-        db.prepare('DELETE FROM world_books WHERE world_books_id_pk=? AND owner_users_id_fk=?').run(b.world_books_id_pk, u.users_id_pk);
-        db.prepare('DELETE FROM room_books WHERE world_books_id_fk=?').run(b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+        const eids = db.prepare('SELECT world_entries_id_fk AS id FROM book_entries WHERE world_books_id_fk=?').all(id).map(r => r.id);
+        db.prepare('DELETE FROM book_entries WHERE world_books_id_fk=?').run(id);
+        const stillLinked = db.prepare('SELECT 1 FROM book_entries WHERE world_entries_id_fk=? LIMIT 1');
+        const delE = db.prepare('DELETE FROM world_entries WHERE world_entries_id_pk=?');
+        const delK = db.prepare('DELETE FROM world_entry_keys WHERE world_entries_id_fk=?');
+        for (const eid of eids) {
+            if (stillLinked.get(eid)) continue; // shared with another book — keep it
+            delK.run(eid); delE.run(eid);
+        }
+        db.prepare('DELETE FROM world_books WHERE world_books_id_pk=? AND owner_users_id_fk=?').run(id, u.users_id_pk);
+        db.prepare('DELETE FROM room_books WHERE world_books_id_fk=?').run(id);
         send(res, 200, { ok: true });
     },
     'POST /api/world/link': async (req, res, u) => {
@@ -166,28 +174,31 @@ const router = {
     },
     'POST /api/world/update': async (req, res, u) => {
         const b = await readBody(req);
+        const id = b.id || b.world_books_id_pk;
         const keys = typeof b.keys === 'string'
             ? b.keys.split(',').map(k => k.trim()).filter(Boolean) : b.keys;
         const secondary = typeof b.keysecondary === 'string'
             ? b.keysecondary.split(',').map(k => k.trim()).filter(Boolean) : b.keysecondary;
         if (keys || secondary) {
-            db.prepare('DELETE FROM world_entry_keys WHERE world_entries_id_fk=?').run(b.world_books_id_pk);
+            db.prepare('DELETE FROM world_entry_keys WHERE world_entries_id_fk=?').run(id);
             const ik = db.prepare('INSERT OR IGNORE INTO world_entry_keys (world_entries_id_fk,word,kind) VALUES (?,?,?)');
-            for (const w of (keys || [])) ik.run(b.world_books_id_pk, w, 'primary');
-            for (const w of (secondary || [])) ik.run(b.world_books_id_pk, w, 'secondary');
+            for (const w of (keys || [])) ik.run(id, w, 'primary');
+            for (const w of (secondary || [])) ik.run(id, w, 'secondary');
         }
         db.prepare(`UPDATE world_entries SET
             comment=COALESCE(?,comment), content=COALESCE(?,content),
             constant=COALESCE(?,constant), enabled=COALESCE(?,enabled), ord=COALESCE(?,ord) WHERE world_entries_id_pk=?`)
             .run(b.comment, b.content,
                 b.constant === undefined ? null : (b.constant ? 1 : 0),
-                b.enabled === undefined ? null : (b.enabled ? 1 : 0), b.ord, b.world_books_id_pk);
+                b.enabled === undefined ? null : (b.enabled ? 1 : 0), b.ord, id);
         send(res, 200, { ok: true });
     },
     'POST /api/world/delete': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('DELETE FROM book_entries WHERE world_entries_id_fk=?').run(b.world_books_id_pk);
-        db.prepare('DELETE FROM world_entries WHERE world_entries_id_pk=?').run(b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+        db.prepare('DELETE FROM world_entry_keys WHERE world_entries_id_fk=?').run(id);
+        db.prepare('DELETE FROM book_entries WHERE world_entries_id_fk=?').run(id);
+        db.prepare('DELETE FROM world_entries WHERE world_entries_id_pk=?').run(id);
         send(res, 200, { ok: true });
     },
     'GET /api/users': async (req, res, u) =>
