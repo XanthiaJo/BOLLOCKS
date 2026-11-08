@@ -179,7 +179,11 @@ const router = {
                 SELECT m2.card_id FROM members m2
                 JOIN members me ON me.room_id = m2.room_id AND me.user_id = ?
                 WHERE m2.card_id IS NOT NULL
-            ) ORDER BY c.name`).all(u.id, u.id);
+            ) OR (c.is_persona=1 AND c.owner_id IN (
+                SELECT m3.user_id FROM members m3
+                JOIN members me2 ON me2.room_id = m3.room_id AND me2.user_id = ?
+                WHERE m3.user_id IS NOT NULL
+            )) ORDER BY c.name`).all(u.id, u.id, u.id);
         send(res, 200, { cards });
     },
     'POST /api/cards': async (req, res, u) => {
