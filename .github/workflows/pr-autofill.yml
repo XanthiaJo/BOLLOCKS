@@ -1,9 +1,7 @@
 name: PR Autofill
 
-# Fills in a PR's title/body from its commits when it's opened — same
-# convention as the release planner: the highest-bump conventional commit
-# becomes the title (BREAKING/! > feat > everything else), and the body lists
-# every commit as `- <sha> <message>`.
+# Fills a PR's body from its commits when it's opened — every commit in the
+# PR as `- <sha> <message>`. The title is left alone (whatever's typed).
 
 on:
   pull_request:
@@ -21,7 +19,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fill title and body from commits
+      - name: Fill body from commits
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -29,29 +27,7 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           git fetch origin "$BASE" --depth=1 2>/dev/null || git fetch origin
-          COMMITS=$(git log --format='%h %s' "$BASE..$HEAD" 2>/dev/null || git log --format='%h %s' "${{ github.event.pull_request.base.ref }}..${{ github.event.pull_request.head.ref }}")
-
-          # Highest-bump conventional commit wins the title: feat!/BREAKING
-          # (major) > feat (minor) > fix/chore/docs/etc (patch).
-          TITLE=""
-          while IFS= read -r line; do
-            msg="${line#* }"
-            case "$msg" in
-              *"!"*:|"BREAKING"*|feat!*|fix!*) TITLE="$msg"; break;;
-            esac
-          done <<< "$COMMITS"
-          if [ -z "$TITLE" ]; then
-            TITLE=$(echo "$COMMITS" | grep -oP '(?<= )feat(\(.+\))?:.*' | head -1 || true)
-          fi
-          if [ -z "$TITLE" ]; then
-            TITLE=$(echo "$COMMITS" | head -1 | sed 's/^[^ ]* //')
-          fi
-          # strip the sha prefix if grep picked the whole line
-          TITLE="${TITLE#* }"
-          [ -z "$TITLE" ] && TITLE="Update"
-
-          BODY=$(echo "$COMMITS" | sed 's/^/- /')
-
-          gh pr edit "$PR_NUMBER" --title "$TITLE" --body "$BODY"
-          echo "title: $TITLE"
+          BODY=$(git log --format='%h %s' "$BASE..$HEAD" 2>/dev/null | sed 's/^/- /')
+          [ -z "$BODY" ] && BODY="- (no commits found)"
+          gh pr edit "$PR_NUMBER" --body "$BODY"
           echo "$BODY"
