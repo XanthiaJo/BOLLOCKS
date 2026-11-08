@@ -11,8 +11,8 @@ const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
  * { apiUrl, model, key }) — read from DB, never reaches clients.
  */
 export async function generateReply(roomId, card) {
-    const owner = db.prepare(`SELECT u.users_id_pk FROM members m JOIN users u ON u.users_id_pk=m.users_id_fk
-        WHERE m.rooms_id_fk=? AND m.kind='human' ORDER BY m.users_id_fk LIMIT 1`).get(roomId);
+    const owner = db.prepare(`SELECT u.users_id_pk FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN users u ON u.users_id_pk=m.users_id_fk
+        WHERE rm.rooms_id_fk=? AND m.kind='human' ORDER BY m.users_id_fk LIMIT 1`).get(roomId);
     // Card's own profile wins; otherwise the room owner's active profile.
     const p = card.api_profiles_id_fk
         ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE users_id_pk=?').get(card.api_profiles_id_fk)
@@ -37,8 +37,8 @@ export async function generateReply(roomId, card) {
 
     // Other characters in the scene — ST injects member context so NPCs
     // know who's present. Descriptions only; no full cards.
-    const others = db.prepare(`SELECT c.name, c.description FROM members m
-        JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE m.rooms_id_fk=? AND m.kind='ai' AND c.cards_id_pk!=?`)
+    const others = db.prepare(`SELECT c.name, c.description FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
+        JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE rm.rooms_id_fk=? AND m.kind='ai' AND c.cards_id_pk!=?`)
         .all(roomId, card.id);
 
     // Keyword-triggered world entries: constant entries always in; keyed
@@ -171,8 +171,8 @@ export async function maybeSummarize(roomId) {
     if (!room?.auto_mem) return;
     const lastId = db.prepare('SELECT MAX(id) m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
     if (lastId - room.mem_last_messages_id < (room.mem_every || 10)) return;
-    const owner = db.prepare(`SELECT u.users_id_pk FROM members m JOIN users u ON u.users_id_pk=m.users_id_fk
-        WHERE m.rooms_id_fk=? AND m.kind='human' ORDER BY m.users_id_fk LIMIT 1`).get(roomId);
+    const owner = db.prepare(`SELECT u.users_id_pk FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN users u ON u.users_id_pk=m.users_id_fk
+        WHERE rm.rooms_id_fk=? AND m.kind='human' ORDER BY m.users_id_fk LIMIT 1`).get(roomId);
     const p = room.api_profiles_id_fk ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE users_id_pk=?').get(room.api_profiles_id_fk) : null;
     const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(owner?.id);
     if (!conn?.apiUrl) return;
@@ -181,10 +181,10 @@ export async function maybeSummarize(roomId) {
         .all(roomId, room.mem_last_messages_id);
     if (!excerpt.length) return;
     const roomCards = [
-        ...db.prepare(`SELECT c.cards_id_pk,c.name FROM members m JOIN cards c ON c.cards_id_pk=m.cards_id_fk
-            WHERE m.rooms_id_fk=? AND m.kind='ai'`).all(roomId),
+        ...db.prepare(`SELECT c.cards_id_pk,c.name FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards c ON c.cards_id_pk=m.cards_id_fk
+            WHERE rm.rooms_id_fk=? AND m.kind='ai'`).all(roomId),
         // Human members' persona cards — facts about players belong to them too.
-        ...db.prepare(`SELECT pc.id,pc.name FROM members m JOIN cards pc
+        ...db.prepare(`SELECT pc.cards_id_pk AS id,pc.name FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards pc
             ON pc.owner_users_id_fk=m.users_id_fk AND pc.is_persona=1
             WHERE m.rooms_id_fk=? AND m.kind='human'`).all(roomId),
     ];
