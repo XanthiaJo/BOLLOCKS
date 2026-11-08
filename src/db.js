@@ -43,8 +43,7 @@ CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
     cards_id_fk INTEGER REFERENCES cards(id),
-    kind TEXT DEFAULT 'say',             -- say | narration | ai
-    name TEXT NOT NULL, text TEXT NOT NULL,
+    text TEXT NOT NULL,
     send_date TEXT DEFAULT (datetime('now')),
     supersedes INTEGER REFERENCES messages(id)
 );
