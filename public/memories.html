@@ -184,7 +184,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 let ROOM=Number(localStorage.mp_room||1);
 let cardId=0,scopeName='',curTab='user',allMems=[];
 const TYPE_ORDER=['fact','event','relationship','preference'];
-function tab(t){curTab=t;
+function tab(t){if(t==='smart' && cardId!==0) return; curTab=t;
   $('t_perm').classList.toggle('on',t==='user');
   $('t_auto').classList.toggle('on',t==='smart');
   $('t_set').classList.toggle('on',t==='settings');
@@ -228,12 +228,15 @@ async function load(){
       `<div class="rprof${c.id===cardId?' on':''}" onclick="pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')"><div class="n">${esc(c.name)}</div></div>`
     ).join('')||'<small>None</small>';
   if(cardId<0)cardId=0;
+  // Smart memories are room-scoped only — disable the Smart tab for character scopes.
+  const smartTab=$('t_auto');
+  if(smartTab){ smartTab.disabled=cardId!==0; smartTab.style.opacity=cardId!==0?'0.4':'1'; smartTab.style.cursor=cardId!==0?'not-allowed':'pointer'; }
   const {memories}=await get(`memories?card=${cardId}&room=${ROOM}`);
   allMems=memories||[];
   $('title').textContent=`${scopeName||roomName||'Memories'} — memories`;
   renderList();
 }
-function pick(id,name){cardId=id;scopeName=name;load()}
+function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') curTab='user';load()}
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
 async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500,max:Number($('set_max').value)||50,profileId:Number($('set_profile').value)||null})}
