@@ -196,14 +196,20 @@ function renderList(){
   $('list').innerHTML=curTab==='settings'?'':
     mems.map(m=>`
     <div class="card">
-      <div><div class="desc"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''}</div></div>
-      <div class="btns"><button class="del" onclick="del(${m.id})">Delete</button></div>
+      <div><div class="desc"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''} · ${esc(cardName(m.card_id))}</div></div>
+      <div class="btns"><select onchange="move(${m.id},this.value)" style="font-size:.8em;max-width:110px">${roomCardOpts(m.card_id)}</select><button class="del" onclick="del(${m.id})">Delete</button></div>
     </div>`).join('')||`<small>No ${curTab==='auto'?'smart':'permanent'} memories yet.</small>`;
 }
 
+let roomCards=[];
+const cardName=id=>id?(roomCards.find(c=>c.id===id)?.name||'#'+id):'shared';
+const roomCardOpts=cur=>`<option value="0"${!cur?' selected':''}>shared</option>`+
+  roomCards.map(c=>`<option value="${c.id}"${cur===c.id?' selected':''}>${esc(c.name)}</option>`).join('');
+async function move(id,cardId){await api('memories/move',{id,cardId:Number(cardId)||null});loadMems();}
 let roomName='';
 async function load(){
   const [{cards},{rooms},{profiles}]=await Promise.all([get('cards'),get('rooms'),get('profiles')]);
+  roomCards=cards||[];
   $('set_profile').innerHTML='<option value="0">— default (active) —</option>'+
     (profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   const rm=(rooms||[]).find(r=>r.id===ROOM);

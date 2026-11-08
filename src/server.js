@@ -405,6 +405,11 @@ const router = {
             .run(b.maxContext === undefined ? null : b.maxContext, b.room || 1);
         send(res, 200, { ok: true });
     },
+    'POST /api/memories/move': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('UPDATE memories SET card_id=? WHERE id=?').run(b.cardId || null, b.id);
+        send(res, 200, { ok: true });
+    },
     'POST /api/room/memsettings': async (req, res, u) => {
         const b = await readBody(req);
         db.prepare(`UPDATE rooms SET auto_mem=COALESCE(?,auto_mem), mem_every=COALESCE(?,mem_every),
