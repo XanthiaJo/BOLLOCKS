@@ -413,6 +413,14 @@ const router = {
         db.prepare('UPDATE memories SET card_id=? WHERE id=?').run(b.cardId || null, b.id);
         send(res, 200, { ok: true });
     },
+    'POST /api/messages/delete': async (req, res, u) => {
+        const b = await readBody(req);
+        const m = db.prepare('SELECT room_id FROM messages WHERE id=?').get(b.id);
+        if (!m) return send(res, 404, { error: 'no message' });
+        db.prepare('DELETE FROM messages WHERE id=?').run(b.id);
+        push(m.room_id, { type: 'delete', id: b.id });
+        send(res, 200, { ok: true });
+    },
     'POST /api/room/memsettings': async (req, res, u) => {
         const b = await readBody(req);
         db.prepare(`UPDATE rooms SET auto_mem=COALESCE(?,auto_mem), mem_every=COALESCE(?,mem_every),

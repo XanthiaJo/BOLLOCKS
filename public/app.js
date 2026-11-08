@@ -31,8 +31,10 @@ function md(src) {
 
 function addMsg(m) {
     const li = document.createElement('li');
+    li.dataset.mid = m.id;
     li.className = 'mes' + (m.kind === 'ai' ? ' ai' : m.kind === 'sys' ? ' sys' : '');
-    li.innerHTML = `<div class="who">${m.card_id ? `<img class="mav" src="/api/avatar?id=${m.card_id}" onerror="this.remove()">` : ''}<span class="n"></span></div><div class="body"><span class="t"></span></div>`;
+    li.innerHTML = `<div class="who">${m.card_id ? `<img class="mav" src="/api/avatar?id=${m.card_id}" onerror="this.remove()">` : ''}<span class="n"></span></div><div class="body"><span class="t"></span></div>` +
+        `<button class="delm" title="Delete" onclick="delMsg(${m.id},this)">✕</button>`;
     li.querySelector('.n').textContent = m.name;
     li.querySelector('.t').innerHTML = md(m.text);
     $('msgs').append(li);
@@ -73,6 +75,7 @@ async function loadRoom() {
             addMsg(d.message);
             get(`lastmem?room=${room}`).then(renderLastMem);
         }
+        if (d.type === 'delete') document.querySelector(`li[data-mid="${d.id}"]`)?.remove();
     };
     renderRooms();
     renderWorld();
@@ -167,6 +170,11 @@ async function genCard(cardId, btn) {
     renderToks();
 }
 
+async function delMsg(id, btn) {
+    if (!confirm('Delete this message?')) return;
+    btn.disabled = true;
+    await api('messages/delete', { id });
+}
 function renderLastMem(m) {
     $('lastmem').innerHTML = m ? `<div style="font-size:.8em;color:#9ab;line-height:1.4">${m.text}</div>` : '<div style="font-size:.8em;color:#555">none yet</div>';
 }
