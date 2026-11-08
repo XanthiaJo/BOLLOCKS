@@ -137,6 +137,20 @@ export async function generateReply(roomId, card) {
     };
     parts.Memories = tok(memText);
 
+    // Section texts for the chat sidebar's click-to-view prompt inspector.
+    const texts = {
+        'Main Prompt': card.system_prompt || `You are ${card.name}.`,
+        'World Info': worldText,
+        'Char Description': card.description,
+        'Char Personality': card.personality,
+        'Scenario': card.scenario,
+        'Chat Examples': card.mes_example,
+        'Other Characters': others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
+        'Post-History Instructions': card.post_history_instructions,
+        'Memories': memText,
+        'Chat History': history.map(m => `${m.name}: ${m.text}`).join('\n'),
+    };
+
     // Context cap: drop oldest history lines until the prompt fits.
     const roomCtx = db.prepare('SELECT max_context FROM rooms WHERE rooms_id_pk=?').get(roomId)?.max_context || 0;
     const caps = [roomCtx, conn.context_size || 0].filter(v => v > 0);
@@ -188,6 +202,7 @@ export async function generateReply(roomId, card) {
         prompt_tokens: data?.usage?.prompt_tokens ?? null,
         completion_tokens: data?.usage?.completion_tokens ?? null,
         parts,
+        texts,
     };
     // Always drop a leading "Name:" / "**Name:**" / "[Name]" speaker tag —
     // the UI already labels messages; the tag only exists for steering.

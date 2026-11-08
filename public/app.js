@@ -196,8 +196,26 @@ async function delMsg(id, btn) {
 function renderLastMem(m) {
     $('lastmem').innerHTML = m ? `<div style="font-size:.8em;color:#9ab;line-height:1.4">${m.text}</div>` : '<div style="font-size:.8em;color:#555">none yet</div>';
 }
+let lastStats = null;
+const PAGE_LINKS = { 'World Info': '/world.html', 'Memories': '/memories.html' };
+function showPart(k) {
+    const txt = (lastStats?.texts || {})[k];
+    let v = document.getElementById('partview');
+    if (!v) {
+        v = document.createElement('div');
+        v.id = 'partview'; v.className = 'mp-veil';
+        v.onclick = e => { if (e.target === v) v.remove(); };
+        document.body.appendChild(v);
+    }
+    const esc = String(txt ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    v.innerHTML = `<div class="card" style="width:min(720px,94vw);max-height:82vh;overflow-y:auto;background:#191b24;padding:16px">
+        <h3 style="margin:0 0 10px">${k}</h3>
+        <pre style="white-space:pre-wrap;font-size:.85em;color:#cde;margin:0 0 14px">${esc || '(empty)'}</pre>
+        <button onclick="document.getElementById('partview').remove()">Close</button></div>`;
+}
 async function renderToks() {
     const { stats } = await get('genstats?room=' + room);
+    lastStats = stats;
     if (!stats) { $('toks').innerHTML = '<small>generate to see</small>'; return; }
     const total = stats.prompt_tokens ?? stats.est;
     $('toks').innerHTML =
@@ -205,15 +223,13 @@ async function renderToks() {
         `<div style="display:flex;justify-content:space-between;font-weight:600;font-size:.85em"><span>Prompt tokens</span><span>${total}</span></div>` +
         (stats.completion_tokens ? `<div style="display:flex;justify-content:space-between;font-size:.8em;color:#789"><span>Reply tokens</span><span>${stats.completion_tokens}</span></div>` : '') +
         Object.entries(stats.parts).filter(([, v]) => v).map(([k, v]) => {
-            const href = {
-                'World Info': '/world.html', 'Memories': '/memories.html',
-                'Main Prompt': '/characters.html', 'Char Description': '/characters.html',
-                'Char Personality': '/characters.html', 'Scenario': '/characters.html',
-                'Chat Examples': '/characters.html', 'Other Characters': '/characters.html',
-                'Post-History Instructions': '/characters.html',
-            }[k];
+            const href = PAGE_LINKS[k];
+            const hasText = k in (lastStats?.texts || {});
             const lbl = href
-                ? `<a href="${href}" style="color:#9ab">${k}</a>` : `<span>${k}</span>`;
+                ? `<a href="${href}" style="color:#9ab">${k}</a>`
+                : hasText
+                    ? `<a href="#" onclick="showPart('${k}');return false" style="color:#9ab">${k}</a>`
+                    : `<span>${k}</span>`;
             return `<div style="display:flex;justify-content:space-between;font-size:.8em;color:#9ab"><span>${lbl}</span><span>${v}</span></div>`;
         }).join('');
 }
