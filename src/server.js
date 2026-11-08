@@ -117,12 +117,14 @@ const router = {
         if (!list.length) return send(res, 400, { error: 'no entries found' });
         const bid = db.prepare('INSERT INTO world_books (owner_users_id_fk,name) VALUES (?,?)')
             .run(u.users_id_pk, b.name || raw.name || 'Imported book').lastInsertRowid;
-        const ins = db.prepare(`INSERT INTO world_entries (keys,keysecondary,comment,content,constant,enabled,ord)
-            VALUES (?,?,?,?,?,?,?)`);
+        const ins = db.prepare(`INSERT INTO world_entries (comment,content,constant,enabled,ord)
+            VALUES (?,?,?,?,?)`);
         const link = db.prepare('INSERT INTO book_entries (world_books_id_fk,world_entries_id_fk) VALUES (?,?)');
+        const ik = db.prepare('INSERT OR IGNORE INTO world_entry_keys (world_entries_id_fk,word,kind) VALUES (?,?,?)');
         for (const e of list) {
-            const eid = ins.run(JSON.stringify(e.key || []), JSON.stringify(e.keysecondary || []),
-                e.comment || '', e.content || '', e.constant ? 1 : 0, e.disable ? 0 : 1, e.order || 0).lastInsertRowid;
+            const eid = ins.run(e.comment || '', e.content || '', e.constant ? 1 : 0, e.disable ? 0 : 1, e.order || 0).lastInsertRowid;
+            for (const w of (e.key || [])) ik.run(eid, w, 'primary');
+            for (const w of (e.keysecondary || [])) ik.run(eid, w, 'secondary');
             link.run(bid, eid);
         }
         send(res, 200, { id: bid, count: list.length });
@@ -130,6 +132,12 @@ const router = {
     'GET /api/world': async (req, res, u) => {
         const bookId = Number(new URL(req.url, 'http://x').searchParams.get('book') || 0);
         const entries = db.prepare('SELECT e.*, e.world_entries_id_pk AS id FROM world_entries e JOIN book_entries be ON be.world_entries_id_fk=e.world_entries_id_pk WHERE be.world_books_id_fk=? ORDER BY e.ord, e.world_entries_id_pk').all(bookId);
+        const ks = db.prepare('SELECT word,kind FROM world_entry_keys WHERE world_entries_id_fk=?');
+        for (const e of entries) {
+            const rows = ks.all(e.id);
+            e.keys = JSON.stringify(rows.filter(r=>r.kind==='primary').map(r=>r.word));
+            e.keysecondary = JSON.stringify(rows.filter(r=>r.kind==='secondary').map(r=>r.word));
+        }
         send(res, 200, { entries });
     },
     'POST /api/world': async (req, res, u) => {
@@ -138,24 +146,30 @@ const router = {
             ? b.keys.split(',').map(k => k.trim()).filter(Boolean) : (b.keys || []);
         const secondary = typeof b.keysecondary === 'string'
             ? b.keysecondary.split(',').map(k => k.trim()).filter(Boolean) : (b.keysecondary || []);
-        const id = db.prepare('INSERT INTO world_entries (keys,keysecondary,comment,content,constant,enabled,ord) VALUES (?,?,?,?,?,?,?)')
-            .run(JSON.stringify(keys), JSON.stringify(secondary),
-                b.comment || '', b.content || '', b.constant ? 1 : 0, b.enabled === false ? 0 : 1, b.ord || 0).lastInsertRowid;
+        const id = db.prepare('INSERT INTO world_entries (comment,content,constant,enabled,ord) VALUES (?,?,?,?,?)')
+            .run(b.comment || '', b.content || '', b.constant ? 1 : 0, b.enabled === false ? 0 : 1, b.ord || 0).lastInsertRowid;
+        const ik2 = db.prepare('INSERT OR IGNORE INTO world_entry_keys (world_entries_id_fk,word,kind) VALUES (?,?,?)');
+        for (const w of keys) ik2.run(id, w, 'primary');
+        for (const w of secondary) ik2.run(id, w, 'secondary');
         if (b.book) db.prepare('INSERT OR IGNORE INTO book_entries (world_books_id_fk,world_entries_id_fk) VALUES (?,?)').run(b.book, id);
         send(res, 200, { id });
     },
     'POST /api/world/update': async (req, res, u) => {
         const b = await readBody(req);
         const keys = typeof b.keys === 'string'
-            ? JSON.stringify(b.keys.split(',').map(k => k.trim()).filter(Boolean))
-            : (b.keys ? JSON.stringify(b.keys) : null);
+            ? b.keys.split(',').map(k => k.trim()).filter(Boolean) : b.keys;
         const secondary = typeof b.keysecondary === 'string'
-            ? JSON.stringify(b.keysecondary.split(',').map(k => k.trim()).filter(Boolean))
-            : (b.keysecondary ? JSON.stringify(b.keysecondary) : null);
-        db.prepare(`UPDATE world_entries SET keys=COALESCE(?,keys), keysecondary=COALESCE(?,keysecondary),
+            ? b.keysecondary.split(',').map(k => k.trim()).filter(Boolean) : b.keysecondary;
+        if (keys || secondary) {
+            db.prepare('DELETE FROM world_entry_keys WHERE world_entries_id_fk=?').run(b.world_books_id_pk);
+            const ik = db.prepare('INSERT OR IGNORE INTO world_entry_keys (world_entries_id_fk,word,kind) VALUES (?,?,?)');
+            for (const w of (keys || [])) ik.run(b.world_books_id_pk, w, 'primary');
+            for (const w of (secondary || [])) ik.run(b.world_books_id_pk, w, 'secondary');
+        }
+        db.prepare(`UPDATE world_entries SET
             comment=COALESCE(?,comment), content=COALESCE(?,content),
             constant=COALESCE(?,constant), enabled=COALESCE(?,enabled), ord=COALESCE(?,ord) WHERE world_entries_id_pk=?`)
-            .run(keys, secondary, b.comment, b.content,
+            .run(b.comment, b.content,
                 b.constant === undefined ? null : (b.constant ? 1 : 0),
                 b.enabled === undefined ? null : (b.enabled ? 1 : 0), b.ord, b.world_books_id_pk);
         send(res, 200, { ok: true });

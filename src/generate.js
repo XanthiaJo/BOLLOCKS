@@ -50,9 +50,14 @@ export async function generateReply(roomId, card) {
         JOIN book_entries be ON be.world_entries_id_fk=e.world_entries_id_pk
         JOIN room_books rb ON rb.world_books_id_fk=be.world_books_id_fk
         WHERE rb.rooms_id_fk=? AND e.enabled=1 ORDER BY e.ord,e.world_entries_id_pk`).all(roomId)
-        .filter(e => e.constant || (
-            JSON.parse(e.keys || '[]').some(k => k && scanText.includes(k.toLowerCase()))
-            && JSON.parse(e.keysecondary || '[]').every(k => !k || scanText.includes(k.toLowerCase()))));
+        .filter(e => {
+            if (e.constant) return true;
+            const rows = db.prepare('SELECT word,kind FROM world_entry_keys WHERE world_entries_id_fk=?').all(e.world_entries_id_pk);
+            const prim = rows.filter(r => r.kind==='primary').map(r => r.word);
+            const sec = rows.filter(r => r.kind==='secondary').map(r => r.word);
+            return prim.some(k => k && scanText.includes(k.toLowerCase()))
+                && sec.every(k => !k || scanText.includes(k.toLowerCase()));
+        });
     const worldText = world.length
         ? 'World info:\n' + world.map(e => e.content).join('\n\n')
         : null;

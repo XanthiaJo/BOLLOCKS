@@ -55,9 +55,7 @@ CREATE TABLE IF NOT EXISTS world_books (
     created TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS world_entries (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
-    keys TEXT DEFAULT '[]',          -- JSON array of trigger keywords
+    world_entries_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
     content TEXT NOT NULL DEFAULT '',
     constant INTEGER DEFAULT 0,      -- 1 = always injected, no keyword needed
     enabled INTEGER DEFAULT 1,
@@ -233,6 +231,26 @@ export function migrateSchema() {
         db.exec(`INSERT INTO messages_new (id,rooms_id_fk,cards_id_fk,text,send_date,supersedes)
             SELECT id,rooms_id_fk,cards_id_fk,text,send_date,supersedes FROM messages`);
         db.exec('DROP TABLE messages; ALTER TABLE messages_new RENAME TO messages');
+    }
+    // Keywords get their own table — keys=primary triggers, keysecondary=secondary.
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='world_entry_keys'").get()) {
+        db.exec(`CREATE TABLE world_entry_keys (
+            world_entries_id_fk INTEGER NOT NULL REFERENCES world_entries(world_entries_id_pk),
+            word TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'primary',
+            UNIQUE(world_entries_id_fk, word, kind))`);
+        const ekeys = db.prepare('SELECT world_entries_id_pk, keys, keysecondary FROM world_entries').all();
+        const ik = db.prepare('INSERT OR IGNORE INTO world_entry_keys (world_entries_id_fk,word,kind) VALUES (?,?,?)');
+        for (const e of ekeys) {
+            for (const w of JSON.parse(e.keys || '[]')) ik.run(e.world_entries_id_pk, w, 'primary');
+            for (const w of JSON.parse(e.keysecondary || '[]')) ik.run(e.world_entries_id_pk, w, 'secondary');
+        }
+        db.exec(`CREATE TABLE world_entries_new3 (world_entries_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT DEFAULT '', constant INTEGER DEFAULT 0,
+            enabled INTEGER DEFAULT 1, ord INTEGER DEFAULT 0, comment TEXT DEFAULT '')`);
+        db.exec(`INSERT INTO world_entries_new3 (world_entries_id_pk,content,constant,enabled,ord,comment)
+            SELECT world_entries_id_pk,content,constant,enabled,ord,comment FROM world_entries`);
+        db.exec('PRAGMA foreign_keys=OFF; DROP TABLE world_entries; ALTER TABLE world_entries_new3 RENAME TO world_entries; PRAGMA foreign_keys=ON');
     }
     // Entries are standalone; book_entries junction links entries to books.
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='book_entries'").get()) {
