@@ -30,6 +30,8 @@ const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'applic
 // Local testing mode: no token → ?as=<handle> impersonation, else first user.
 const auth = req =>
     userForToken(req.headers.authorization?.replace(/^Bearer /, '') || new URL(req.url, 'http://x').searchParams.get('token'));
+const roomOwner = id => db.prepare('SELECT owner_users_id_fk AS o FROM rooms WHERE rooms_id_pk=?').get(id)?.o;
+const roomOwnerOnly = (roomId, u) => roomOwner(roomId) === u.users_id_pk;
 
 const router = {
     'POST /api/login': async (req, res) => {
@@ -123,6 +125,8 @@ const router = {
     },
     'POST /api/world/link': async (req, res, u) => {
         const b = await readBody(req);
+        const rid = b.room || b.id || 1;
+        if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
         if (b.book) db.prepare('INSERT OR IGNORE INTO room_books (rooms_id_fk,world_books_id_fk) VALUES (?,?)').run(b.room || 1, b.book);
         else db.prepare('DELETE FROM room_books WHERE rooms_id_fk=?').run(b.room || 1);
         send(res, 200, { ok: true });
@@ -307,6 +311,8 @@ const router = {
     },
     'POST /api/members': async (req, res, u) => {
         const b = await readBody(req);
+        const rid = b.room || b.id || 1;
+        if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
         if (b.userId) {
             const pc = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(b.userId)?.cards_id_pk;
             if (!pc) return send(res, 400, { error: 'user has no persona card' });
@@ -325,6 +331,13 @@ const router = {
     },
     'POST /api/members/remove': async (req, res, u) => {
         const b = await readBody(req);
+        const rid = b.room || 1;
+        if (!roomOwnerOnly(rid, u)) {
+            // Non-owners may only remove themselves (their own persona/card).
+            const ownCard = b.cardId && db.prepare('SELECT 1 FROM cards WHERE cards_id_pk=? AND owner_users_id_fk=?').get(b.cardId, u.users_id_pk);
+            const ownPersona = !b.cardId && b.userId === u.users_id_pk;
+            if (!ownCard && !ownPersona) return send(res, 403, { error: 'room owner only' });
+        }
         if (b.cardId) db.prepare('DELETE FROM room_members WHERE rooms_id_fk=? AND members_id_fk IN (SELECT members_id_pk FROM members WHERE cards_id_fk=?)').run(b.room || 1, b.cardId);
         else if (b.userId) {
             const pc = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(b.userId)?.cards_id_pk;
@@ -346,15 +359,16 @@ const router = {
     },
     'GET /api/rooms': async (req, res, u) => {
         const rooms = db.prepare(`SELECT DISTINCT r.rooms_id_pk AS id, r.name, r.ai_trigger, r.max_context,
-            r.mem_profiles_id_fk,
+            r.mem_profiles_id_fk, r.owner_users_id_fk AS owner,
+            (r.owner_users_id_fk=?) AS is_owner,
             (SELECT COUNT(*) FROM room_members rm2 WHERE rm2.rooms_id_fk=r.rooms_id_pk) AS members, r.bg FROM rooms r
-            JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE c.owner_users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk);
+            JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE c.owner_users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk, u.users_id_pk);
         send(res, 200, { rooms });
     },
     'POST /api/rooms': async (req, res, u) => {
         const b = await readBody(req);
         if (!b.name) return send(res, 400, { error: 'name required' });
-        const id = db.prepare(`INSERT INTO rooms (name,mem_profiles_id_fk) VALUES (?,(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1))`).run(b.name).lastInsertRowid;
+        const id = db.prepare(`INSERT INTO rooms (name,mem_profiles_id_fk,owner_users_id_fk) VALUES (?,(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1),?)`).run(b.name, u.users_id_pk).lastInsertRowid;
         const pc0 = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk)?.cards_id_pk;
         if (pc0) {
             const mid3 = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc0)?.members_id_pk
@@ -365,18 +379,22 @@ const router = {
     },
     'POST /api/rooms/update': async (req, res, u) => {
         const b = await readBody(req);
-        if (b.name) db.prepare('UPDATE rooms SET name=? WHERE rooms_id_pk=?').run(b.name, b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+        if (!roomOwnerOnly(id, u)) return send(res, 403, { error: 'room owner only' });
+        if (b.name) db.prepare('UPDATE rooms SET name=? WHERE rooms_id_pk=?').run(b.name, id);
         send(res, 200, { ok: true });
     },
     'POST /api/rooms/delete': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('DELETE FROM messages WHERE rooms_id_fk=?').run(b.world_books_id_pk);
-        db.prepare('DELETE FROM room_members WHERE rooms_id_fk=?').run(b.world_books_id_pk);
-        db.prepare('DELETE FROM memory_cards WHERE memories_id_fk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(b.world_books_id_pk);
-        db.prepare('DELETE FROM memories WHERE memories_id_pk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(b.world_books_id_pk);
-        db.prepare('DELETE FROM room_memories WHERE rooms_id_fk=?').run(b.world_books_id_pk);
-        db.prepare('DELETE FROM room_books WHERE rooms_id_fk=?').run(b.world_books_id_pk);
-        db.prepare('DELETE FROM rooms WHERE rooms_id_pk=?').run(b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+        if (!roomOwnerOnly(id, u)) return send(res, 403, { error: 'room owner only' });
+        db.prepare('DELETE FROM messages WHERE rooms_id_fk=?').run(id);
+        db.prepare('DELETE FROM room_members WHERE rooms_id_fk=?').run(id);
+        db.prepare('DELETE FROM memory_cards WHERE memories_id_fk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(id);
+        db.prepare('DELETE FROM memories WHERE memories_id_pk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(id);
+        db.prepare('DELETE FROM room_memories WHERE rooms_id_fk=?').run(id);
+        db.prepare('DELETE FROM room_books WHERE rooms_id_fk=?').run(id);
+        db.prepare('DELETE FROM rooms WHERE rooms_id_pk=?').run(id);
         send(res, 200, { ok: true });
     },
     'POST /api/models': async (req, res, u) => {
@@ -532,6 +550,8 @@ const router = {
     },
     'POST /api/room/trigger': async (req, res, u) => {
         const b = await readBody(req);
+        const rid = b.room || b.id || 1;
+        if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
         db.prepare('UPDATE rooms SET ai_trigger=? WHERE rooms_id_pk=?').run(b.mode || 'manual', b.room || 1);
         send(res, 200, { ok: true });
     },
@@ -545,6 +565,8 @@ const router = {
     },
     'POST /api/room/background': async (req, res, u) => {
         const b = await readBody(req);
+        const rid = b.room || b.id || 1;
+        if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
         if (!b.png_b64) return send(res, 400, { error: 'png_b64 required' });
         const file = `${b.room || 1}.png`;
         fs.writeFileSync(path.join(BG_DIR, file), Buffer.from(b.png_b64, 'base64'));
@@ -553,6 +575,8 @@ const router = {
     },
     'POST /api/room/background/remove': async (req, res, u) => {
         const b = await readBody(req);
+        const rid = b.room || b.id || 1;
+        if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
         const r = db.prepare('SELECT bg FROM rooms WHERE rooms_id_pk=?').get(b.room || 1);
         if (r?.bg && fs.existsSync(path.join(BG_DIR, r.bg))) fs.unlinkSync(path.join(BG_DIR, r.bg));
         db.prepare("UPDATE rooms SET bg='' WHERE rooms_id_pk=?").run(b.room || 1);
@@ -560,6 +584,8 @@ const router = {
     },
     'POST /api/room/settings': async (req, res, u) => {
         const b = await readBody(req);
+        const rid = b.room || b.id || 1;
+        if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
         db.prepare('UPDATE rooms SET max_context=COALESCE(?,max_context) WHERE rooms_id_pk=?')
             .run(b.maxContext === undefined ? null : b.maxContext, b.room || 1);
         send(res, 200, { ok: true });
@@ -589,11 +615,15 @@ const router = {
         // Per-chat memory *settings* are gone — rooms follow a memory profile.
         // The only per-room aspect left is which profile the room follows.
         const b = await readBody(req);
+        const rid = b.room || b.id || 1;
+        if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
         if (b.memProfile !== undefined) db.prepare('UPDATE rooms SET mem_profiles_id_fk=? WHERE rooms_id_pk=?').run(Number(b.memProfile) || 0, b.room || 1);
         send(res, 200, { ok: true });
     },
     'POST /api/members/talkativeness': async (req, res, u) => {
         const b = await readBody(req);
+        const rid = b.room || b.id || 1;
+        if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
         db.prepare(`UPDATE members SET talkativeness=? WHERE cards_id_fk=? AND members_id_pk IN (SELECT members_id_fk FROM room_members WHERE rooms_id_fk=?)`)
             .run(Math.max(0, Math.min(100, Number(b.value) || 0)), b.room || 1, b.cardId);
         send(res, 200, { ok: true });

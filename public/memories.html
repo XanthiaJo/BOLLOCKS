@@ -268,7 +268,9 @@ async function load(){
   $('smart_mprof').innerHTML=mprofOpts;$('smart_mprof').value=mprofVal;
   $('smart_mprof_hint').textContent=followed?`This chat follows "${followed.name}" — edit it on the Settings tab.`:'No profiles yet — create one on the Settings tab.';
   const smartP=followed||memProfiles[0]||null;
-  $('smart_auto').checked=!!smartP?.auto_mem;$('smart_auto').disabled=!smartP;
+  $('smart_auto').checked=!!smartP?.auto_mem;$('smart_auto').disabled=!smartP||!rm?.is_owner;
+  $('smart_mprof').disabled=!rm?.is_owner;
+  if(!rm?.is_owner)$('smart_mprof_hint').textContent='Only the room owner can change the memory profile.';
   // Settings tab: profiles list (panel 1); selected profile's settings (panel 2).
   $('mprof_list').innerHTML=(memProfiles||[]).map(p=>
     `<div class="mprofrow${p.mem_profiles_id_pk===selProf?' sel':''}" style="cursor:pointer" onclick="selectProf(${p.mem_profiles_id_pk})"><span class="n">${esc(p.name)}${p.auto_mem?' <small>smart on</small>':''}</span><button onclick="event.stopPropagation();delMP(${p.mem_profiles_id_pk})" class="del">Delete</button></div>`).join('')||'<small>No profiles yet — create one.</small>';

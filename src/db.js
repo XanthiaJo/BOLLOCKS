@@ -492,6 +492,17 @@ export function migrateSchema() {
     for (const r of existingCardLinks) insCard.run(r.memory_id_fk, r.cards_id_fk);
     // Duplicate-member dedupe removed — membership lives in room_members
     // junction (UNIQUE on room+member) so dupes can't form.
+    // Room owner: the user whose persona sits in the room (lowest user id,
+    // matching the convention generation uses for memory extraction).
+    const rcolsEnd = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);
+    if (!rcolsEnd.includes('owner_users_id_fk')) db.exec('ALTER TABLE rooms ADD COLUMN owner_users_id_fk INTEGER');
+    db.exec(`UPDATE rooms SET owner_users_id_fk=COALESCE((
+        SELECT MIN(c.owner_users_id_fk) FROM room_members rm
+        JOIN members m ON m.members_id_pk=rm.members_id_fk
+        JOIN cards c ON c.cards_id_pk=m.cards_id_fk
+        WHERE rm.rooms_id_fk=rooms.rooms_id_pk AND c.is_persona=1),
+        (SELECT users_id_pk FROM users ORDER BY users_id_pk LIMIT 1))
+        WHERE owner_users_id_fk IS NULL`);
 }
 
 /** One-time: import legacy settings-JSON connections as a "Default" profile. */
