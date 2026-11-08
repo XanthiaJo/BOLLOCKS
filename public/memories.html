@@ -255,9 +255,9 @@ function editForm(m){
     <textarea id="em_content_${m.id}" style="min-height:60px;width:100%">${esc(m.content)}</textarea>
     <div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap">
       <select id="em_type_${m.id}" style="width:auto">${types.map(t=>`<option${t===(m.type||'fact')?' selected':''}>${t}</option>`).join('')}</select>
-      <input id="em_trig_${m.id}" placeholder="trigger keywords" value="${esc(m.triggers||'')}" style="flex:1;min-width:140px;font-size:.85em">
       <select id="em_scope_${m.id}" style="width:auto">${scopeOpts}</select>
     </div>
+    <input id="em_trig_${m.id}" placeholder="trigger keywords" value="${esc(m.triggers||'')}" style="width:100%;margin-top:6px;font-size:.85em">
     <div class="btns" style="margin-top:6px"><button onclick="saveEdit(${m.id})">Save</button><button onclick="editMem(${m.id})">Cancel</button></div>
   </div>`;
 }
