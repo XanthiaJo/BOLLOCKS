@@ -116,10 +116,10 @@ const router = {
         if (!list.length) return send(res, 400, { error: 'no entries found' });
         const bid = db.prepare('INSERT INTO world_books (owner_id,name) VALUES (?,?)')
             .run(u.id, b.name || raw.name || 'Imported book').lastInsertRowid;
-        const ins = db.prepare(`INSERT INTO world_entries (room_id,book_id,keys,keysecondary,comment,content,constant,enabled,ord)
-            VALUES (?,?,?,?,?,?,?,?,?)`);
+        const ins = db.prepare(`INSERT INTO world_entries (book_id,keys,keysecondary,comment,content,constant,enabled,ord)
+            VALUES (?,?,?,?,?,?,?,?)`);
         for (const e of list) {
-            ins.run(b.room || 1, bid, JSON.stringify(e.key || []), JSON.stringify(e.keysecondary || []),
+            ins.run(bid, JSON.stringify(e.key || []), JSON.stringify(e.keysecondary || []),
                 e.comment || '', e.content || '', e.constant ? 1 : 0, e.disable ? 0 : 1, e.order || 0);
         }
         send(res, 200, { id: bid, count: list.length });
@@ -135,8 +135,8 @@ const router = {
             ? b.keys.split(',').map(k => k.trim()).filter(Boolean) : (b.keys || []);
         const secondary = typeof b.keysecondary === 'string'
             ? b.keysecondary.split(',').map(k => k.trim()).filter(Boolean) : (b.keysecondary || []);
-        const id = db.prepare('INSERT INTO world_entries (room_id,book_id,keys,keysecondary,comment,content,constant,enabled,ord) VALUES (?,?,?,?,?,?,?,?,?)')
-            .run(b.room || 1, b.book || null, JSON.stringify(keys), JSON.stringify(secondary),
+        const id = db.prepare('INSERT INTO world_entries (book_id,keys,keysecondary,comment,content,constant,enabled,ord) VALUES (?,?,?,?,?,?,?,?)')
+            .run(b.book || null, JSON.stringify(keys), JSON.stringify(secondary),
                 b.comment || '', b.content || '', b.constant ? 1 : 0, b.enabled === false ? 0 : 1, b.ord || 0).lastInsertRowid;
         send(res, 200, { id });
     },
@@ -313,7 +313,7 @@ const router = {
         db.prepare('DELETE FROM messages WHERE room_id=?').run(b.id);
         db.prepare('DELETE FROM members WHERE room_id=?').run(b.id);
         db.prepare('DELETE FROM memories WHERE room_id=?').run(b.id);
-        db.prepare('DELETE FROM world_entries WHERE room_id=?').run(b.id);
+        db.prepare('DELETE FROM room_books WHERE room_id=?').run(b.id);
         db.prepare('DELETE FROM rooms WHERE id=?').run(b.id);
         send(res, 200, { ok: true });
     },

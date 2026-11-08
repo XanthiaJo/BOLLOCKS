@@ -178,17 +178,26 @@ export function migrateSchema() {
         UNIQUE(room_id, book_id))`);
     db.exec(`INSERT OR IGNORE INTO room_books (room_id,book_id)
         SELECT id, world_book_id FROM rooms WHERE world_book_id IS NOT NULL`);
+    // Entries belong to books, not rooms — drop the column.
+    const wecols = db.prepare('PRAGMA table_info(world_entries)').all().map(c => c.name);
+    if (wecols.includes('room_id')) {
+        db.exec(`CREATE TABLE world_entries_new (id INTEGER PRIMARY KEY AUTOINCREMENT,
+            book_id INTEGER NOT NULL REFERENCES world_books(id),
+            keys TEXT DEFAULT '[]', keysecondary TEXT DEFAULT '[]',
+            content TEXT DEFAULT '', constant INTEGER DEFAULT 0,
+            enabled INTEGER DEFAULT 1, ord INTEGER DEFAULT 0,
+            comment TEXT DEFAULT '')`);
+        db.exec(`INSERT INTO world_entries_new (id,book_id,keys,keysecondary,content,constant,enabled,ord,comment)
+            SELECT id,book_id,keys,keysecondary,content,constant,enabled,ord,comment FROM world_entries`);
+        db.exec('DROP TABLE world_entries; ALTER TABLE world_entries_new RENAME TO world_entries');
+    }
     const pcols = db.prepare('PRAGMA table_info(api_profiles)').all().map(c => c.name);
     if (!pcols.includes('strip_prefix')) db.exec('ALTER TABLE api_profiles ADD COLUMN strip_prefix INTEGER DEFAULT 1');
     if (!pcols.includes('headers')) db.exec("ALTER TABLE api_profiles ADD COLUMN headers TEXT DEFAULT '{}'");
     if (!pcols.includes('context_size')) db.exec('ALTER TABLE api_profiles ADD COLUMN context_size INTEGER DEFAULT 0');
     if (!pcols.includes('max_response')) db.exec('ALTER TABLE api_profiles ADD COLUMN max_response INTEGER DEFAULT 2048');
-    // Legacy: entries keyed by room become a default book linked to that room.
-    for (const r of db.prepare('SELECT DISTINCT room_id FROM world_entries WHERE book_id IS NULL').all()) {
-        const bid = db.prepare('INSERT INTO world_books (owner_id,name) VALUES (NULL,?)').run('Room ' + r.room_id + ' book').lastInsertRowid;
-        db.prepare('UPDATE world_entries SET book_id=? WHERE room_id=? AND book_id IS NULL').run(bid, r.room_id);
-        db.prepare('UPDATE rooms SET world_book_id=? WHERE id=? AND world_book_id IS NULL').run(bid, r.room_id);
-    }
+    // Legacy room-keyed entry backfill removed — entries now belong to books
+    // only; rooms link via room_books junction.
     const mcols = db.prepare('PRAGMA table_info(members)').all().map(c => c.name);
     if (!mcols.includes('talkativeness')) db.exec('ALTER TABLE members ADD COLUMN talkativeness INTEGER DEFAULT 50');
     // memories.card_id must be nullable — NULL = shared room memory.
