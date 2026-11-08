@@ -46,7 +46,7 @@ const router = {
         send(res, 200, db.prepare("SELECT content text FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY memories_id_pk  DESC LIMIT 1").get(roomId) || null);
     },
     'GET /api/me': async (req, res, u) => {
-        const persona = db.prepare('SELECT id,name FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk);
+        const persona = db.prepare('SELECT cards_id_pk AS id,name FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk);
         send(res, 200, { handle: u.handle, persona: persona || null });
     },
     'POST /api/persona': async (req, res, u) => {
@@ -202,11 +202,11 @@ const router = {
         const b = await readBody(req);
         if (!b.name) return send(res, 400, { error: 'name required' });
         const id = db.prepare(`INSERT INTO cards (owner_users_id_fk,name,description,personality,scenario,first_message,
-            mes_example,system_prompt,post_history_instructions,tags,creator) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+            mes_example,system_prompt,post_history_instructions,tags,creator,api_profiles_id_fk) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
             .run(u.users_id_pk, b.name, b.description || '', b.personality || '', b.scenario || '', b.first_message || '',
                 b.mes_example || '', b.system_prompt || '', b.post_history_instructions || '',
                 JSON.stringify(typeof b.tags === 'string' ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : (b.tags || [])),
-                b.creator || '').lastInsertRowid;
+                b.creator || '', b.profileId || null).lastInsertRowid;
         send(res, 200, { id });
     },
     // Import a SillyTavern card: {png_b64} for PNG cards, {card} for JSON.
@@ -256,11 +256,11 @@ const router = {
             personality=COALESCE(?,personality), scenario=COALESCE(?,scenario),
             first_message=COALESCE(?,first_message), mes_example=COALESCE(?,mes_example),
             system_prompt=COALESCE(?,system_prompt), post_history_instructions=COALESCE(?,post_history_instructions),
-            tags=COALESCE(?,tags), creator=COALESCE(?,creator) WHERE cards_id_pk=? AND owner_users_id_fk=?`)
+            tags=COALESCE(?,tags), creator=COALESCE(?,creator), api_profiles_id_fk=? WHERE cards_id_pk=? AND owner_users_id_fk=?`)
             .run(b.name, b.description, b.personality, b.scenario, b.first_message, b.mes_example,
                 b.system_prompt, b.post_history_instructions,
                 b.tags !== undefined ? JSON.stringify(typeof b.tags === 'string' ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : b.tags) : null,
-                b.creator, b.world_books_id_pk, u.users_id_pk);
+                b.creator, b.profileId ?? null, b.world_books_id_pk, u.users_id_pk);
         send(res, 200, { ok: true });
     },
     'POST /api/cards/delete': async (req, res, u) => {

@@ -125,14 +125,19 @@ async function load(){
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let profs=[];
 const profName=c=>c.api_profiles_id_fk?(' · '+(profs.find(p=>p.id===c.api_profiles_id_fk)?.name||'custom api')):'';
-async function loadProfs(){/* profiles now come from each user's active profile */}
+async function loadProfs(){
+  const {profiles}=await get('profiles');
+  profs=profiles||[];
+  $('ed_profile').innerHTML='<option value="">� default �</option>'+
+    profs.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+}
 
 function edit(c){
   const mine=c.owner===me;
   document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=!mine);
   $('edtitle').textContent=(mine?'Edit ':'')+c.name+(mine?'':` (${c.owner})`);
   $('ed_av').src=c.avatar?'/api/avatar?id='+c.id+'&t='+Date.now():'';
-  if(!mine){$('editor').style.display='block';$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');scrollTo(0,0);return;}$('edtitle').textContent='Edit '+c.name;$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');$('ed_creator').value=c.creator||'';scrollTo(0,0)}
+  if(!mine){$('editor').style.display='block';$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');scrollTo(0,0);return;}$('edtitle').textContent='Edit '+c.name;$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');$('ed_creator').value=c.creator||'';$('ed_profile').value=c.api_profiles_id_fk||'';scrollTo(0,0)}
 let cropImg=null,cropX=0,cropY=0,cropSize=0,cropScale=1;
 function pickAvatar(inp){
   const f=inp.files[0];inp.value='';if(!f)return;
