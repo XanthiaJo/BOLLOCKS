@@ -254,7 +254,7 @@ async function renderToks() {
     // The API only reports the prompt total — scale the per-section
     // estimates so they sum to it (≈ attribution, not exact counts).
     const entries = Object.entries(stats.parts).filter(([, v]) => v);
-    const estSum = entries.filter(([k]) => k !== '(capped)').reduce((a, [, v]) => a + v, 0);
+    const estSum = entries.filter(([k]) => !k.startsWith('(')).reduce((a, [, v]) => a + v, 0);
     const scale = stats.prompt_tokens && estSum ? stats.prompt_tokens / estSum : 1;
     $('toks').innerHTML =
         `<small style="color:#789">${stats.card} · <a href="#" onclick="showRequest();return false" style="color:#9ab" title="View full request JSON">${stats.prompt_tokens ? 'actual' : 'estimated'}</a></small>` +
@@ -262,7 +262,7 @@ async function renderToks() {
         (stats.completion_tokens ? `<div style="display:flex;justify-content:space-between;font-size:.8em;color:#789"><span>Reply tokens</span><span>${stats.completion_tokens}</span></div>` : '') +
         (scale !== 1 ? `<small style="color:#567">sections ≈ scaled to actual total</small>` : '') +
         entries.map(([k, v]) => {
-            const shown = k === '(capped)' ? v : Math.round(v * scale);
+            const shown = k.startsWith('(') ? v : Math.round(v * scale);
             const href = PAGE_LINKS[k];
             const hasText = k in (lastStats?.texts || {});
             const lbl = href
