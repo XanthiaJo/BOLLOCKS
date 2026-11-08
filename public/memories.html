@@ -11,31 +11,26 @@
 .tabs{display:flex;gap:6px;margin:8px 0}
 .tab{background:#2a2b2e;border:1px solid #3a3b3e;color:#9ab;padding:5px 14px;border-radius:4px;cursor:pointer;width:auto;font-size:.85em}
 .tab.on{background:#3a5ccc;color:#fff;border-color:#3a5ccc}
-#setpanel h4{color:#789;margin:16px 0 4px;font-size:.85em;text-transform:uppercase;letter-spacing:.04em}
+#setpanel h4,#profpanel h4{color:#789;margin:16px 0 4px;font-size:.85em;text-transform:uppercase;letter-spacing:.04em}
 #smartbar{margin:8px 0}
 #smartbar .lbl{font-size:.8em;color:#789;display:block;margin-bottom:3px}
-#setpanel .lbl{font-size:.8em;color:#789}
-#setpanel .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;margin:4px 0}
-#setpanel .row input[type=number]{width:80px}
-#setpanel .row input:not([type=number]):not([type=checkbox]){width:200px}
-#setpanel .ph{opacity:.45;pointer-events:none;margin-top:4px}
-#setpanel input[type=number]{display:inline-block}
-#setpanel .acc{background:#23242a;border:1px solid #3a3b3e;border-radius:8px;margin:10px 0;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.25)}
-#setpanel .acc-h{background:#2a2b2e;padding:7px 10px;cursor:pointer;font-size:.85em;font-weight:700;color:#9ab;display:flex;justify-content:space-between;align-items:center;user-select:none}
-#setpanel .acc-h:hover{background:#33353a}
-#setpanel .acc-h .arrow{transition:transform .15s;font-size:.9em}
-#setpanel .acc-h.open .arrow{transform:rotate(90deg)}
-#setpanel .acc-b{padding:8px 10px;display:none}
-#setpanel .acc-b.open{display:block}
-.mprofrow{display:flex;align-items:center;gap:6px;margin:4px 0}
+#profpanel .lbl,#setpanel .lbl{font-size:.8em;color:#789}
+#profpanel .row,#setpanel .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;margin:4px 0}
+#profpanel .row input[type=number],#setpanel .row input[type=number]{width:80px}
+#profpanel .row input:not([type=number]):not([type=checkbox]),#setpanel .row input:not([type=number]):not([type=checkbox]){width:200px}
+#profpanel .ph,#setpanel .ph{opacity:.45;pointer-events:none;margin-top:4px}
+#profpanel input[type=number],#setpanel input[type=number]{display:inline-block}
+#profpanel .acc{background:#23242a;border:1px solid #3a3b3e;border-radius:8px;margin:10px 0;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+#profpanel .acc-h{background:#2a2b2e;padding:7px 10px;cursor:pointer;font-size:.85em;font-weight:700;color:#9ab;display:flex;justify-content:space-between;align-items:center;user-select:none}
+#profpanel .acc-h:hover{background:#33353a}
+#profpanel .acc-h .arrow{transition:transform .15s;font-size:.9em}
+#profpanel .acc-h.open .arrow{transform:rotate(90deg)}
+#profpanel .acc-b{padding:8px 10px;display:none}
+#profpanel .acc-b.open{display:block}
+.mprofrow{display:flex;align-items:center;gap:6px;margin:4px 0;padding:6px 8px;border:1px solid #3a3b3e;border-radius:6px;background:#191b20}
+.mprofrow.sel{border-color:#3a5ccc;background:#1e2438}
 .mprofrow .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mprofrow small{color:#567}
-#editor{display:none;text-align:left}
-#editor input:not([type=checkbox]){width:100%;margin:2px 0}
-#editor textarea{width:100%}
-#editor .cap{display:block;font-size:.8em;color:#789;margin:6px 0 1px}
-#editor .grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-#editor .grid2 .cap{margin:0}
 
 </style>
 </head>
@@ -67,46 +62,46 @@
   </div>
   <div id="list"></div>
   <div class="panel" id="setpanel">
-    <h3>Memory settings</h3>
-
-    <h4>Profiles</h4>
+    <h3>Memory profiles</h3>
     <div id="mprof_list"></div>
     <div style="display:flex;gap:6px;margin-top:6px"><button onclick="newMP()">New profile</button><button onclick="saveAsProfile()">Save current as profile…</button></div>
-
-    <div id="setbody">
-    <div id="mpfolownote" style="display:none;color:#9ab;font-size:.8em;margin:6px 0">Settings come from the memory profile this chat follows (pick it on the <b>Smart</b> tab) — switch to <i>per-chat</i> to customise, or edit the profile above.</div>
-    <label class="cb"><input type="checkbox" id="set_auto" onchange="saveSet()"> Enable Smart Memory</label>
+    <small style="color:#789;display:block;margin-top:8px">Select a profile to make or edit it — its settings open in a new panel below. Chats pick which profile they follow on the Smart tab.</small>
+  </div>
+  <div class="panel" id="profpanel" style="display:none">
+    <h3 id="pf_title"></h3>
+    <label class="lbl" style="display:block">Profile name</label><input id="pf_name" style="width:240px;margin:2px 0" onchange="saveProf()">
+    <label class="cb"><input type="checkbox" id="set_auto" onchange="saveProf()"> Enable Smart Memory</label>
     <div style="opacity:.45;pointer-events:none"><label class="cb"><input type="checkbox" disabled> Read-only mode — protect memories</label></div>
 
     <h4>Memory LLM</h4>
     <div class="lbl" title="Which API profile runs memory extraction — pick a cheaper model here if you like.">Extraction profile (default = active)</div>
-    <select id="set_profile" onchange="saveSet()" style="width:220px"></select>
+    <select id="set_profile" onchange="saveProf()" style="width:220px"></select>
     <div>
-      <div class="row"><span class="lbl" title="Max tokens the memory LLM may use per extraction call. Unlimited (-1) warns it may be slow/costly.">Generation budget (tokens)</span><input type="number" id="set_genbudget" min="256" max="32768" value="2000" onchange="saveSet()" style="width:80px;display:inline-block"></div>
-      <label class="cb"><input type="checkbox" id="set_unlimited" onchange="saveSet()"> Unlimited (-1)</label>
-      <label class="cb"><input type="checkbox" id="set_activity" onchange="saveSet()"> Show activity indicator</label>
-      <label class="cb"><input type="checkbox" id="set_unified" onchange="saveSet()"> Unified injection</label>
-      <label class="cb"><input type="checkbox" id="set_triggers" onchange="saveSet()"> Generate contextual triggers</label>
-      <label class="cb"><input type="checkbox" id="set_autotune" onchange="saveSet()"> Auto-tune budgets</label>
-      <div class="row"><span class="lbl" title="How often the injected memory block is rebuilt. 1 = every generation.">Injection refresh every N AI messages</span><input type="number" id="set_refresh" min="1" max="50" value="1" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+      <div class="row"><span class="lbl" title="Max tokens the memory LLM may use per extraction call. Unlimited (-1) warns it may be slow/costly.">Generation budget (tokens)</span><input type="number" id="set_genbudget" min="256" max="32768" value="2000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+      <label class="cb"><input type="checkbox" id="set_unlimited" onchange="saveProf()"> Unlimited (-1)</label>
+      <label class="cb"><input type="checkbox" id="set_activity" onchange="saveProf()"> Show activity indicator</label>
+      <label class="cb"><input type="checkbox" id="set_unified" onchange="saveProf()"> Unified injection</label>
+      <label class="cb"><input type="checkbox" id="set_triggers" onchange="saveProf()"> Generate contextual triggers</label>
+      <label class="cb"><input type="checkbox" id="set_autotune" onchange="saveProf()"> Auto-tune budgets</label>
+      <div class="row"><span class="lbl" title="How often the injected memory block is rebuilt. 1 = every generation.">Injection refresh every N AI messages</span><input type="number" id="set_refresh" min="1" max="50" value="1" onchange="saveProf()" style="width:80px;display:inline-block"></div>
     </div>
 
     <h4>Extraction</h4>
-    <div class="row"><span class="lbl" title="How many new messages before the extractor summarizes them." title="How many new messages before the extractor summarizes them.">Extract after every</span><input type="number" id="set_every" min="2" max="100" onchange="saveSet()" style="width:80px;display:inline-block"></div> <span class="lbl" style="display:inline">new messages</span>
-    <div class="row"><span class="lbl" title="Cap on auto-extracted memories (total); oldest are dropped.">Max stored smart memories (total)</span><input type="number" id="set_max" min="0" max="5000" onchange="saveSet()" style="width:80px;display:inline-block"></div>
-    <div class="row"><span class="lbl">Max per type — fact</span><input type="number" id="set_max_fact" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
-    <div class="row"><span class="lbl">Max per type — event</span><input type="number" id="set_max_event" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
-    <div class="row"><span class="lbl">Max per type — relationship</span><input type="number" id="set_max_rel" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
-    <div class="row"><span class="lbl">Max per type — preference</span><input type="number" id="set_max_pref" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl" title="How many new messages before the extractor summarizes them." title="How many new messages before the extractor summarizes them.">Extract after every</span><input type="number" id="set_every" min="2" max="100" onchange="saveProf()" style="width:80px;display:inline-block"></div> <span class="lbl" style="display:inline">new messages</span>
+    <div class="row"><span class="lbl" title="Cap on auto-extracted memories (total); oldest are dropped.">Max stored smart memories (total)</span><input type="number" id="set_max" min="0" max="5000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — fact</span><input type="number" id="set_max_fact" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — event</span><input type="number" id="set_max_event" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — relationship</span><input type="number" id="set_max_rel" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — preference</span><input type="number" id="set_max_pref" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
     <div>
       <div class="lbl" title="The instruction sent to the memory LLM when summarizing chat into memories. Leave blank for default.">Extraction prompt template</div>
-      <textarea id="set_prompt" placeholder="(default extraction prompt)" style="min-height:60px" onchange="saveSet()"></textarea>
-      <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><input type="number" id="set_ctx" min="10" max="100" onchange="saveSet()" style="width:80px;display:inline-block"></div>
-      <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><input type="number" id="set_resplen" min="256" max="8192" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+      <textarea id="set_prompt" placeholder="(default extraction prompt)" style="min-height:60px" onchange="saveProf()"></textarea>
+      <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><input type="number" id="set_ctx" min="10" max="100" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+      <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><input type="number" id="set_resplen" min="256" max="8192" onchange="saveProf()" style="width:80px;display:inline-block"></div>
     </div>
 
     <h4>Injection</h4>
-    <div class="row"><span class="lbl" title="Max tokens of memory content injected into each generation prompt." title="Max tokens of memory content injected into each generation prompt.">Token budget</span><input type="number" id="set_budget" min="50" max="4000" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl" title="Max tokens of memory content injected into each generation prompt." title="Max tokens of memory content injected into each generation prompt.">Token budget</span><input type="number" id="set_budget" min="50" max="4000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
     <div class="ph">
       <div class="lbl" title="Where memory text lands in the prompt: before/after the system block, or mid-history at depth N.">Injection position</div>
       <label class="cb"><input type="radio" name="pos" checked disabled> Before main prompt</label>
@@ -204,42 +199,10 @@
       <div class="row"><span class="lbl" title="Model used for embeddings, e.g. nomic-embed-text." title="Model used for embeddings, e.g. nomic-embed-text.">Embedding model</span><input placeholder="nomic-embed-text" disabled></div>
       <label class="cb"><input type="checkbox" disabled> Keep model in memory</label>
     </div>
-    </div>
+
+    <div style="display:flex;gap:6px;margin-top:12px"><button onclick="saveProf()">Save profile</button><button onclick="delMP(selProf)" style="background:#7c3a3a">Delete profile</button><button onclick="deselectProf()" style="background:#444">Close</button></div>
   </div>
 </main>
-</div>
-<div id="editor">
-  <h3 id="ed_title">New memory profile</h3>
-  <input type="hidden" id="ed_pid">
-  <input id="ed_name" placeholder="Profile name">
-  <div class="grid2">
-    <div><label class="cap" for="ed_every">Extract after (messages)</label><input id="ed_every" type="number" min="2" max="100"></div>
-    <div><label class="cap" for="ed_budget">Injection budget (tokens)</label><input id="ed_budget" type="number" min="50" max="8000"></div>
-    <div><label class="cap" for="ed_max">Max smart memories (total)</label><input id="ed_max" type="number" min="0" max="5000"></div>
-    <div><label class="cap" for="ed_max_fact">Max per type — fact</label><input id="ed_max_fact" type="number" min="0" max="500"></div>
-    <div><label class="cap" for="ed_max_event">Max per type — event</label><input id="ed_max_event" type="number" min="0" max="500"></div>
-    <div><label class="cap" for="ed_max_rel">Max per type — relationship</label><input id="ed_max_rel" type="number" min="0" max="500"></div>
-    <div><label class="cap" for="ed_max_pref">Max per type — preference</label><input id="ed_max_pref" type="number" min="0" max="500"></div>
-    <div><label class="cap" for="ed_ctx">Context threshold (%)</label><input id="ed_ctx" type="number" min="10" max="100"></div>
-    <div><label class="cap" for="ed_resplen">Response length (tokens)</label><input id="ed_resplen" type="number" min="256" max="8192"></div>
-    <div><label class="cap" for="ed_genbudget">Generation budget (tokens)</label><input id="ed_genbudget" type="number" min="256" max="32768"></div>
-    <div><label class="cap" for="ed_refresh">Injection refresh every N AI msgs</label><input id="ed_refresh" type="number" min="1" max="50"></div>
-    <div><label class="cap" for="ed_profile">Extraction API profile</label><select id="ed_profile" style="width:100%;margin:2px 0"></select></div>
-  </div>
-  <label class="cap">Extraction prompt template (blank = default)</label>
-  <textarea id="ed_prompt" style="min-height:60px"></textarea>
-  <label class="cb"><input type="checkbox" id="ed_auto"> Enable Smart Memory</label>
-  <div class="grid2">
-    <label class="cb"><input type="checkbox" id="ed_unlimited"> Generation budget unlimited</label>
-    <label class="cb"><input type="checkbox" id="ed_unified"> Unified injection</label>
-    <label class="cb"><input type="checkbox" id="ed_triggers"> Generate contextual triggers</label>
-    <label class="cb"><input type="checkbox" id="ed_autotune"> Auto-tune budgets</label>
-    <label class="cb"><input type="checkbox" id="ed_activity"> Show activity indicator</label>
-  </div>
-  <div style="display:flex;gap:6px;margin-top:10px">
-    <button onclick="saveMP()">Save</button>
-    <button onclick="mpCloseEditor()" style="background:#444">Cancel</button>
-  </div>
 </div>
 <script src="layout.js"></script>
 <script>
@@ -262,6 +225,7 @@ function renderList(){
   $('t_auto').classList.toggle('on',curTab==='smart');
   $('t_set').classList.toggle('on',curTab==='settings');
   const sb=$('smartbar'); if(sb) sb.style.display=curTab==='smart'?'block':'none';
+  if($('profpanel')) $('profpanel').style.display=(curTab==='settings'&&selProf)?'block':'none';
   const mems = curTab==='settings'?[]:allMems.filter(m=>(m.origin||m.source||'user')===curTab);
   $('addbox').style.display=curTab==='user'?'block':'none';
   $('setpanel').style.display=curTab==='settings'?'block':'none';
@@ -289,26 +253,25 @@ async function load(){
   roomCards=cards||[];
   memProfiles=mprofiles||[];
   const profOpts='<option value="0">— default (active) —</option>'+(profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
-  $('set_profile').innerHTML=profOpts;$('ed_profile').innerHTML=profOpts;
+  $('set_profile').innerHTML=profOpts;
   if ((rooms||[]).length && !(rooms||[]).some(r=>r.id===ROOM)) { ROOM=rooms[0].id; localStorage.mp_room=ROOM; }
   const rm=(rooms||[]).find(r=>r.id===ROOM);
   roomName=rm?.name||'Chat';
-  // When the chat follows a memory profile, values + lock state come from it.
+  // What "current" means for Save-current-as-profile: the chat's effective
+  // memory settings (its followed profile, else its per-chat values).
   const followed=(rm?.mem_profiles_id_fk)&&(memProfiles.find(x=>x.mem_profiles_id_pk===rm.mem_profiles_id_fk))||null;
-  const sv=followed||rm||{};
-  $('set_auto').checked=!!sv.auto_mem;$('set_every').value=sv.mem_every||10;$('set_budget').value=sv.mem_budget||500;$('set_max').value=sv.mem_max||50;
-  $('set_max_fact').value=sv.mem_max_fact||50;$('set_max_event').value=sv.mem_max_event||50;$('set_max_rel').value=sv.mem_max_relationship||50;$('set_max_pref').value=sv.mem_max_preference||50;
-  $('set_prompt').value=sv.mem_extraction_prompt||'';$('set_ctx').value=sv.mem_context_threshold||80;$('set_resplen').value=sv.mem_response_length||2000;
-  $('set_genbudget').value=sv.mem_gen_budget||2000;$('set_unlimited').checked=!!sv.mem_unlimited;$('set_unified').checked=!!sv.mem_unified;$('set_triggers').checked=!!sv.mem_triggers;$('set_autotune').checked=!!sv.mem_autotune;$('set_refresh').value=sv.mem_refresh||1;
-  $('set_activity').checked=!!sv.mem_activity;
-  $('set_profile').value=sv.mem_extraction_profile_id||0;
-  lockSet(!!followed&&sv!==rm);
+  effRow=followed||rm||null;
+  // Smart tab: picker showing which profile this chat follows.
   const mprofOpts='<option value="0">— per-chat (custom) —</option>'+(memProfiles||[]).map(p=>`<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
   const mprofVal=followed?String(followed.mem_profiles_id_pk):'0';
   $('smart_mprof').innerHTML=mprofOpts;$('smart_mprof').value=mprofVal;
-  $('smart_mprof_hint').textContent=followed?`Heavier settings live inside "${followed.name}" — make/edit profiles on the Settings tab.`:'Per-chat settings apply — make/edit presets on the Settings tab.';
+  $('smart_mprof_hint').textContent=followed?`This chat follows "${followed.name}" — edit it on the Settings tab.`:'Per-chat settings apply — save them as a profile from the Settings tab.';
+  // Settings tab: profiles list (panel 1); selected profile's settings (panel 2).
   $('mprof_list').innerHTML=(memProfiles||[]).map(p=>
-    `<div class="mprofrow"><span class="n">${esc(p.name)}</span><button onclick="editMP(${p.mem_profiles_id_pk})">Edit</button><button class="del" onclick="delMP(${p.mem_profiles_id_pk})">Delete</button></div>`).join('')||'<small>No memory profiles saved yet.</small>';
+    `<div class="mprofrow${p.mem_profiles_id_pk===selProf?' sel':''}" style="cursor:pointer" onclick="selectProf(${p.mem_profiles_id_pk})"><span class="n">${esc(p.name)}${p.auto_mem?' <small>smart on</small>':''}</span><button onclick="event.stopPropagation();delMP(${p.mem_profiles_id_pk})" class="del">Delete</button></div>`).join('')||'<small>No profiles yet — create one, or save the chat\'s current settings as one.</small>';
+  const sp=selProf&&memProfiles.find(x=>x.mem_profiles_id_pk===selProf)||null;
+  $('profpanel').style.display=sp?'block':'none';
+  if(sp)fillProf(sp);
   $('rchat').innerHTML=
     `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div>`;
   $('rcards').innerHTML=(cards||[]).map(c=>
@@ -326,33 +289,30 @@ async function load(){
 function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') curTab='user';load()}
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
-function collectSet(){return {room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0,extractionPrompt:$('set_prompt').value,contextThreshold:Number($('set_ctx').value)||80,responseLength:Number($('set_resplen').value)||2000,profileId:$('set_profile').value?Number($('set_profile').value):0,genBudget:Number($('set_genbudget').value)||2000,unlimited:$('set_unlimited').checked?1:0,unified:$('set_unified').checked?1:0,triggers:$('set_triggers').checked?1:0,autotune:$('set_autotune').checked?1:0,refresh:Number($('set_refresh').value)||1,activity:$('set_activity').checked?1:0}}
-async function saveSet(){await api('room/memsettings',collectSet())}
-// --- Memory profiles (like API profiles: named presets assigned per chat) ---
-const SET_FIELDS=['set_auto','set_every','set_budget','set_max','set_max_fact','set_max_event','set_max_rel','set_max_pref','set_prompt','set_ctx','set_resplen','set_genbudget','set_unlimited','set_unified','set_triggers','set_autotune','set_refresh','set_activity','set_profile'];
-function lockSet(on){for(const id of SET_FIELDS)$(id).disabled=!!on;$('setbody').classList.toggle('ph',!!on);$('mpfolownote').style.display=on?'block':'none';}
+// --- Memory profiles: Settings tab works on profiles; chats follow one ---
+let selProf=0,effRow=null;
+function fillProf(p){
+  $('pf_title').textContent='Edit profile: '+p.name;$('pf_name').value=p.name;
+  $('set_auto').checked=!!p.auto_mem;$('set_every').value=p.mem_every||10;$('set_budget').value=p.mem_budget||800;$('set_max').value=p.mem_max||50;
+  $('set_max_fact').value=p.mem_max_fact||50;$('set_max_event').value=p.mem_max_event||50;$('set_max_rel').value=p.mem_max_relationship||50;$('set_max_pref').value=p.mem_max_preference||50;
+  $('set_prompt').value=p.mem_extraction_prompt||'';$('set_ctx').value=p.mem_context_threshold||80;$('set_resplen').value=p.mem_response_length||2000;
+  $('set_genbudget').value=p.mem_gen_budget||2000;$('set_unlimited').checked=!!p.mem_unlimited;$('set_unified').checked=!!p.mem_unified;$('set_triggers').checked=!!p.mem_triggers;$('set_autotune').checked=!!p.mem_autotune;$('set_refresh').value=p.mem_refresh||1;
+  $('set_activity').checked=!!p.mem_activity;
+  $('set_profile').value=p.mem_extraction_profile_id||0;
+}
+function selectProf(id){selProf=id;load()}
+function deselectProf(){selProf=0;load()}
+function collectProf(){return {id:selProf,name:$('pf_name').value.trim()||'Profile',auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||800,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0,extractionPrompt:$('set_prompt').value,contextThreshold:Number($('set_ctx').value)||80,responseLength:Number($('set_resplen').value)||2000,profileId:$('set_profile').value?Number($('set_profile').value):0,genBudget:Number($('set_genbudget').value)||2000,unlimited:$('set_unlimited').checked?1:0,unified:$('set_unified').checked?1:0,triggers:$('set_triggers').checked?1:0,autotune:$('set_autotune').checked?1:0,refresh:Number($('set_refresh').value)||1,activity:$('set_activity').checked?1:0}}
+async function saveProf(){if(!selProf)return;await api('memprofiles/update',collectProf());load()}
 async function pickMProf(v){await api('room/memsettings',{room:ROOM,memProfile:Number(v)||0});load()}
-async function saveAsProfile(){const name=prompt('Name this memory profile:');if(!name)return;await api('memprofiles',{...collectSet(),name});load()}
-function ppCollect(){return {id:Number($('ed_pid').value)||0,name:$('ed_name').value.trim(),auto:$('ed_auto').checked,every:Number($('ed_every').value)||10,budget:Number($('ed_budget').value)||800,max:Number($('ed_max').value)||50,maxFact:Number($('ed_max_fact').value)||0,maxEvent:Number($('ed_max_event').value)||0,maxRel:Number($('ed_max_rel').value)||0,maxPref:Number($('ed_max_pref').value)||0,extractionPrompt:$('ed_prompt').value,contextThreshold:Number($('ed_ctx').value)||80,responseLength:Number($('ed_resplen').value)||2000,genBudget:Number($('ed_genbudget').value)||2000,unlimited:$('ed_unlimited').checked?1:0,unified:$('ed_unified').checked?1:0,triggers:$('ed_triggers').checked?1:0,autotune:$('ed_autotune').checked?1:0,refresh:Number($('ed_refresh').value)||1,activity:$('ed_activity').checked?1:0,profileId:Number($('ed_profile').value)||0}}
-async function saveMP(){const b=ppCollect();if(!b.name)return alert('needs a name');await api(b.id?'memprofiles/update':'memprofiles',b);mpCloseEditor();load()}
-async function editMP(id){const p=(memProfiles||[]).find(x=>x.mem_profiles_id_pk===id);if(!p)return;
-  $('ed_title').textContent='Edit '+p.name;$('ed_pid').value=p.mem_profiles_id_pk;$('ed_name').value=p.name;
-  $('ed_auto').checked=!!p.auto_mem;$('ed_every').value=p.mem_every||10;$('ed_budget').value=p.mem_budget||800;$('ed_max').value=p.mem_max||50;
-  $('ed_max_fact').value=p.mem_max_fact||50;$('ed_max_event').value=p.mem_max_event||50;$('ed_max_rel').value=p.mem_max_relationship||50;$('ed_max_pref').value=p.mem_max_preference||50;
-  $('ed_prompt').value=p.mem_extraction_prompt||'';$('ed_ctx').value=p.mem_context_threshold||80;$('ed_resplen').value=p.mem_response_length||2000;
-  $('ed_genbudget').value=p.mem_gen_budget||2000;$('ed_refresh').value=p.mem_refresh||1;
-  $('ed_unlimited').checked=!!p.mem_unlimited;$('ed_unified').checked=!!p.mem_unified;$('ed_triggers').checked=!!p.mem_triggers;$('ed_autotune').checked=!!p.mem_autotune;$('ed_activity').checked=!!p.mem_activity;
-  $('ed_profile').value=p.mem_extraction_profile_id||0;mpOpenEditor()}
-function newMP(){$('ed_title').textContent='New memory profile';$('ed_pid').value='';$('ed_name').value='';
-  $('ed_auto').checked=false;$('ed_every').value=10;$('ed_budget').value=800;$('ed_max').value=50;
-  $('ed_max_fact').value=50;$('ed_max_event').value=50;$('ed_max_rel').value=50;$('ed_max_pref').value=50;
-  $('ed_prompt').value='';$('ed_ctx').value=80;$('ed_resplen').value=2000;
-  $('ed_genbudget').value=2000;$('ed_refresh').value=1;
-  $('ed_unlimited').checked=false;$('ed_unified').checked=true;$('ed_triggers').checked=false;$('ed_autotune').checked=false;$('ed_activity').checked=false;
-  $('ed_profile').value='0';mpOpenEditor()}
-async function delMP(id){if(confirm('Delete this memory profile? Chats following it fall back to per-chat settings.')){await api('memprofiles/delete',{id});load()}}
+async function newMP(){const name=prompt('Name for the new memory profile:');if(!name)return;
+  const r=await api('memprofiles',{name,auto:0,every:10,budget:800,max:50,maxFact:50,maxEvent:50,maxRel:50,maxPref:50,extractionPrompt:'',contextThreshold:80,responseLength:2000,genBudget:2000,unlimited:0,unified:1,triggers:0,autotune:0,refresh:1,activity:0,profileId:0});
+  if(r?.id)selProf=r.id;load()}
+async function saveAsProfile(){const name=prompt('Name this memory profile:');if(!name)return;const r=effRow||{};
+  await api('memprofiles',{name,auto:!!r.auto_mem,every:r.mem_every||10,budget:r.mem_budget||800,max:r.mem_max||50,maxFact:r.mem_max_fact||50,maxEvent:r.mem_max_event||50,maxRel:r.mem_max_relationship||50,maxPref:r.mem_max_preference||50,extractionPrompt:r.mem_extraction_prompt||'',contextThreshold:r.mem_context_threshold||80,responseLength:r.mem_response_length||2000,genBudget:r.mem_gen_budget||2000,unlimited:!!r.mem_unlimited,unified:(r.mem_unified??1)?1:0,triggers:!!r.mem_triggers,autotune:!!r.mem_autotune,refresh:r.mem_refresh||1,activity:!!r.mem_activity,profileId:r.mem_extraction_profile_id||0});load()}
+async function delMP(id){if(confirm('Delete this memory profile? Chats following it fall back to per-chat settings.')){if(selProf===id)selProf=0;await api('memprofiles/delete',{id});load()}}
 function setupAcc(){
-  const panel=document.getElementById('setpanel');
+  const panel=document.getElementById('profpanel');
   if(!panel) return;
   const h4s=[...panel.querySelectorAll('h4')];
   for(const h of h4s){
@@ -361,8 +321,7 @@ function setupAcc(){
     header.innerHTML=esc(h.textContent)+' <span class="arrow">▸</span>';
     const body=document.createElement('div'); body.className='acc-b';
     let node=h.nextSibling; const toMove=[];
-    // Stop at the next h4, or at the setbody wrapper (it holds the other sections).
-    while(node && !((node.nodeType===1 && node.tagName==='H4') || node.id==='setbody')){ toMove.push(node); node=node.nextSibling; }
+    while(node && !(node.nodeType===1 && node.tagName==='H4')){ toMove.push(node); node=node.nextSibling; }
     h.parentNode.insertBefore(wrap,h);
     wrap.appendChild(header); wrap.appendChild(body);
     for(const n of toMove) body.appendChild(n);
