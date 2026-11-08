@@ -21,6 +21,8 @@ textarea{min-height:80px;font-family:inherit}
 <main>
   <a class="back" href="/world.html">← Books</a>
   <h2 id="bookname" style="margin:8px 0 14px"></h2>
+  <button onclick="newEntry()" style="margin-bottom:12px">+ New entry</button>
+  <div id="list"></div>
   <div class="panel" id="editor" style="display:none">
     <h3 id="edtitle">New entry</h3>
     <input type="hidden" id="ed_id">
@@ -32,10 +34,8 @@ textarea{min-height:80px;font-family:inherit}
     <label class="cb"><input type="checkbox" id="ed_enabled" checked> Enabled</label>
     <input id="ed_ord" type="number" placeholder="Order (0 = first)" value="0">
     <button onclick="saveEnt()">Save</button>
-    <button onclick="mpCloseEditor()" style="background:#444">Close</button>
+    <button onclick="closeEd()" style="background:#444">Close</button>
   </div>
-  <button onclick="newEntry()" style="margin-bottom:12px">+ New entry</button>
-  <div id="list"></div>
 </main>
 </div>
 <script src="layout.js"></script>
@@ -70,9 +70,10 @@ async function load(){
       </div>
     </div>`).join('')||'<small>No entries yet.</small>';
 }
-function newEntry(){clearEd();mpOpenEditor()}
-function edit(e){$('edtitle').textContent='Edit entry #'+e.id;$('ed_id').value=e.id;$('ed_comment').value=e.comment||'';$('ed_keys').value=JSON.parse(e.keys||'[]').join(', ');$('ed_keys2').value=JSON.parse(e.keysecondary||'[]').join(', ');$('ed_content').value=e.content;$('ed_const').checked=!!e.constant;$('ed_enabled').checked=!!e.enabled;$('ed_ord').value=e.ord;mpOpenEditor()}
+function newEntry(){clearEd();mpOpenEditor('inline')}
+function edit(e){$('edtitle').textContent='Edit entry #'+e.id;$('ed_id').value=e.id;$('ed_comment').value=e.comment||'';$('ed_keys').value=JSON.parse(e.keys||'[]').join(', ');$('ed_keys2').value=JSON.parse(e.keysecondary||'[]').join(', ');$('ed_content').value=e.content;$('ed_const').checked=!!e.constant;$('ed_enabled').checked=!!e.enabled;$('ed_ord').value=e.ord;mpOpenEditor('inline')}
 function clearEd(){$('edtitle').textContent='New entry';['ed_id','ed_comment','ed_keys','ed_keys2','ed_content'].forEach(i=>$(i).value='');$('ed_const').checked=false;$('ed_enabled').checked=true;$('ed_ord').value=0}
+function closeEd(){$('editor').style.display='none'}
 
 async function saveEnt(){
   const id=$('ed_id').value;
@@ -80,7 +81,7 @@ async function saveEnt(){
   if(!b.content.trim())return alert('needs content');
   if(id)await api('world/update',{id:Number(id),...b});
   else await api('world',b);
-  mpCloseEditor();load();
+  closeEd();load();
 }
 async function toggle(id,en){await api('world/update',{id,enabled:!!en});load()}
 async function del(id){if(confirm('Delete this entry?')){await api('world/delete',{id});load()}}
