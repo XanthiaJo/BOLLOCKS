@@ -105,12 +105,12 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.addEventListener('mouseup',()=>drag=null);document.addEventListener('touchend',()=>drag=null);
 });
 
-let me='';
+let me='',allCards=[];
 async function load(){
   const [{cards},who]=await Promise.all([get('cards'),get('me')]);
-  me=who.handle;
-  $('list').innerHTML=(cards||[]).map(c=>`
-    <div class="card" style="cursor:pointer" onclick='edit(${JSON.stringify(c).replace(/'/g,"&#39;")})'>
+  me=who.handle;allCards=cards||[];
+  $('list').innerHTML=allCards.map((c,i)=>`
+    <div class="card" style="cursor:pointer" onclick="editIdx(${i})">
       <img src="/api/avatar?id=${c.id}" onerror="this.style.visibility='hidden'">
       <div>
         <div class="name">${esc(c.name)}</div>
@@ -133,6 +133,7 @@ async function loadProfs(){
     profs.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
 }
 
+function editIdx(i){edit(allCards[i])}
 function edit(c){
   const mine=c.owner===me;
   document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=!mine);

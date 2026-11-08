@@ -48,14 +48,15 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const BOOK=Number(new URLSearchParams(location.search).get('id')||0);
 const ROOM=Number(localStorage.mp_room||1);
 
+let allEntries=[];
 async function load(){
-  const [{entries},{books}]=await Promise.all([get('world?book='+BOOK),get('world/books')]);
+  const [{entries},{books}]=await Promise.all([get('world?book='+BOOK),get('world/books')]);allEntries=entries||[];
   const b=(books||[]).find(b=>b.id===BOOK);
   $('bookname').textContent=b?.name||('Book #'+BOOK);
   $('rbooks').innerHTML=(books||[]).map(x=>
     `<div class="rprof${x.id===BOOK?' on':''}" onclick="location='/world-edit.html?id=${x.id}'"><div class="n">${esc(x.name)}</div><div class="m">${x.cnt||0} entries</div></div>`
   ).join('')||'<small>No books</small>';
-  $('list').innerHTML=(entries||[]).map(e=>`
+  $('list').innerHTML=allEntries.map((e,i)=>`
     <div class="card ent${e.enabled?'':' off'}">
       <div>
         ${e.comment?`<div class="comment">${esc(e.comment)}</div>`:''}
@@ -64,13 +65,14 @@ async function load(){
         <div class="meta">#${e.id} · order ${e.ord}</div>
       </div>
       <div class="btns">
-        <button onclick='edit(${JSON.stringify(e).replace(/'/g,"&#39;")})'>Edit</button>
+        <button onclick="editIdx(${i})">Edit</button>
         <button onclick="toggle(${e.id},${e.enabled?0:1})">${e.enabled?'Disable':'Enable'}</button>
         <button class="del" onclick="del(${e.id})">Delete</button>
       </div>
     </div>`).join('')||'<small>No entries yet.</small>';
 }
 function newEntry(){clearEd();mpOpenEditor('inline')}
+function editIdx(i){edit(allEntries[i])}
 function edit(e){$('edtitle').textContent='Edit entry #'+e.id;$('ed_id').value=e.id;$('ed_comment').value=e.comment||'';$('ed_keys').value=JSON.parse(e.keys||'[]').join(', ');$('ed_keys2').value=JSON.parse(e.keysecondary||'[]').join(', ');$('ed_content').value=e.content;$('ed_const').checked=!!e.constant;$('ed_enabled').checked=!!e.enabled;$('ed_ord').value=e.ord;mpOpenEditor('inline')}
 function clearEd(){$('edtitle').textContent='New entry';['ed_id','ed_comment','ed_keys','ed_keys2','ed_content'].forEach(i=>$(i).value='');$('ed_const').checked=false;$('ed_enabled').checked=true;$('ed_ord').value=0}
 function closeEd(){$('editor').style.display='none'}
