@@ -25,16 +25,37 @@ jobs:
       deploy: false
     secrets: inherit
 
+  # Compute the next beta suffix (vX.Y.Z-beta.N) for the planned base version
+  # so the mirror's sync PR/merge is titled with it.
+  beta-num:
+    needs: plan
+    runs-on: ubuntu-latest
+    outputs:
+      suffix: ${{ steps.n.outputs.suffix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: n
+        env:
+          BASE: ${{ needs.plan.outputs.release_tag }}
+        run: |
+          git fetch origin --tags
+          LAST=$(git tag -l "${BASE}-beta.*" | sed 's/.*-beta\.//' | sort -n | tail -1)
+          N=$(( ${LAST:-0} + 1 ))
+          echo "suffix=-beta.${N}" >> "$GITHUB_OUTPUT"
+
   # Mirror the dispatch branch into beta (auto-PR + merge, beta merged back
   # into the dispatch branch so the histories stay reconciled).
   mirror:
-    needs: plan
+    needs: [plan, beta-num]
     uses: Box-of-Dragons/StructuredChaos/.github/workflows/family-release.yml@master
     permissions:
       contents: write
       pull-requests: write
     with:
       release-branch: beta
+      release-title-suffix: ${{ needs.beta-num.outputs.suffix }}
       create-tag: false
       create-release: false
       deploy: false
