@@ -56,7 +56,7 @@
     </div>
     <div id="smartbar" style="display:none">
       <div><span class="lbl" title="Which memory profile (preset of smart-memory settings) this chat follows.">Memory profile for this chat</span></div>
-      <select id="smart_mprof" onchange="pickMProf(this.value)" style="width:240px"><option value="0">— per-chat (custom) —</option></select>
+      <select id="smart_mprof" onchange="pickMProf(this.value)" style="width:240px"></select>
       <small id="smart_mprof_hint" style="display:block;color:#789;margin-top:4px">Heavier settings live under the profile — make/edit them on the Settings tab.</small>
     </div>
   </div>
@@ -249,26 +249,26 @@ const memScope=id=>id?(roomCards.find(c=>c.id===id)?.name||'#'+id):'shared';
 async function move(id,cardId){await api('memories/move',{id,cardId:Number(cardId)||null});load();}
 let roomName='';
 async function load(){
-  const [{cards},{rooms},{profiles},{mprofiles}]=await Promise.all([get('cards'),get('rooms'),get('profiles'),get('memprofiles')]);
+  const [{cards},{rooms},{profiles},mps]=await Promise.all([get('cards'),get('rooms'),get('profiles'),get('memprofiles')]);
   roomCards=cards||[];
-  memProfiles=mprofiles||[];
+  memProfiles=mps?.profiles||[];
   const profOpts='<option value="0">— default (active) —</option>'+(profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   $('set_profile').innerHTML=profOpts;
   if ((rooms||[]).length && !(rooms||[]).some(r=>r.id===ROOM)) { ROOM=rooms[0].id; localStorage.mp_room=ROOM; }
   const rm=(rooms||[]).find(r=>r.id===ROOM);
   roomName=rm?.name||'Chat';
-  // What "current" means for Save-current-as-profile: the chat's effective
-  // memory settings (its followed profile, else its per-chat values).
+  // What "current" means for Save-current-as-profile: the profile this chat
+  // follows (now always a profile — there is no per-chat custom option).
   const followed=(rm?.mem_profiles_id_fk)&&(memProfiles.find(x=>x.mem_profiles_id_pk===rm.mem_profiles_id_fk))||null;
-  effRow=followed||rm||null;
+  effRow=followed||memProfiles[0]||null;
   // Smart tab: picker showing which profile this chat follows.
-  const mprofOpts='<option value="0">— per-chat (custom) —</option>'+(memProfiles||[]).map(p=>`<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
-  const mprofVal=followed?String(followed.mem_profiles_id_pk):'0';
+  const mprofOpts=(memProfiles||[]).map(p=>`<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
+  const mprofVal=String(followed?.mem_profiles_id_pk ?? memProfiles[0]?.mem_profiles_id_pk ?? '');
   $('smart_mprof').innerHTML=mprofOpts;$('smart_mprof').value=mprofVal;
-  $('smart_mprof_hint').textContent=followed?`This chat follows "${followed.name}" — edit it on the Settings tab.`:'Per-chat settings apply — save them as a profile from the Settings tab.';
+  $('smart_mprof_hint').textContent=followed?`This chat follows "${followed.name}" — edit it on the Settings tab.`:'No profiles yet — create one on the Settings tab.';
   // Settings tab: profiles list (panel 1); selected profile's settings (panel 2).
   $('mprof_list').innerHTML=(memProfiles||[]).map(p=>
-    `<div class="mprofrow${p.mem_profiles_id_pk===selProf?' sel':''}" style="cursor:pointer" onclick="selectProf(${p.mem_profiles_id_pk})"><span class="n">${esc(p.name)}${p.auto_mem?' <small>smart on</small>':''}</span><button onclick="event.stopPropagation();delMP(${p.mem_profiles_id_pk})" class="del">Delete</button></div>`).join('')||'<small>No profiles yet — create one, or save the chat\'s current settings as one.</small>';
+    `<div class="mprofrow${p.mem_profiles_id_pk===selProf?' sel':''}" style="cursor:pointer" onclick="selectProf(${p.mem_profiles_id_pk})"><span class="n">${esc(p.name)}${p.auto_mem?' <small>smart on</small>':''}</span><button onclick="event.stopPropagation();delMP(${p.mem_profiles_id_pk})" class="del">Delete</button></div>`).join('')||'<small>No profiles yet — create one.</small>';
   const sp=selProf&&memProfiles.find(x=>x.mem_profiles_id_pk===selProf)||null;
   $('profpanel').style.display=sp?'block':'none';
   if(sp)fillProf(sp);
@@ -310,7 +310,7 @@ async function newMP(){const name=prompt('Name for the new memory profile:');if(
   if(r?.id)selProf=r.id;load()}
 async function saveAsProfile(){const name=prompt('Name this memory profile:');if(!name)return;const r=effRow||{};
   await api('memprofiles',{name,auto:!!r.auto_mem,every:r.mem_every||10,budget:r.mem_budget||800,max:r.mem_max||50,maxFact:r.mem_max_fact||50,maxEvent:r.mem_max_event||50,maxRel:r.mem_max_relationship||50,maxPref:r.mem_max_preference||50,extractionPrompt:r.mem_extraction_prompt||'',contextThreshold:r.mem_context_threshold||80,responseLength:r.mem_response_length||2000,genBudget:r.mem_gen_budget||2000,unlimited:!!r.mem_unlimited,unified:(r.mem_unified??1)?1:0,triggers:!!r.mem_triggers,autotune:!!r.mem_autotune,refresh:r.mem_refresh||1,activity:!!r.mem_activity,profileId:r.mem_extraction_profile_id||0});load()}
-async function delMP(id){if(confirm('Delete this memory profile? Chats following it fall back to per-chat settings.')){if(selProf===id)selProf=0;await api('memprofiles/delete',{id});load()}}
+async function delMP(id){if(confirm('Delete this memory profile? Chats following it switch to another profile.')){if(selProf===id)selProf=0;await api('memprofiles/delete',{id});load()}}
 function setupAcc(){
   const panel=document.getElementById('profpanel');
   if(!panel) return;
