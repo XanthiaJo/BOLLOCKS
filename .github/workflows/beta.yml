@@ -45,21 +45,44 @@ jobs:
           N=$(( ${LAST:-0} + 1 ))
           echo "suffix=-beta.${N}" >> "$GITHUB_OUTPUT"
 
-  # Mirror the dispatch branch into beta (auto-PR + merge, beta merged back
-  # into the dispatch branch so the histories stay reconciled).
+  # Mirror the dispatch branch into beta locally (auto-PR + merge titled
+  # "Release vX.Y.Z-beta.N", beta merged back into the dispatch branch so the
+  # histories stay reconciled). Done here rather than via family-release so
+  # the beta suffix stays a BOLLOCKS-local concern.
   mirror:
     needs: [plan, beta-num]
-    uses: Box-of-Dragons/StructuredChaos/.github/workflows/family-release.yml@master
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-    with:
-      release-branch: beta
-      release-title-suffix: ${{ needs.beta-num.outputs.suffix }}
-      create-tag: false
-      create-release: false
-      deploy: false
-    secrets: inherit
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Mirror dispatch branch into beta via pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE: ${{ needs.plan.outputs.release_tag }}
+          SUFFIX: ${{ needs.beta-num.outputs.suffix }}
+          HEAD_BRANCH: ${{ github.ref_name }}
+        run: |
+          git fetch origin beta "$HEAD_BRANCH"
+          if [ "$(git rev-list --count origin/beta..HEAD)" -eq 0 ]; then
+            echo "beta already up to date."
+            exit 0
+          fi
+          TITLE="Release ${BASE}${SUFFIX}"
+          gh pr create --base beta --head "$HEAD_BRANCH" \
+            --title "$TITLE" --body "Automated beta sync." || true
+          gh pr merge --merge --subject "$TITLE" "$HEAD_BRANCH" || { sleep 5; gh pr merge --merge --subject "$TITLE" "$HEAD_BRANCH"; }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin beta "$HEAD_BRANCH"
+          git checkout -B "$HEAD_BRANCH" "origin/$HEAD_BRANCH"
+          git merge "origin/beta" -m "chore(release): merge beta back into $HEAD_BRANCH"
+          git push origin "$HEAD_BRANCH"
 
   # Tag the new beta tip as a pre-release of the planned stable version.
   tag-beta:
