@@ -11,11 +11,13 @@ const MEM_PROFILE_FIELDS = ['auto_mem', 'mem_every', 'mem_budget', 'mem_max', 'm
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
     'mem_extraction_profile_id'];
 
-/** Effective memory settings for a room: the assigned memory profile's values
- *  on top of the room's own columns (0/absent profile id = per-chat settings). */
+/** Effective memory settings for a room: always the memory profile it follows
+ *  (falling back to the first profile when none is assigned) — there is no
+ *  per-chat custom option. Room columns only carry per-room bits like
+ *  the injection-refresh counter. */
 export function memProfileFor(room) {
-    if (!room?.mem_profiles_id_fk) return room;
-    const p = db.prepare('SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=?').get(room.mem_profiles_id_fk);
+    const p = db.prepare(`SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=COALESCE(?,(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1))`)
+        .get(room?.mem_profiles_id_fk || null);
     if (!p) return room;
     const out = { ...room };
     for (const k of MEM_PROFILE_FIELDS) if (k in p) out[k] = p[k];
@@ -284,9 +286,10 @@ export async function maybeSummarize(roomId) {
     }
     // Auto-tune: when enabled, raise the injection budget so stored smart
     // memories aren't dropped purely for exceeding the current budget.
-    if (mem.mem_autotune) {
+    // (Budgets live on the memory profile now — rooms only carry the FK.)
+    if (mem.mem_autotune && mem.mem_profiles_id_pk) {
         const used = db.prepare(`SELECT COALESCE(SUM(LENGTH(m.content)/4.0),0) AS s FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart'`).get(roomId)?.s || 0;
         const b = mem.mem_budget || 800;
-        if (used > b && b < 8000) db.prepare('UPDATE rooms SET mem_budget=? WHERE rooms_id_pk=?').run(Math.ceil(used), roomId);
+        if (used > b && b < 8000) db.prepare('UPDATE mem_profiles SET mem_budget=? WHERE mem_profiles_id_pk=?').run(Math.ceil(used), mem.mem_profiles_id_pk);
     }
 }

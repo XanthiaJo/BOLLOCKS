@@ -333,9 +333,7 @@ const router = {
         send(res, 200, { ok: true });
     },
     'GET /api/rooms': async (req, res, u) => {
-        const rooms = db.prepare(`SELECT DISTINCT r.rooms_id_pk AS id, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget, r.mem_max, r.max_context,
-            r.mem_max_fact, r.mem_max_event, r.mem_max_relationship, r.mem_max_preference, r.mem_extraction_prompt, r.mem_context_threshold, r.mem_response_length,
-            r.mem_gen_budget, r.mem_unlimited, r.mem_unified, r.mem_triggers, r.mem_autotune, r.mem_refresh, r.mem_activity, r.mem_extraction_profile_id,
+        const rooms = db.prepare(`SELECT DISTINCT r.rooms_id_pk AS id, r.name, r.ai_trigger, r.max_context,
             r.mem_profiles_id_fk,
             (SELECT COUNT(*) FROM room_members rm2 WHERE rm2.rooms_id_fk=r.rooms_id_pk) AS members, r.bg FROM rooms r
             JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE c.owner_users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk);
@@ -344,7 +342,7 @@ const router = {
     'POST /api/rooms': async (req, res, u) => {
         const b = await readBody(req);
         if (!b.name) return send(res, 400, { error: 'name required' });
-        const id = db.prepare('INSERT INTO rooms (name) VALUES (?)').run(b.name).lastInsertRowid;
+        const id = db.prepare(`INSERT INTO rooms (name,mem_profiles_id_fk) VALUES (?,(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1))`).run(b.name).lastInsertRowid;
         const pc0 = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk)?.cards_id_pk;
         if (pc0) {
             const mid3 = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc0)?.members_id_pk
@@ -459,9 +457,10 @@ const router = {
     },
     'POST /api/memprofiles/delete': async (req, res, u) => {
         const b = await readBody(req);
+        // Rooms following the deleted profile are re-pointed at another one
+        // (0 = feature-less room columns only when NO profiles remain).
+        db.prepare(`UPDATE rooms SET mem_profiles_id_fk=COALESCE((SELECT mem_profiles_id_pk FROM mem_profiles WHERE mem_profiles_id_pk<>? ORDER BY mem_profiles_id_pk LIMIT 1),0) WHERE mem_profiles_id_fk=?`).run(b.id, b.id);
         db.prepare('DELETE FROM mem_profiles WHERE mem_profiles_id_pk=? AND users_id_fk=?').run(b.id, u.users_id_pk);
-        // Rooms following the deleted profile fall back to per-chat settings.
-        db.prepare('UPDATE rooms SET mem_profiles_id_fk=0 WHERE mem_profiles_id_fk=?').run(b.id);
         send(res, 200, { ok: true });
     },
     'GET /api/room': async (req, res, u) => {
@@ -572,24 +571,10 @@ const router = {
         send(res, 200, { ok: true });
     },
     'POST /api/room/memsettings': async (req, res, u) => {
+        // Per-chat memory *settings* are gone — rooms follow a memory profile.
+        // The only per-room aspect left is which profile the room follows.
         const b = await readBody(req);
-        db.prepare(`UPDATE rooms SET auto_mem=COALESCE(?,auto_mem), mem_every=COALESCE(?,mem_every),
-            mem_budget=COALESCE(?,mem_budget), mem_max=COALESCE(?,mem_max),
-            mem_max_fact=COALESCE(?,mem_max_fact), mem_max_event=COALESCE(?,mem_max_event),
-            mem_max_relationship=COALESCE(?,mem_max_relationship), mem_max_preference=COALESCE(?,mem_max_preference),
-            mem_extraction_prompt=COALESCE(?,mem_extraction_prompt),
-            mem_context_threshold=COALESCE(?,mem_context_threshold),
-            mem_response_length=COALESCE(?,mem_response_length),
-            mem_gen_budget=COALESCE(?,mem_gen_budget), mem_unlimited=COALESCE(?,mem_unlimited),
-            mem_unified=COALESCE(?,mem_unified), mem_triggers=COALESCE(?,mem_triggers),
-            mem_autotune=COALESCE(?,mem_autotune), mem_refresh=COALESCE(?,mem_refresh),
-            mem_activity=COALESCE(?,mem_activity), mem_extraction_profile_id=COALESCE(?,mem_extraction_profile_id),
-            mem_profiles_id_fk=COALESCE(?,mem_profiles_id_fk)
-            WHERE rooms_id_pk=?`)
-            .run(b.auto === undefined ? null : (b.auto ? 1 : 0), b.every, b.budget, b.max,
-                b.maxFact, b.maxEvent, b.maxRel, b.maxPref,
-                b.extractionPrompt, b.contextThreshold, b.responseLength,
-                b.genBudget, b.unlimited, b.unified, b.triggers, b.autotune, b.refresh, b.activity, b.profileId, b.memProfile, b.room || 1);
+        if (b.memProfile !== undefined) db.prepare('UPDATE rooms SET mem_profiles_id_fk=? WHERE rooms_id_pk=?').run(Number(b.memProfile) || 0, b.room || 1);
         send(res, 200, { ok: true });
     },
     'POST /api/members/talkativeness': async (req, res, u) => {
