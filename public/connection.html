@@ -26,6 +26,7 @@ button.act{background:#4a7c3a}
 <aside id="rsidebar">
   <h3>Profiles</h3>
   <div id="list"></div>
+  <button onclick="newProf()" style="width:100%;margin-top:8px">+ New profile</button>
 </aside>
 <div id="content">
 <main>
@@ -112,7 +113,8 @@ async function fetchModels(){
   $('modelist').innerHTML=(r.models||[]).map(m=>`<option value="${m}">`).join('');
   $('ed_model').focus();
 }
-function clearEd(){$('editor').style.display='none';$('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value=''}
+function clearEd(){$('editor').style.display='none';$('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value='';$('ed_headers').value='';$('ed_ctx').value='';$('ed_maxr').value=''}
+function newProf(){clearEd();mpOpenEditor('inline');$('ed_name').focus()}
 
 async function saveProf(){
   const id=$('ed_id').value;
