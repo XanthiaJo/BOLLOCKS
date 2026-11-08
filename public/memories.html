@@ -64,7 +64,11 @@
 
     <h4>Extraction</h4>
     <div class="row"><span class="lbl" title="How many new messages before the extractor summarizes them." title="How many new messages before the extractor summarizes them.">Extract after every</span><input type="number" id="set_every" min="2" max="100" onchange="saveSet()" style="width:80px;display:inline-block"></div> <span class="lbl" style="display:inline">new messages</span>
-    <div class="row"><span class="lbl" title="Cap on auto-extracted memories; oldest are dropped." title="Cap on auto-extracted memories; oldest are dropped.">Max stored smart memories</span><input type="number" id="set_max" min="5" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl" title="Cap on auto-extracted memories (total); oldest are dropped.">Max stored smart memories (total)</span><input type="number" id="set_max" min="0" max="5000" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — fact</span><input type="number" id="set_max_fact" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — event</span><input type="number" id="set_max_event" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — relationship</span><input type="number" id="set_max_rel" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — preference</span><input type="number" id="set_max_pref" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
     <div class="ph">
       <div class="lbl" title="The instruction sent to the memory LLM when summarizing chat into memories.">Extraction prompt template</div>
       <textarea placeholder="(default extraction prompt)" disabled style="min-height:60px"></textarea>
@@ -221,7 +225,9 @@ async function load(){
   if ((rooms||[]).length && !(rooms||[]).some(r=>r.id===ROOM)) { ROOM=rooms[0].id; localStorage.mp_room=ROOM; }
   const rm=(rooms||[]).find(r=>r.id===ROOM);
   roomName=rm?.name||'Chat';
-  $('set_auto').checked=!!rm?.auto_mem;$('set_every').value=rm?.mem_every||10;$('set_budget').value=rm?.mem_budget||500;$('set_max').value=rm?.mem_max||50;$('set_profile').value=rm?.api_profiles_id_fk||0;
+  $('set_auto').checked=!!rm?.auto_mem;$('set_every').value=rm?.mem_every||10;$('set_budget').value=rm?.mem_budget||500;$('set_max').value=rm?.mem_max||50;
+  $('set_max_fact').value=rm?.mem_max_fact||50;$('set_max_event').value=rm?.mem_max_event||50;$('set_max_rel').value=rm?.mem_max_relationship||50;$('set_max_pref').value=rm?.mem_max_preference||50;
+  $('set_profile').value=rm?.api_profiles_id_fk||0;
   $('rchat').innerHTML=
     `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div>`;
   $('rcards').innerHTML=(cards||[]).map(c=>
@@ -239,7 +245,7 @@ async function load(){
 function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') curTab='user';load()}
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
-async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500,max:Number($('set_max').value)||50,profileId:Number($('set_profile').value)||null})}
+async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0,profileId:Number($('set_profile').value)||null})}
 load();
 </script>
 </body>

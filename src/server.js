@@ -527,8 +527,12 @@ const router = {
     'POST /api/room/memsettings': async (req, res, u) => {
         const b = await readBody(req);
         db.prepare(`UPDATE rooms SET auto_mem=COALESCE(?,auto_mem), mem_every=COALESCE(?,mem_every),
-            mem_budget=COALESCE(?,mem_budget), mem_max=COALESCE(?,mem_max) WHERE rooms_id_pk=?`)
-            .run(b.auto === undefined ? null : (b.auto ? 1 : 0), b.every, b.budget, b.max, b.room || 1);
+            mem_budget=COALESCE(?,mem_budget), mem_max=COALESCE(?,mem_max),
+            mem_max_fact=COALESCE(?,mem_max_fact), mem_max_event=COALESCE(?,mem_max_event),
+            mem_max_relationship=COALESCE(?,mem_max_relationship), mem_max_preference=COALESCE(?,mem_max_preference)
+            WHERE rooms_id_pk=?`)
+            .run(b.auto === undefined ? null : (b.auto ? 1 : 0), b.every, b.budget, b.max,
+                b.maxFact, b.maxEvent, b.maxRel, b.maxPref, b.room || 1);
         send(res, 200, { ok: true });
     },
     'POST /api/members/talkativeness': async (req, res, u) => {

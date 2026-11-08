@@ -224,12 +224,27 @@ export async function maybeSummarize(roomId) {
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
     db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
-    // Cap stored smart memories — oldest auto entries drop off.
-    db.prepare(`DELETE FROM memories WHERE origin='smart' AND memories_id_pk IN
-        (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-         WHERE rm.rooms_id_fk=? AND m.origin='smart'
-         AND m.memories_id_pk NOT IN
-            (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
-             WHERE rm2.rooms_id_fk=? AND m2.origin='smart' ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
-        .run(roomId, roomId, room.mem_max || 50);
+    // Cap stored smart memories per type — oldest entries of each type drop off.
+    for (const [type, col] of [['fact','mem_max_fact'],['event','mem_max_event'],['relationship','mem_max_relationship'],['preference','mem_max_preference']]) {
+        const cap = room[col] || 0;
+        if (cap <= 0) continue;
+        db.prepare(`DELETE FROM memories WHERE origin='smart' AND type=? AND memories_id_pk IN
+            (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type=?
+             AND m.memories_id_pk NOT IN
+                (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
+                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type=? ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
+            .run(type, roomId, type, roomId, type, cap);
+    }
+    // Global cap (mem_max) as a safety net across all types.
+    const totalCap = room.mem_max || 0;
+    if (totalCap > 0) {
+        db.prepare(`DELETE FROM memories WHERE origin='smart' AND memories_id_pk IN
+            (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+             WHERE rm.rooms_id_fk=? AND m.origin='smart'
+             AND m.memories_id_pk NOT IN
+                (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
+                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
+            .run(roomId, roomId, totalCap);
+    }
 }
