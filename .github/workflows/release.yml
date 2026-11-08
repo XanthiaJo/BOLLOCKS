@@ -1,0 +1,74 @@
+name: Stable Release
+
+# Releases are always manual — Actions → Stable Release → Run workflow (from dev).
+#
+# Flow: plan the version → bump package.json on the dispatch branch → mirror
+# the dispatch branch into main via auto-PR → tag the merge commit vX.Y.Z →
+# create the GitHub Release.
+#
+# Versioning follows StructuredChaos docs/git-rules.md: feat → minor,
+# BREAKING/! → major, everything else → patch. Dispatch on main directly for
+# hotfixes (sync is skipped, tag lands on the branch tip).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # Plan-only pass: computes the next vX.Y.Z from conventional commits since
+  # the latest tag — no sync, no tag, no release.
+  plan:
+    uses: Box-of-Dragons/StructuredChaos/.github/workflows/family-release.yml@master
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      create-tag: false
+      create-release: false
+      deploy: false
+    secrets: inherit
+
+  # Write the planned version into package.json before the sync, so the
+  # tagged merge commit on main already carries the correct version.
+  bump-package:
+    name: Bump package version
+    needs: plan
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update package.json and push
+        env:
+          RELEASE_TAG: ${{ needs.plan.outputs.release_tag }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          V="${RELEASE_TAG#v}"
+          node -e "const fs=require('fs');const p='package.json';const m=JSON.parse(fs.readFileSync(p,'utf8'));m.version='$V';fs.writeFileSync(p,JSON.stringify(m,null,4)+'\n')"
+          if git diff --quiet; then
+            echo "package.json already at $V"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore(package): bump version to $RELEASE_TAG"
+          git push origin "HEAD:$BRANCH"
+
+  # The real release: syncs the dispatch branch into main via auto-PR (and
+  # back-merges so tags stay reachable from dev), tags the merge commit, and
+  # creates the GitHub Release.
+  release:
+    needs: [plan, bump-package]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      needs.bump-package.result != 'failure' &&
+      needs.bump-package.result != 'cancelled'
+    uses: Box-of-Dragons/StructuredChaos/.github/workflows/family-release.yml@master
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      release-branch: main
+      deploy: false
+    secrets: inherit
