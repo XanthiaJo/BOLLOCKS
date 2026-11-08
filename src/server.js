@@ -45,7 +45,7 @@ const router = {
     },
     'GET /api/lastmem': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room')) || 1;
-        send(res, 200, db.prepare("SELECT content text FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY memories_id_pk  DESC LIMIT 1").get(roomId) || null);
+        send(res, 200, db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId) || null);
     },
     'GET /api/me': async (req, res, u) => {
         const persona = db.prepare('SELECT cards_id_pk AS id,name FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk);
@@ -61,22 +61,29 @@ const router = {
         const q = new URL(req.url, 'http://x').searchParams;
         const card = Number(q.get('card') ?? -1);
         const room = Number(q.get('room') || 0);
-        const rows = db.prepare(`SELECT m.*, m.memories_id_pk AS id, c.name card_name, r.name room_name FROM memories m
-            LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk JOIN rooms r ON r.rooms_id_pk=m.rooms_id_fk
-            WHERE (?<0 OR (?=0 AND m.cards_id_fk IS NULL) OR m.cards_id_fk=?)
-              AND (?=0 OR m.rooms_id_fk=?) ORDER BY m.memories_id_pk`)
+        const rows = db.prepare(`SELECT m.*, m.memories_id_pk AS id, c.name card_name, r.name room_name, mc.cards_id_fk AS cards_id_fk FROM memories m
+            JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+            LEFT JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk
+            LEFT JOIN cards c ON c.cards_id_pk=mc.cards_id_fk JOIN rooms r ON r.rooms_id_pk=rm.rooms_id_fk
+            WHERE (?<0 OR (?=0 AND mc.memories_id_fk IS NULL) OR mc.cards_id_fk=?)
+              AND (?=0 OR rm.rooms_id_fk=?) ORDER BY m.memories_id_pk`)
             .all(card, card, card, room, room);
         send(res, 200, { memories: rows });
     },
     'POST /api/memories': async (req, res, u) => {
         const b = await readBody(req);
-        const id = db.prepare('INSERT INTO memories (cards_id_fk,rooms_id_fk,content) VALUES (?,?,?)')
-            .run(b.cardId || null, b.room || 1, b.content || '').lastInsertRowid;
+        const id = db.prepare('INSERT INTO memories (content,type,origin,triggers) VALUES (?,?,?,?)')
+            .run(b.content || '', b.type || 'fact', 'user', b.triggers || '').lastInsertRowid;
+        db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(b.room || 1, id);
+        if (b.cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, b.cardId);
         send(res, 200, { id });
     },
     'POST /api/memories/delete': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('DELETE FROM memories WHERE memories_id_pk=?').run(b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+    db.prepare('DELETE FROM room_memories WHERE memories_id_fk=?').run(id);
+    db.prepare('DELETE FROM memory_cards WHERE memories_id_fk=?').run(id);
+    db.prepare('DELETE FROM memories WHERE memories_id_pk=?').run(id);
         send(res, 200, { ok: true });
     },
     'GET /api/genstats': async (req, res, u) => {
@@ -326,7 +333,8 @@ const router = {
         send(res, 200, { ok: true });
     },
     'GET /api/rooms': async (req, res, u) => {
-        const rooms = db.prepare(`SELECT DISTINCT r.rooms_id_pk AS id, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget, r.mem_max, r.max_context,
+        const rooms = db.prepare(`SELECT DISTINCT r.rooms_id_pk AS id, r.name, r.ai_trigger, r.max_context,
+            r.mem_profiles_id_fk,
             (SELECT COUNT(*) FROM room_members rm2 WHERE rm2.rooms_id_fk=r.rooms_id_pk) AS members, r.bg FROM rooms r
             JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE c.owner_users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk);
         send(res, 200, { rooms });
@@ -334,7 +342,7 @@ const router = {
     'POST /api/rooms': async (req, res, u) => {
         const b = await readBody(req);
         if (!b.name) return send(res, 400, { error: 'name required' });
-        const id = db.prepare('INSERT INTO rooms (name) VALUES (?)').run(b.name).lastInsertRowid;
+        const id = db.prepare(`INSERT INTO rooms (name,mem_profiles_id_fk) VALUES (?,(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1))`).run(b.name).lastInsertRowid;
         const pc0 = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk)?.cards_id_pk;
         if (pc0) {
             const mid3 = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc0)?.members_id_pk
@@ -352,7 +360,9 @@ const router = {
         const b = await readBody(req);
         db.prepare('DELETE FROM messages WHERE rooms_id_fk=?').run(b.world_books_id_pk);
         db.prepare('DELETE FROM room_members WHERE rooms_id_fk=?').run(b.world_books_id_pk);
-        db.prepare('DELETE FROM memories WHERE rooms_id_fk=?').run(b.world_books_id_pk);
+        db.prepare('DELETE FROM memory_cards WHERE memories_id_fk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(b.world_books_id_pk);
+        db.prepare('DELETE FROM memories WHERE memories_id_pk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(b.world_books_id_pk);
+        db.prepare('DELETE FROM room_memories WHERE rooms_id_fk=?').run(b.world_books_id_pk);
         db.prepare('DELETE FROM room_books WHERE rooms_id_fk=?').run(b.world_books_id_pk);
         db.prepare('DELETE FROM rooms WHERE rooms_id_pk=?').run(b.world_books_id_pk);
         send(res, 200, { ok: true });
@@ -410,6 +420,51 @@ const router = {
         db.prepare('DELETE FROM api_profiles WHERE api_profiles_id_pk=? AND users_id_fk=?').run(b.world_books_id_pk, u.users_id_pk);
         send(res, 200, { ok: true });
     },
+    // Smart-memory profiles: named presets of the mem_* room settings.
+    'GET /api/memprofiles': async (req, res, u) => {
+        const profiles = db.prepare('SELECT * FROM mem_profiles WHERE users_id_fk=? ORDER BY mem_profiles_id_pk').all(u.users_id_pk);
+        send(res, 200, { profiles });
+    },
+    'POST /api/memprofiles': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!b.name) return send(res, 400, { error: 'name required' });
+        const vals = [b.auto ? 1 : 0, b.every ?? 10, b.budget ?? 800, b.max ?? 50,
+            b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
+            b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
+            b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
+            b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0];
+        const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,auto_mem,mem_every,mem_budget,mem_max,
+            mem_max_fact,mem_max_event,mem_max_relationship,mem_max_preference,mem_extraction_prompt,
+            mem_context_threshold,mem_response_length,mem_gen_budget,mem_unlimited,mem_unified,mem_triggers,
+            mem_autotune,mem_refresh,mem_activity,mem_extraction_profile_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+            .run(u.users_id_pk, b.name, ...vals).lastInsertRowid;
+        send(res, 200, { id });
+    },
+    'POST /api/memprofiles/update': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare(`UPDATE mem_profiles SET auto_mem=?, mem_every=?, mem_budget=?, mem_max=?,
+            mem_max_fact=?, mem_max_event=?, mem_max_relationship=?, mem_max_preference=?,
+            mem_extraction_prompt=?, mem_context_threshold=?, mem_response_length=?,
+            mem_gen_budget=?, mem_unlimited=?, mem_unified=?, mem_triggers=?,
+            mem_autotune=?, mem_refresh=?, mem_activity=?, mem_extraction_profile_id=?
+            WHERE mem_profiles_id_pk=? AND users_id_fk=?`)
+            .run(b.auto ? 1 : 0, b.every ?? 10, b.budget ?? 800, b.max ?? 50,
+                b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
+                b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
+                b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
+                b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0,
+                b.id, u.users_id_pk);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/memprofiles/delete': async (req, res, u) => {
+        const b = await readBody(req);
+        // Rooms following the deleted profile are re-pointed at another one
+        // (0 = feature-less room columns only when NO profiles remain).
+        db.prepare(`UPDATE rooms SET mem_profiles_id_fk=COALESCE((SELECT mem_profiles_id_pk FROM mem_profiles WHERE mem_profiles_id_pk<>? ORDER BY mem_profiles_id_pk LIMIT 1),0) WHERE mem_profiles_id_fk=?`).run(b.id, b.id);
+        db.prepare('DELETE FROM mem_profiles WHERE mem_profiles_id_pk=? AND users_id_fk=?').run(b.id, u.users_id_pk);
+        send(res, 200, { ok: true });
+    },
     'GET /api/room': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('id') || 1);
         const msgs = db.prepare(MSG_SQL + ' WHERE m.rooms_id_fk=? ORDER BY m.messages_id_pk').all(roomId);
@@ -419,7 +474,7 @@ const router = {
             FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
             LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk LEFT JOIN users u ON u.users_id_pk=c.owner_users_id_fk
             LEFT JOIN cards pc ON pc.owner_users_id_fk=u.users_id_pk AND pc.is_persona=1 WHERE rm.rooms_id_fk=?`).all(roomId);
-        const lastMem = db.prepare("SELECT content text FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY memories_id_pk DESC LIMIT 1").get(roomId);
+        const lastMem = db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId);
         send(res, 200, { messages: msgs, members, lastMem });
     },
     'GET /api/stream': (req, res, u) => {
@@ -498,27 +553,30 @@ const router = {
     },
     'POST /api/memories/triggers': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('UPDATE memories SET triggers=? WHERE rooms_id_pk=?').run(b.triggers || '', b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+    db.prepare('UPDATE memories SET triggers=? WHERE memories_id_pk=?').run(b.triggers || '', id);
         send(res, 200, { ok: true });
     },
     'POST /api/memories/move': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('UPDATE memories SET cards_id_fk=? WHERE memories_id_pk=?').run(b.cardId || null, b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+    db.prepare('DELETE FROM memory_cards WHERE memories_id_fk=?').run(id);
+    if (b.cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, b.cardId);
         send(res, 200, { ok: true });
     },
     'POST /api/messages/delete': async (req, res, u) => {
         const b = await readBody(req);
-        const m = db.prepare('SELECT rooms_id_fk FROM messages WHERE memories_id_pk=?').get(b.world_books_id_pk);
+        const m = db.prepare('SELECT rooms_id_fk FROM messages WHERE messages_id_pk=?').get(b.world_books_id_pk);
         if (!m) return send(res, 404, { error: 'no message' });
         db.prepare('DELETE FROM messages WHERE messages_id_pk=?').run(b.world_books_id_pk);
         push(m.rooms_id_fk, { type: 'delete', id: b.world_books_id_pk });
         send(res, 200, { ok: true });
     },
     'POST /api/room/memsettings': async (req, res, u) => {
+        // Per-chat memory *settings* are gone — rooms follow a memory profile.
+        // The only per-room aspect left is which profile the room follows.
         const b = await readBody(req);
-        db.prepare(`UPDATE rooms SET auto_mem=COALESCE(?,auto_mem), mem_every=COALESCE(?,mem_every),
-            mem_budget=COALESCE(?,mem_budget), mem_max=COALESCE(?,mem_max) WHERE rooms_id_pk=?`)
-            .run(b.auto === undefined ? null : (b.auto ? 1 : 0), b.every, b.budget, b.max, b.room || 1);
+        if (b.memProfile !== undefined) db.prepare('UPDATE rooms SET mem_profiles_id_fk=? WHERE rooms_id_pk=?').run(Number(b.memProfile) || 0, b.room || 1);
         send(res, 200, { ok: true });
     },
     'POST /api/members/talkativeness': async (req, res, u) => {

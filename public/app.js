@@ -42,6 +42,14 @@ function addMsg(m) {
 }
 
 async function loadRoom() {
+    // Self-heal a stale room id (e.g. room 1 when only room 2 exists).
+    try {
+        const { rooms: rr } = await get('rooms');
+        if (Array.isArray(rr) && rr.length && !rr.find(x => x.id === room)) {
+            room = rr[0].id;
+            localStorage.mp_room = room;
+        }
+    } catch { }
     const r = await get(`room?id=${room}`);
     $('msgs').innerHTML = '';
     (r.messages || []).forEach(addMsg);
