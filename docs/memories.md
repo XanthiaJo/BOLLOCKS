@@ -6,12 +6,12 @@ what, and the intended refinements. It accompanies the code in `src/db.js`,
 
 ## Concepts
 
-There are two kinds of memory, distinguished by `source`:
+There are two kinds of memory, distinguished by `origin`:
 
-| Kind | `source` | Created by | Scope | Lifetime |
+| Kind | `origin` | Created by | Scope | Lifetime |
 |---|---|---|---|---|
-| **Permanent** | `manual` | User (always user-driven) | Room-shared or character (card) | Until user deletes it |
-| **Smart** | `auto` | AI extraction | **Room only** (shared) | Capped (`mem_max`); oldest auto dropped |
+| **Permanent** | `user` | User (always user-driven) | Room-shared or character (card) | Until user deletes it |
+| **Smart** | `smart` | AI extraction | **Room only** (shared) | Capped (`mem_max`); oldest auto dropped |
 
 ### Permanent memories (user-driven)
 
@@ -22,32 +22,36 @@ There are two kinds of memory, distinguished by `source`:
   - A user may edit/delete **character memories** for cards they **own** (`cards.owner_users_id_fk === user`).
   - A user may edit/delete **room (shared) memories** for any room they are a **member of**.
   - Permanent memories are never auto-created, never auto-capped, never auto-deleted.
-- Card-scoped permanent memories travel with that character **within the room** they were created in (they are stored with both `cards_id_fk` and `rooms_id_fk`).
+- Card-scoped permanent memories travel with that character **within the room(s)** they were created in (linked via `room_memories` + `memory_cards`).
 
 ### Smart memories (AI-extracted)
 
 - Created automatically by `maybeSummarize()` after every `mem_every` messages when `auto_mem=1`.
 - Extraction runs against the room owner's active profile (see open issue: profile selection not persisted).
-- **Smart memories belong to the chat (room) only** — they are always stored as shared room memories (`cards_id_fk = NULL`).
+- **Smart memories belong to the chat (room) only** - they are always stored as shared room memories (no `memory_cards` row).
   - Rationale: deciding whether an extracted fact belongs to a specific character vs. the chat as a whole is ambiguous and error-prone. Keep smart memories room-scoped; users can promote a fact to a character's permanent memory manually if desired.
-- Capped to `mem_max` per room (oldest `source='auto'` dropped). Permanent memories are never subject to the cap.
+- Capped to `mem_max` per room (oldest `origin='smart'` dropped). Permanent memories are never subject to the cap.
 - Watermark (`mem_last_messages_id`) advances only after a successful extraction.
 
 ## Scoping model
 
 ```
-memory (memories)
-├── rooms_id_fk  (always set — the chat it lives in)
-└── memory_cards (junction, 0 or 1 row per memory)
-    └── cards_id_fk → character memory (visible when that card is in the room)
-        (no row)    → shared room memory (visible to everyone in the room)
+memory (memories)  -- standalone entity; no room/card FKs
+├── origin  'user' | 'smart'
+├── room_memories (junction, many-to-many)  -- which chats this memory is available in
+│   └── rooms_id_fk → room
+└── memory_cards (junction, many-to-many)  -- which characters this memory belongs to
+    └── cards_id_fk → card (character memory; absent => shared room memory)
 ```
 
-Scope is derived from junction presence — no nullable FK, no NULL encoding.
+- A memory is **shared room memory** iff it has no `memory_cards` row.
+- A memory is **character memory** iff it has one or more `memory_cards` rows.
+- A memory can span multiple rooms (cross-chat) and multiple cards.
+- Smart memories are room-scoped (linked to one room) by design.
 
 Injection at generation time (see `generateReply`):
-1. Shared room memories (`cards_id_fk IS NULL`, trigger-filtered, budget-capped).
-2. This card's own memories (`cards_id_fk = card`, trigger-filtered, budget-capped against remaining budget).
+1. Shared room memories (no `memory_cards` row, trigger-filtered, budget-capped).
+2. This card's own memories (linked via `memory_cards`, trigger-filtered, budget-capped against remaining budget).
 3. Budget = `rooms.mem_budget` tokens.
 
 ## Ownership & permissions
@@ -80,7 +84,7 @@ flowchart TD
     PermList --> AddMem{Add memory}
     AddMem --> Scope{Scope}
     Scope -->|Shared room| InsShared["INSERT memories (no memory_cards row)"]
-    Scope -->|"Character card (owned)"| InsCard["INSERT memories<br/>cards_id_fk=card, source=manual"]
+    Scope -->|"Character card (owned)"| InsCard["INSERT memories + memory_cards row"]
     InsShared --> PermList
     InsCard --> PermList
 
@@ -108,7 +112,7 @@ flowchart TD
 
     %% Move
     PermList --> Move{Move memory?}
-    Move -->|User owns target scope| MoveMem["UPDATE cards_id_fk<br/>card <-> NULL"]
+    Move -->|User owns target scope| MoveMem["add/remove memory_cards row"]
     MoveMem --> PermList
 ```
 
@@ -122,7 +126,7 @@ flowchart TD
 | `/api/memories/update` | POST | user + ownership | `{id, content?, type?, triggers?}`. |
 | `/api/memories/move` | POST | user + ownership | `{id, cardId}`. Move between card and shared. |
 | `/api/room/memsettings` | POST | room member | `{room, auto, every, budget, max, profileId?}`. Persist profile selection. |
-| `/api/lastmem?room=` | GET | user | Latest `source='auto'` memory in room. |
+| `/api/lastmem?room=` | GET | user | Latest `origin='smart'` memory in room. |
 
 ## Known issues to fix (tracked)
 
@@ -138,4 +142,4 @@ flowchart TD
 
 - Should permanent card memories be visible across rooms if the same card is in multiple rooms? Currently scoped per room. Leaning: keep per-room (matches smart memories; avoids cross-room leakage).
 - Should smart memories ever be attributed to a character? Decided no — room-scoped only, to avoid ambiguity. Users can promote manually.
-- Should there be a "global character memory" (ST-style)? Deferred; would need `rooms_id_fk IS NULL` support + UI scope selector.
+- Should there be a "global character memory" (ST-style)? Deferred; would need a memory with no `room_memories` link + UI scope selector.

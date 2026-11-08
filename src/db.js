@@ -61,16 +61,11 @@ CREATE TABLE IF NOT EXISTS world_entries (
 );
 CREATE TABLE IF NOT EXISTS memories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
     content TEXT NOT NULL,
     created TEXT DEFAULT (datetime('now')),
     type TEXT DEFAULT 'fact',
-    source TEXT DEFAULT 'manual',
+    origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart')),
     triggers TEXT DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS memory_cards (
-    memory_id_fk INTEGER PRIMARY KEY REFERENCES memories(memories_id_pk) ON DELETE CASCADE,
-    cards_id_fk INTEGER NOT NULL REFERENCES cards(cards_id_pk)
 );
 CREATE TABLE IF NOT EXISTS api_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -142,7 +137,7 @@ export function migrateSchema() {
       world_books:{id:'world_books_id_pk',owner_id:'owner_users_id_fk'},
       world_entries:{id:'world_entries_id_pk',book_id:'world_books_id_fk'},
       room_books:{room_id:'rooms_id_fk',book_id:'world_books_id_fk'},
-      memories:{id:'memories_id_pk',room_id:'rooms_id_fk'},
+      memories:{id:'memories_id_pk'},
       api_profiles:{id:'api_profiles_id_pk',user_id:'users_id_fk'}};
     for (const [t,rs] of Object.entries(REN))
         for (const [old,nw] of Object.entries(rs)) {
@@ -321,9 +316,22 @@ export function migrateSchema() {
     // memories.cards_id_fk must be nullable — NULL = shared room memory.
     const mecols2 = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     const hasCardsFk = mecols2.includes('cards_id_fk');
-    // Collect card-scoped rows before dropping the column.
+    const hasRoomsFk = mecols2.includes('rooms_id_fk');
+    const hasSource = mecols2.includes('source');
+    // Collect card-scoped rows and room links before dropping columns.
     const cardScoped = hasCardsFk
         ? db.prepare('SELECT memories_id_pk, cards_id_fk FROM memories WHERE cards_id_fk IS NOT NULL').all()
+        : [];
+    // Collect from existing memory_cards junction (junction-era DBs), handling
+    // both old (memory_id_fk) and new (memories_id_fk) column names.
+    let existingCardLinks = [];
+    if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_cards'").get()) {
+        const mcCols = db.prepare('PRAGMA table_info(memory_cards)').all().map(c => c.name);
+        const memCol = mcCols.includes('memories_id_fk') ? 'memories_id_fk' : 'memory_id_fk';
+        existingCardLinks = db.prepare(`SELECT ${memCol} AS memory_id_fk, cards_id_fk FROM memory_cards`).all();
+    }
+    const roomLinks = hasRoomsFk
+        ? db.prepare('SELECT memories_id_pk, rooms_id_fk FROM memories').all()
         : [];
     // Fix stale memory_cards FK (older builds referenced memories(id)).
     const mcSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='memory_cards'").get()?.sql || '';
@@ -337,26 +345,59 @@ export function migrateSchema() {
         db.exec('INSERT OR IGNORE INTO memory_cards (memory_id_fk, cards_id_fk) SELECT memory_id_fk, cards_id_fk FROM memory_cards_backup');
         db.exec('DROP TABLE memory_cards_backup');
     }
-    if (hasCardsFk) {
+    // Rebuild memories: drop cards_id_fk + rooms_id_fk, replace source with origin.
+    if (hasCardsFk || hasRoomsFk || hasSource) {
         db.exec(`BEGIN;
             CREATE TABLE memories_new (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-                rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
                 content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')),
-                type TEXT DEFAULT 'fact', source TEXT DEFAULT 'manual', triggers TEXT DEFAULT '');
-            INSERT INTO memories_new (memories_id_pk,rooms_id_fk,content,created,type,source,triggers)
-                SELECT memories_id_pk,rooms_id_fk,content,created,type,source,triggers FROM memories;
+                type TEXT DEFAULT 'fact', origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart')),
+                triggers TEXT DEFAULT '');
+            INSERT INTO memories_new (memories_id_pk,content,created,type,origin,triggers)
+                SELECT memories_id_pk, content, created, type,
+                    CASE WHEN source='auto' THEN 'smart' ELSE 'user' END,
+                    triggers FROM memories;
             DROP TABLE memories; ALTER TABLE memories_new RENAME TO memories; COMMIT;`);
+    } else if (!mecols2.includes('origin')) {
+        // Fresh-ish DB without origin column (shouldn't happen, but be safe).
+        db.exec("ALTER TABLE memories ADD COLUMN origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart'))");
     }
-    // Junction table (created after memories rebuild so FK targets the final table).
+    // Create junction tables (after memories rebuild).
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='room_memories'").get()) {
+        db.exec(`CREATE TABLE room_memories (
+            rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+            memories_id_fk INTEGER NOT NULL REFERENCES memories(memories_id_pk) ON DELETE CASCADE,
+            PRIMARY KEY (rooms_id_fk, memories_id_fk))`);
+    }
+    const mcColsNow = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_cards'").get()
+        ? db.prepare('PRAGMA table_info(memory_cards)').all().map(c => c.name)
+        : [];
+    if (mcColsNow.length && !mcColsNow.includes('memories_id_fk')) {
+        db.exec('DROP TABLE memory_cards');
+    }
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_cards'").get()) {
         db.exec(`CREATE TABLE memory_cards (
-            memory_id_fk INTEGER PRIMARY KEY REFERENCES memories(memories_id_pk) ON DELETE CASCADE,
-            cards_id_fk INTEGER NOT NULL REFERENCES cards(cards_id_pk))`);
+            memories_id_fk INTEGER NOT NULL REFERENCES memories(memories_id_pk) ON DELETE CASCADE,
+            cards_id_fk INTEGER NOT NULL REFERENCES cards(cards_id_pk),
+            PRIMARY KEY (memories_id_fk, cards_id_fk))`);
     }
-    if (cardScoped.length) {
-        const ins = db.prepare('INSERT OR IGNORE INTO memory_cards (memory_id_fk, cards_id_fk) VALUES (?,?)');
-        for (const r of cardScoped) ins.run(r.memories_id_pk, r.cards_id_fk);
+    // Migrate room links.
+    if (roomLinks.length) {
+        const ins = db.prepare('INSERT OR IGNORE INTO room_memories (rooms_id_fk, memories_id_fk) VALUES (?,?)');
+        for (const r of roomLinks) ins.run(r.rooms_id_fk, r.memories_id_pk);
     }
+    // Safety net: any memory without a room link (e.g. after a partial migration)
+    // is attached to the only room if there's exactly one room in the DB.
+    const orphanMems = db.prepare(`SELECT m.memories_id_pk FROM memories m
+        WHERE NOT EXISTS (SELECT 1 FROM room_memories rm WHERE rm.memories_id_fk=m.memories_id_pk)`).all();
+    const rooms = db.prepare('SELECT rooms_id_pk FROM rooms').all();
+    if (orphanMems.length && rooms.length === 1) {
+        const ins = db.prepare('INSERT OR IGNORE INTO room_memories (rooms_id_fk, memories_id_fk) VALUES (?,?)');
+        for (const m of orphanMems) ins.run(rooms[0].rooms_id_pk, m.memories_id_pk);
+    }
+    // Migrate card links (from old column and/or stale junction).
+    const insCard = db.prepare('INSERT OR IGNORE INTO memory_cards (memories_id_fk, cards_id_fk) VALUES (?,?)');
+    for (const r of cardScoped) insCard.run(r.memories_id_pk, r.cards_id_fk);
+    for (const r of existingCardLinks) insCard.run(r.memory_id_fk, r.cards_id_fk);
     // Duplicate-member dedupe removed — membership lives in room_members
     // junction (UNIQUE on room+member) so dupes can't form.
 }

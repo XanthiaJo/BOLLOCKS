@@ -69,9 +69,9 @@ export async function generateReply(roomId, card) {
     const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
     const active = r => !r.triggers || r.triggers.split(/[\s,]+/).filter(Boolean)
         .some(t => recentText.includes(t.toLowerCase()));
-    const roomMems = cap(db.prepare('SELECT content,triggers FROM memories m WHERE m.rooms_id_fk=? AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memory_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC').all(roomId).reverse().filter(active), 0);
-    const mems = cap(db.prepare('SELECT m.content,m.triggers FROM memories m JOIN memory_cards mc ON mc.memory_id_fk=m.memories_id_pk WHERE mc.cards_id_fk=? AND m.rooms_id_fk=? ORDER BY m.memories_id_pk DESC')
-        .all(card.id, roomId).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
+    const roomMems = cap(db.prepare('SELECT m.content,m.triggers FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC').all(roomId).reverse().filter(active), 0);
+    const mems = cap(db.prepare('SELECT m.content,m.triggers FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? ORDER BY m.memories_id_pk DESC')
+        .all(roomId, card.id).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
 
     const memText = (roomMems.length || mems.length)
         ? [
@@ -211,20 +211,25 @@ export async function maybeSummarize(roomId) {
     });
     if (!resp.ok) return;
     const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
-    const ins = db.prepare("INSERT INTO memories (rooms_id_fk,content,type,source) VALUES (?,?,?,'auto')");
+    const ins = db.prepare("INSERT INTO memories (content,type,origin) VALUES (?,?, 'smart')");
+    const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
     for (const line of text.split('\n')) {
         let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
         fact = fact.replace(/^\[[^\]]+\]\s*/, ''); // strip any [Name] prefix — shared scope only
         const tag = fact.match(/^\[(fact|event|relationship|preference)\]\s*/i);
         const type = tag ? tag[1].toLowerCase() : 'fact';
         if (tag) fact = fact.slice(tag[0].length);
-        if (fact.length > 10) ins.run(roomId, fact, type);
+        if (fact.length > 10) { const mid = ins.run(fact, type).lastInsertRowid; linkRoom.run(roomId, mid); }
     }
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
     db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
     // Cap stored smart memories — oldest auto entries drop off.
-    db.prepare(`DELETE FROM memories WHERE rooms_id_fk=? AND source='auto' AND memories_id_pk NOT IN
-        (SELECT memories_id_pk FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY memories_id_pk DESC LIMIT ?)`)
+    db.prepare(`DELETE FROM memories WHERE origin='smart' AND memories_id_pk IN
+        (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+         WHERE rm.rooms_id_fk=? AND m.origin='smart'
+         AND m.memories_id_pk NOT IN
+            (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
+             WHERE rm2.rooms_id_fk=? AND m2.origin='smart' ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
         .run(roomId, roomId, room.mem_max || 50);
 }
