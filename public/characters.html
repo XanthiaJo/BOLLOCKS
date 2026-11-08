@@ -172,7 +172,7 @@ function cropConfirm(){
     if(r.error)alert(r.error);else $('ed_av').src='/api/avatar?id='+id+'&t='+Date.now();});
   else{$('ed_av').src=url;$('ed_av').dataset.pending=b64;}
 }
-function clearEd(){$('editor').style.display='none';$('edtitle').textContent='New character';['ed_id','ed_name','ed_desc','ed_personality','ed_scenario','ed_first','ed_mesex','ed_sysp','ed_phi','ed_tags','ed_creator'].forEach(i=>$(i).value='');$('ed_profile').value='';$('ed_av').src='';$('ed_av').dataset.pending=''}
+function clearEd(){$('edtitle').textContent='New character';['ed_id','ed_name','ed_desc','ed_personality','ed_scenario','ed_first','ed_mesex','ed_sysp','ed_phi','ed_tags','ed_creator'].forEach(i=>$(i).value='');$('ed_profile').value='';$('ed_av').src='';$('ed_av').dataset.pending=''}
 function newCard(){clearEd();document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=false);mpOpenEditor('inline')}
 
 async function saveCard(){
@@ -181,7 +181,8 @@ async function saveCard(){
   if(!b.name)return alert('needs a name');
   if(id)await api('cards/update',{id:Number(id),...b});
   else await api('cards',b);
-  mpCloseEditor();clearEd();load();
+  if(!id)clearEd();
+  mpFlashSaved();load();
 }
 async function del(id){if(confirm('Delete this character?')){await api('cards/delete',{id});load()}}
 async function addToRoom(id){await api('members',{room:Number(localStorage.mp_room||1),cardId:id,kind:'ai'});alert('added to current chat')}
