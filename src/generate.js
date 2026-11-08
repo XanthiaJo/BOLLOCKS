@@ -136,7 +136,7 @@ export async function generateReply(roomId, card) {
                 { role: 'user', content: `${card.name}:` },
             ],
             temperature: 0.8,
-            max_tokens: 512,
+            max_tokens: 2048,
         }),
     });
     if (!resp.ok) throw new Error(`AI ${resp.status}: ${await resp.text()}`);
