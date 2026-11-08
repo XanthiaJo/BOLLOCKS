@@ -77,10 +77,10 @@
     <div class="row"><span class="lbl">Max per type — relationship</span><input type="number" id="set_max_rel" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
     <div class="row"><span class="lbl">Max per type — preference</span><input type="number" id="set_max_pref" min="0" max="500" onchange="saveSet()" style="width:80px;display:inline-block"></div>
     <div class="ph">
-      <div class="lbl" title="The instruction sent to the memory LLM when summarizing chat into memories.">Extraction prompt template</div>
-      <textarea placeholder="(default extraction prompt)" disabled style="min-height:60px"></textarea>
-      <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><input value="80" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><input value="2000" disabled style="width:80px"></div>
+      <div class="lbl" title="The instruction sent to the memory LLM when summarizing chat into memories. Leave blank for default.">Extraction prompt template</div>
+      <textarea id="set_prompt" placeholder="(default extraction prompt)" style="min-height:60px" onchange="saveSet()"></textarea>
+      <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><input type="number" id="set_ctx" min="10" max="100" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+      <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><input type="number" id="set_resplen" min="256" max="8192" onchange="saveSet()" style="width:80px;display:inline-block"></div>
     </div>
 
     <h4>Injection</h4>
@@ -234,6 +234,7 @@ async function load(){
   roomName=rm?.name||'Chat';
   $('set_auto').checked=!!rm?.auto_mem;$('set_every').value=rm?.mem_every||10;$('set_budget').value=rm?.mem_budget||500;$('set_max').value=rm?.mem_max||50;
   $('set_max_fact').value=rm?.mem_max_fact||50;$('set_max_event').value=rm?.mem_max_event||50;$('set_max_rel').value=rm?.mem_max_relationship||50;$('set_max_pref').value=rm?.mem_max_preference||50;
+  $('set_prompt').value=rm?.mem_extraction_prompt||'';$('set_ctx').value=rm?.mem_context_threshold||80;$('set_resplen').value=rm?.mem_response_length||2000;
   $('set_profile').value=rm?.api_profiles_id_fk||0;
   $('rchat').innerHTML=
     `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div>`;
@@ -252,7 +253,7 @@ async function load(){
 function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') curTab='user';load()}
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
-async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0,profileId:Number($('set_profile').value)||null})}
+async function saveSet(){await api('room/memsettings',{room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0,extractionPrompt:$('set_prompt').value,contextThreshold:Number($('set_ctx').value)||80,responseLength:Number($('set_resplen').value)||2000,profileId:Number($('set_profile').value)||null})}
 function setupAcc(){
   const panel=document.getElementById('setpanel');
   if(!panel) return;

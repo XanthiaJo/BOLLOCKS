@@ -184,6 +184,9 @@ export function migrateSchema() {
     if (!rcols.includes('mem_max_event')) db.exec('ALTER TABLE rooms ADD COLUMN mem_max_event INTEGER DEFAULT 50');
     if (!rcols.includes('mem_max_relationship')) db.exec('ALTER TABLE rooms ADD COLUMN mem_max_relationship INTEGER DEFAULT 50');
     if (!rcols.includes('mem_max_preference')) db.exec('ALTER TABLE rooms ADD COLUMN mem_max_preference INTEGER DEFAULT 50');
+    if (!rcols.includes('mem_extraction_prompt')) db.exec("ALTER TABLE rooms ADD COLUMN mem_extraction_prompt TEXT DEFAULT ''");
+    if (!rcols.includes('mem_context_threshold')) db.exec('ALTER TABLE rooms ADD COLUMN mem_context_threshold INTEGER DEFAULT 80');
+    if (!rcols.includes('mem_response_length')) db.exec('ALTER TABLE rooms ADD COLUMN mem_response_length INTEGER DEFAULT 2000');
     if (!rcols.includes('max_context')) db.exec('ALTER TABLE rooms ADD COLUMN max_context INTEGER DEFAULT 0');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");

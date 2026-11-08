@@ -334,6 +334,7 @@ const router = {
     },
     'GET /api/rooms': async (req, res, u) => {
         const rooms = db.prepare(`SELECT DISTINCT r.rooms_id_pk AS id, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget, r.mem_max, r.max_context,
+            r.mem_max_fact, r.mem_max_event, r.mem_max_relationship, r.mem_max_preference, r.mem_extraction_prompt, r.mem_context_threshold, r.mem_response_length,
             (SELECT COUNT(*) FROM room_members rm2 WHERE rm2.rooms_id_fk=r.rooms_id_pk) AS members, r.bg FROM rooms r
             JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE c.owner_users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk);
         send(res, 200, { rooms });
@@ -529,10 +530,14 @@ const router = {
         db.prepare(`UPDATE rooms SET auto_mem=COALESCE(?,auto_mem), mem_every=COALESCE(?,mem_every),
             mem_budget=COALESCE(?,mem_budget), mem_max=COALESCE(?,mem_max),
             mem_max_fact=COALESCE(?,mem_max_fact), mem_max_event=COALESCE(?,mem_max_event),
-            mem_max_relationship=COALESCE(?,mem_max_relationship), mem_max_preference=COALESCE(?,mem_max_preference)
+            mem_max_relationship=COALESCE(?,mem_max_relationship), mem_max_preference=COALESCE(?,mem_max_preference),
+            mem_extraction_prompt=COALESCE(?,mem_extraction_prompt),
+            mem_context_threshold=COALESCE(?,mem_context_threshold),
+            mem_response_length=COALESCE(?,mem_response_length)
             WHERE rooms_id_pk=?`)
             .run(b.auto === undefined ? null : (b.auto ? 1 : 0), b.every, b.budget, b.max,
-                b.maxFact, b.maxEvent, b.maxRel, b.maxPref, b.room || 1);
+                b.maxFact, b.maxEvent, b.maxRel, b.maxPref,
+                b.extractionPrompt, b.contextThreshold, b.responseLength, b.room || 1);
         send(res, 200, { ok: true });
     },
     'POST /api/members/talkativeness': async (req, res, u) => {

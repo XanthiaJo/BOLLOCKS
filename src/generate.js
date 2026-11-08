@@ -195,10 +195,10 @@ export async function maybeSummarize(roomId) {
         body: JSON.stringify({
             model: conn.model || 'local',
             messages: [
-                { role: 'system', content: `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Each bullet must be a complete, self-contained sentence that names its subject (e.g. "Blake has a pending review pile for API configurations including Venice API."). Start with a type tag [fact], [event], [relationship] or [preference]. Use [shared] only for room-wide facts, and include the subject in the sentence. No narration, no pronouns without a named subject.` },
+                { role: 'system', content: room.mem_extraction_prompt?.trim() || `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Each bullet must be a complete, self-contained sentence that names its subject (e.g. "Blake has a pending review pile for API configurations including Venice API."). Start with a type tag [fact], [event], [relationship] or [preference]. Use [shared] only for room-wide facts, and include the subject in the sentence. No narration, no pronouns without a named subject.` },
                 { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
             ],
-            temperature: 0.3, max_tokens: 2048,
+            temperature: 0.3, max_tokens: room.mem_response_length || 2000,
         }),
     });
     if (!resp.ok) return;
