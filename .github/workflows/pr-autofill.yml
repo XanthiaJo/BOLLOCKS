@@ -25,13 +25,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          git fetch origin "$BASE" --depth=1 2>/dev/null || git fetch origin
-          COMMITS=$(git log --format='%h %s' "$BASE..$HEAD")
-
-          LIST=$(echo "$COMMITS" | sed 's/^/- /')
+          # Use the PR's commits as GitHub sees them (avoids huge/incorrect ranges
+          # when the head branch is diverged from the base).
+          LIST=$(gh pr view "$PR_NUMBER" --json commits --jq '.commits[] | "- " + (.oid[0:7]) + " " + .messageHeadline')
           [ -z "$LIST" ] && LIST="- (no commits found)"
 
           START='<!-- autofill:commits:start -->'
