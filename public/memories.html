@@ -193,15 +193,18 @@ const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.json());
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let ROOM=Number(localStorage.mp_room||1);
-let cardId=0,scopeName='',curTab='user',allMems=[];
+let cardId=0,scopeName='',curTab=localStorage.mp_memtab||'user',allMems=[];
 const TYPE_ORDER=['fact','event','relationship','preference'];
-function tab(t){if(t==='smart' && cardId!==0) return; curTab=t;
+function tab(t){if(t==='smart' && cardId!==0) return; curTab=t; localStorage.mp_memtab=curTab;
   $('t_perm').classList.toggle('on',t==='user');
   $('t_auto').classList.toggle('on',t==='smart');
   $('t_set').classList.toggle('on',t==='settings');
   renderList();
 }
 function renderList(){
+  $('t_perm').classList.toggle('on',curTab==='user');
+  $('t_auto').classList.toggle('on',curTab==='smart');
+  $('t_set').classList.toggle('on',curTab==='settings');
   const mems = curTab==='settings'?[]:allMems.filter(m=>(m.origin||m.source||'user')===curTab);
   $('addbox').style.display=curTab==='user'?'block':'none';
   $('setpanel').style.display=curTab==='settings'?'block':'none';
