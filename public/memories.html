@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8"><title>RP · Memories</title>
+<meta charset="utf-8"><title>BOLLOCKS · Memories</title>
 <link rel="stylesheet" href="layout.css">
 <style>
 .mtag{display:inline-block;font-size:.7em;font-weight:700;padding:1px 6px;border-radius:3px;background:#3a3f4a;color:#9ab;margin-right:4px}
@@ -181,7 +181,7 @@ const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringif
 const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.json());
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const ROOM=Number(localStorage.mp_room||1);
+let ROOM=Number(localStorage.mp_room||1);
 let cardId=0,scopeName='',curTab='manual',allMems=[];
 function tab(t){curTab=t;
   $('t_perm').classList.toggle('on',t==='manual');
@@ -211,6 +211,7 @@ async function load(){
   roomCards=cards||[];
   $('set_profile').innerHTML='<option value="0">— default (active) —</option>'+
     (profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  if ((rooms||[]).length && !(rooms||[]).some(r=>r.id===ROOM)) { ROOM=rooms[0].id; localStorage.mp_room=ROOM; }
   const rm=(rooms||[]).find(r=>r.id===ROOM);
   roomName=rm?.name||'Chat';
   $('set_auto').checked=!!rm?.auto_mem;$('set_every').value=rm?.mem_every||10;$('set_budget').value=rm?.mem_budget||500;$('set_max').value=rm?.mem_max||50;$('set_profile').value=rm?.api_profiles_id_fk||0;
