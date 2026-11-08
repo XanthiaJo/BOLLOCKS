@@ -9,7 +9,8 @@
 .mes{padding:12px 4px;border-bottom:1px solid #232426;display:flex;align-items:flex-start;gap:14px;min-height:66px}
 .mes .mav{width:60px;height:60px;border-radius:50%;object-fit:cover;background:#232426;flex:none}
 .mes .body{flex:1;min-width:0;align-self:center}
-.mes .n{font-weight:600;color:#9ab;margin-right:6px}
+.mes .who{width:60px;flex:none;text-align:center}
+.mes .n{font-weight:600;color:#9ab;font-size:.75em;display:block;margin-top:4px;word-break:break-word;line-height:1.1}
 .mes .t{white-space:pre-wrap;margin-top:2px}
 .mes .t i{color:#b8c9e8}
 .mes .t h2,.mes .t h3,.mes .t h4,.mes .t h5{margin:.3em 0}
@@ -81,7 +82,7 @@ button.gen{background:#4a7c3a}
   <div id="chat">
     <ul id="msgs"></ul>
     <div id="composer">
-      <input id="in" placeholder="Type a message" autofocus onkeydown="if(event.key==='Enter')say()">
+      <textarea id="in" placeholder="Type a message" autofocus rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();say()}" style="resize:none;overflow:hidden;padding:10px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:6px;flex:1;font:inherit" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
       <button onclick="say()">Send</button>
       <button class="gen" onclick="gen()">NPC ▸</button>
     </div>
