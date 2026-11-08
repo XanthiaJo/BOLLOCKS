@@ -31,8 +31,9 @@ jobs:
           COMMITS=$(git log --format='%h %s' "$BASE..$HEAD")
 
           # Highest-bump commit type wins the title.
-          TITLE=$(echo "$COMMITS" | grep -oP '(?<= )(feat|fix|chore|docs|refactor|ci|test)(\(.+))?!:.*' | head -1 || true)
-          [ -z "$TITLE" ] && TITLE=$(echo "$COMMITS" | grep -oP '(?<= )feat(\(.+))?:.*' | head -1 || true)
+          # BREAKING/! commits first, then any conventional type.
+          TITLE=$(echo "$COMMITS" | grep -oP '(?<= )\w+(\(.+\))?!:.*' | head -1 || true)
+          [ -z "$TITLE" ] && TITLE=$(echo "$COMMITS" | grep -oP '(?<= )(feat|fix|chore|docs|refactor|ci|test|perf|style)(\(.+\))?:.*' | head -1 || true)
           [ -z "$TITLE" ] && TITLE=$(echo "$COMMITS" | head -1 | sed 's/^[^ ]* //')
           [ -z "$TITLE" ] && TITLE="Update"
 
