@@ -180,6 +180,8 @@ export async function maybeSummarize(roomId) {
         .all(roomId, room.mem_last_id);
     if (!excerpt.length) return;
     db.prepare('UPDATE rooms SET mem_last_id=? WHERE id=?').run(lastId, roomId);
+    const roomCards = db.prepare(`SELECT c.id,c.name FROM members m JOIN cards c ON c.id=m.card_id
+        WHERE m.room_id=? AND m.kind='ai'`).all(roomId);
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
@@ -187,7 +189,7 @@ export async function maybeSummarize(roomId) {
         body: JSON.stringify({
             model: conn.model || 'local',
             messages: [
-                { role: 'system', content: 'You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Tag each with [fact], [event], [relationship] or [preference]. No narration, no opinions.' },
+                { role: 'system', content: `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Start each with the character it belongs to: [${roomCards.map(c => c.name).join('] [')}] or [shared] if room-wide. Then a type tag [fact], [event], [relationship] or [preference]. No narration.` },
                 { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
             ],
             temperature: 0.3, max_tokens: 400,
@@ -195,13 +197,17 @@ export async function maybeSummarize(roomId) {
     });
     if (!resp.ok) return;
     const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
-    const ins = db.prepare("INSERT INTO memories (card_id,room_id,content,type,source) VALUES (NULL,?,?,?,'auto')");
+    const ins = db.prepare("INSERT INTO memories (card_id,room_id,content,type,source) VALUES (?,?,?,?,'auto')");
+    const findCard = n => roomCards.find(c => c.name.toLowerCase() === n.toLowerCase())?.id ?? null;
     for (const line of text.split('\n')) {
         let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
+        const who = fact.match(/^\[([^\]]+)\]\s*/);
+        const cardId = who && who[1].toLowerCase() !== 'shared' ? findCard(who[1]) : null;
+        if (who) fact = fact.slice(who[0].length);
         const tag = fact.match(/^\[(fact|event|relationship|preference)\]\s*/i);
         const type = tag ? tag[1].toLowerCase() : 'fact';
         if (tag) fact = fact.slice(tag[0].length);
-        if (fact.length > 10) ins.run(roomId, fact, type);
+        if (fact.length > 10) ins.run(cardId, roomId, fact, type);
     }
     // Cap stored smart memories — oldest auto entries drop off.
     db.prepare(`DELETE FROM memories WHERE room_id=? AND source='auto' AND id NOT IN
