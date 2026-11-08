@@ -15,7 +15,7 @@
     ];
     const here = location.pathname === '/index.html' ? '/' : location.pathname;
     const nav = document.createElement('nav');
-    nav.innerHTML = '<span class="brand">RP</span>' +
+    nav.innerHTML = '<span class="brand">🍒 B.O.L.L.O.C.K.S</span>' +
         NAV.map(([label, href]) =>
             `<a href="${href}"${href === here ? ' class="on"' : ''}>${label}</a>`).join('') +
         '<span style="flex:1"></span>' +
