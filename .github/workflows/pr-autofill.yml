@@ -1,12 +1,14 @@
 name: PR Autofill
 
-# On PR open: title = highest-bump conventional commit (BREAKING/! > feat >
-# rest), body = every commit as `- <sha> <message>`. Merge commits inherit
-# the body via the repo's squash/merge commit-message settings (PR_BODY).
+# Keeps the PR title aligned with Conventional Commits and maintains the commit
+# list above any hand-written PR body.
+# - Title: highest-bump conventional commit in the PR (BREAKING/! > feat > rest).
+# - Body: replaces/insert an autofilled commit-list block above the manual body.
+#   Merge commits can inherit the body via repo squash/merge settings (PR_BODY).
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -20,7 +22,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fill title and body from commits
+      - name: Fill title and commit list
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -37,8 +39,25 @@ jobs:
           [ -z "$TITLE" ] && TITLE=$(echo "$COMMITS" | head -1 | sed 's/^[^ ]* //')
           [ -z "$TITLE" ] && TITLE="Update"
 
-          BODY=$(echo "$COMMITS" | sed 's/^/- /')
-          [ -z "$BODY" ] && BODY="- (no commits found)"
+          LIST=$(echo "$COMMITS" | sed 's/^/- /')
+          [ -z "$LIST" ] && LIST="- (no commits found)"
+
+          START='<!-- autofill:commits:start -->'
+          END='<!-- autofill:commits:end -->'
+          BLOCK=$(printf '%s\n## Commits\n%s\n%s' "$START" "$LIST" "$END")
+
+          EXISTING=$(gh pr view "$PR_NUMBER" --json body -q '.body // ""')
+          # Strip any previous autofill block; keep the rest as manual body.
+          MANUAL=$(printf '%s' "$EXISTING" | perl -0777 -pe 's/<!-- autofill:commits:start -->.*?<!-- autofill:commits:end -->\n?//s')
+          # Trim leading/trailing blank lines from manual content.
+          MANUAL=$(printf '%s' "$MANUAL" | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')
+
+          if [ -n "$MANUAL" ]; then
+            BODY=$(printf '%s\n\n%s' "$BLOCK" "$MANUAL")
+          else
+            BODY="$BLOCK"
+          fi
 
           gh pr edit "$PR_NUMBER" --title "$TITLE" --body "$BODY"
-          echo "title: $TITLE"; echo "$BODY"
+          echo "title: $TITLE"
+          echo "$BODY"
