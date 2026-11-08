@@ -85,7 +85,8 @@ const router = {
         const books = db.prepare(`SELECT b.*, u.handle owner,
             (SELECT COUNT(*) FROM world_entries WHERE book_id=b.id) cnt
             FROM world_books b LEFT JOIN users u ON u.id=b.owner_id ORDER BY b.id`).all();
-        const rooms = db.prepare('SELECT id,name,world_book_id FROM rooms').all();
+        const rooms = db.prepare(`SELECT r.id,r.name,rb.book_id world_book_id FROM rooms r
+            LEFT JOIN room_books rb ON rb.room_id=r.id`).all();
         send(res, 200, { books, rooms });
     },
     'POST /api/world/books': async (req, res, u) => {
@@ -98,12 +99,13 @@ const router = {
         const b = await readBody(req);
         db.prepare('DELETE FROM world_entries WHERE book_id=?').run(b.id);
         db.prepare('DELETE FROM world_books WHERE id=? AND owner_id=?').run(b.id, u.id);
-        db.prepare('UPDATE rooms SET world_book_id=NULL WHERE world_book_id=?').run(b.id);
+        db.prepare('DELETE FROM room_books WHERE book_id=?').run(b.id);
         send(res, 200, { ok: true });
     },
     'POST /api/world/link': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('UPDATE rooms SET world_book_id=? WHERE id=?').run(b.book || null, b.room || 1);
+        if (b.book) db.prepare('INSERT OR IGNORE INTO room_books (room_id,book_id) VALUES (?,?)').run(b.room || 1, b.book);
+        else db.prepare('DELETE FROM room_books WHERE room_id=?').run(b.room || 1);
         send(res, 200, { ok: true });
     },
     // ST lorebook JSON import: {entries: {0: {key, keysecondary, comment, content, constant, order, disable}}}

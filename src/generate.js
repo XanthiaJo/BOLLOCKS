@@ -45,14 +45,12 @@ export async function generateReply(roomId, card) {
     // entries fire when a key appears in recent chat or the card's fields.
     const scanText = (history.map(m => `${m.name} ${m.text}`).join('\n')
         + ' ' + (card.name || '') + ' ' + (card.description || '')).toLowerCase();
-    const book = db.prepare('SELECT world_book_id FROM rooms WHERE id=?').get(roomId);
-    const world = book?.world_book_id
-        ? db.prepare('SELECT * FROM world_entries WHERE book_id=? AND enabled=1 ORDER BY ord,id')
-            .all(book.world_book_id)
-            .filter(e => e.constant || (
-                JSON.parse(e.keys || '[]').some(k => k && scanText.includes(k.toLowerCase()))
-                && JSON.parse(e.keysecondary || '[]').every(k => !k || scanText.includes(k.toLowerCase()))))
-        : [];
+    const world = db.prepare(`SELECT e.* FROM world_entries e
+        JOIN room_books rb ON rb.book_id=e.book_id
+        WHERE rb.room_id=? AND e.enabled=1 ORDER BY e.ord,e.id`).all(roomId)
+        .filter(e => e.constant || (
+            JSON.parse(e.keys || '[]').some(k => k && scanText.includes(k.toLowerCase()))
+            && JSON.parse(e.keysecondary || '[]').every(k => !k || scanText.includes(k.toLowerCase()))));
     const worldText = world.length
         ? 'World info:\n' + world.map(e => e.content).join('\n\n')
         : null;

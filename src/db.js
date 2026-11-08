@@ -171,6 +171,13 @@ export function migrateSchema() {
             SELECT id,room_id,sender_user_id,card_id,text,send_date,supersedes FROM messages`);
         db.exec('DROP TABLE messages; ALTER TABLE messages_new RENAME TO messages');
     }
+    // Books ↔ rooms is many-to-many — junction replaces rooms.world_book_id.
+    db.exec(`CREATE TABLE IF NOT EXISTS room_books (
+        room_id INTEGER NOT NULL REFERENCES rooms(id),
+        book_id INTEGER NOT NULL REFERENCES world_books(id),
+        UNIQUE(room_id, book_id))`);
+    db.exec(`INSERT OR IGNORE INTO room_books (room_id,book_id)
+        SELECT id, world_book_id FROM rooms WHERE world_book_id IS NOT NULL`);
     const pcols = db.prepare('PRAGMA table_info(api_profiles)').all().map(c => c.name);
     if (!pcols.includes('strip_prefix')) db.exec('ALTER TABLE api_profiles ADD COLUMN strip_prefix INTEGER DEFAULT 1');
     if (!pcols.includes('headers')) db.exec("ALTER TABLE api_profiles ADD COLUMN headers TEXT DEFAULT '{}'");
