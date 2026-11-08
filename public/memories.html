@@ -239,8 +239,9 @@ function renderList(){
     <div class="card">
       <div><div class="desc"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''} · ${esc(memScope(m.cards_id_fk))}</div>
       <input placeholder="trigger keywords — inject only when mentioned" value="${esc(m.triggers||'')}" style="font-size:.8em;margin-top:4px;width:70%" onchange="api('memories/triggers',{id:${m.id},triggers:this.value})"></div>
-      <div class="btns"><button class="del" onclick="del(${m.id})">Delete</button></div>
-    </div>`).join('')}`).join('');
+      <div class="btns">${curTab==='smart'?`<button onclick="permPick(${m.id})">&rarr; perm</button>`:''}<button class="del" onclick="del(${m.id})">Delete</button></div>
+    </div>
+    ${permPicker(m)}</div>`).join('')}`).join('');
   $('list').innerHTML=html||`<small>No ${curTab==='smart'?'smart':'permanent'} memories yet.</small>`;
 }
 
@@ -291,6 +292,14 @@ async function load(){
 function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') curTab='user';load()}
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
+let permPickId=0;
+function permPick(id){permPickId=permPickId===id?0:id;renderList()}
+function permPicker(m){if(permPickId!==m.id)return'';
+  const cards=roomCards.map(c=>`<button onclick="moveToPerm(${m.id},${c.id})">${esc(c.name)}</button>`).join('');
+  return `<div class="card" style="border-color:#3a5ccc"><div class="desc">Move to permanent — pick a scope:</div><div class="btns" style="flex-direction:row;flex-wrap:wrap"><button onclick="moveToPerm(${m.id},0)">${esc(roomName||'This chat')}</button>${cards}</div></div>`}
+async function moveToPerm(id,cid){const m=allMems.find(x=>x.id===id);if(!m)return;
+  await api('memories',{content:m.content,type:m.type||'fact',triggers:m.triggers||'',room:ROOM,cardId:cid||0});
+  await api('memories/delete',{id});permPickId=0;load()}
 // --- Memory profiles: Settings tab works on profiles; chats follow one ---
 let selProf=0,effRow=null;
 function fillProf(p){
