@@ -137,6 +137,20 @@ export async function generateReply(roomId, card) {
     };
     parts.Memories = tok(memText);
 
+    // Section texts for the chat sidebar's click-to-view prompt inspector.
+    const texts = {
+        'Main Prompt': card.system_prompt || `You are ${card.name}.`,
+        'World Info': worldText,
+        'Char Description': card.description,
+        'Char Personality': card.personality,
+        'Scenario': card.scenario,
+        'Chat Examples': card.mes_example,
+        'Other Characters': others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
+        'Post-History Instructions': card.post_history_instructions,
+        'Memories': memText,
+        'Chat History': history.map(m => `${m.name}: ${m.text}`).join('\n'),
+    };
+
     // Context cap: drop oldest history lines until the prompt fits.
     const roomCtx = db.prepare('SELECT max_context FROM rooms WHERE rooms_id_pk=?').get(roomId)?.max_context || 0;
     const caps = [roomCtx, conn.context_size || 0].filter(v => v > 0);
@@ -155,6 +169,21 @@ export async function generateReply(roomId, card) {
         parts['(capped)'] = maxCtx;
     }
 
+    const reqBody = {
+        model: conn.model || 'local',
+        messages: [
+            { role: 'system', content: system },
+            // The card's own past lines are its voice (assistant);
+            // everyone else's lines are tagged context (user).
+            ...history.map(m => m.cards_id_fk === card.id
+                ? { role: 'assistant', content: m.text }
+                : { role: 'user', content: `${m.name}: ${m.text}` }),
+            // Final nudge — primes the model to continue as this character.
+            { role: 'user', content: `${card.name}:` },
+        ],
+        temperature: 0.8,
+        max_tokens: conn.max_response || 2048,
+    };
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -162,21 +191,7 @@ export async function generateReply(roomId, card) {
             ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
             ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })(),
         },
-        body: JSON.stringify({
-            model: conn.model || 'local',
-            messages: [
-                { role: 'system', content: system },
-                // The card's own past lines are its voice (assistant);
-                // everyone else's lines are tagged context (user).
-                ...history.map(m => m.cards_id_fk === card.id
-                    ? { role: 'assistant', content: m.text }
-                    : { role: 'user', content: `${m.name}: ${m.text}` }),
-                // Final nudge — primes the model to continue as this character.
-                { role: 'user', content: `${card.name}:` },
-            ],
-            temperature: 0.8,
-            max_tokens: conn.max_response || 2048,
-        }),
+        body: JSON.stringify(reqBody),
     });
     if (!resp.ok) throw new Error(`AI ${resp.status}: ${await resp.text()}`);
     const data = await resp.json();
@@ -188,6 +203,8 @@ export async function generateReply(roomId, card) {
         prompt_tokens: data?.usage?.prompt_tokens ?? null,
         completion_tokens: data?.usage?.completion_tokens ?? null,
         parts,
+        texts,
+        request: reqBody,
     };
     // Always drop a leading "Name:" / "**Name:**" / "[Name]" speaker tag —
     // the UI already labels messages; the tag only exists for steering.
