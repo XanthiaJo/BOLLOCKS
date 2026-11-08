@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, seed, login, userForToken, createUser, activeProfile, migrateProfiles, migrateSchema, MSG_SQL } from './db.js';
+import { db, seed, login, userForToken, createUser, migrateProfiles, migrateSchema, MSG_SQL } from './db.js';
 import { generateReply, genStats, maybeSummarize } from './generate.js';
 import { extractCardJson, normalizeCard } from './pngcard.js';
 
@@ -10,7 +10,7 @@ const PUB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'publi
 const PORT = Number(process.env.PORT || 8100);
 migrateSchema();
 migrateProfiles();
-seed();
+if (process.env.BOLLOCKS_SEED !== '0') seed();
 
 // ---- SSE fan-out per room ----
 const streams = new Map(); // rooms_id_fk -> Set<res>
@@ -23,6 +23,8 @@ const push = (roomId, evt) => {
 const readBody = req => new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { r(JSON.parse(b)); } catch { r({}); } }); });
 const CARDS_DIR = path.join(process.cwd(), 'data', 'cards');
 fs.mkdirSync(CARDS_DIR, { recursive: true });
+const BG_DIR = path.join(process.cwd(), 'data', 'bg');
+fs.mkdirSync(BG_DIR, { recursive: true });
 const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
 // Local testing mode: no token → ?as=<handle> impersonation, else first user.
 const auth = req =>
@@ -43,7 +45,7 @@ const router = {
     },
     'GET /api/lastmem': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room')) || 1;
-        send(res, 200, db.prepare("SELECT content text FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY memories_id_pk  DESC LIMIT 1").get(roomId) || null);
+        send(res, 200, db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId) || null);
     },
     'GET /api/me': async (req, res, u) => {
         const persona = db.prepare('SELECT cards_id_pk AS id,name FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk);
@@ -59,22 +61,29 @@ const router = {
         const q = new URL(req.url, 'http://x').searchParams;
         const card = Number(q.get('card') ?? -1);
         const room = Number(q.get('room') || 0);
-        const rows = db.prepare(`SELECT m.*, m.memories_id_pk AS id, c.name card_name, r.name room_name FROM memories m
-            LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk JOIN rooms r ON r.rooms_id_pk=m.rooms_id_fk
-            WHERE (?<0 OR (?=0 AND m.cards_id_fk IS NULL) OR m.cards_id_fk=?)
-              AND (?=0 OR m.rooms_id_fk=?) ORDER BY m.memories_id_pk`)
+        const rows = db.prepare(`SELECT m.*, m.memories_id_pk AS id, c.name card_name, r.name room_name, mc.cards_id_fk AS cards_id_fk FROM memories m
+            JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+            LEFT JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk
+            LEFT JOIN cards c ON c.cards_id_pk=mc.cards_id_fk JOIN rooms r ON r.rooms_id_pk=rm.rooms_id_fk
+            WHERE (?<0 OR (?=0 AND mc.memories_id_fk IS NULL) OR mc.cards_id_fk=?)
+              AND (?=0 OR rm.rooms_id_fk=?) ORDER BY m.memories_id_pk`)
             .all(card, card, card, room, room);
         send(res, 200, { memories: rows });
     },
     'POST /api/memories': async (req, res, u) => {
         const b = await readBody(req);
-        const id = db.prepare('INSERT INTO memories (cards_id_fk,rooms_id_fk,content) VALUES (?,?,?)')
-            .run(b.cardId || null, b.room || 1, b.content || '').lastInsertRowid;
+        const id = db.prepare('INSERT INTO memories (content,type,origin,triggers) VALUES (?,?,?,?)')
+            .run(b.content || '', b.type || 'fact', 'user', b.triggers || '').lastInsertRowid;
+        db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(b.room || 1, id);
+        if (b.cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, b.cardId);
         send(res, 200, { id });
     },
     'POST /api/memories/delete': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('DELETE FROM memories WHERE memories_id_pk=?').run(b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+    db.prepare('DELETE FROM room_memories WHERE memories_id_fk=?').run(id);
+    db.prepare('DELETE FROM memory_cards WHERE memories_id_fk=?').run(id);
+    db.prepare('DELETE FROM memories WHERE memories_id_pk=?').run(id);
         send(res, 200, { ok: true });
     },
     'GET /api/genstats': async (req, res, u) => {
@@ -85,7 +94,7 @@ const router = {
         const books = db.prepare(`SELECT b.*, b.world_books_id_pk AS id, u.handle owner,
             (SELECT COUNT(*) FROM book_entries WHERE world_books_id_fk=b.world_books_id_pk) cnt
             FROM world_books b LEFT JOIN users u ON u.users_id_pk=b.owner_users_id_fk ORDER BY b.world_books_id_pk`).all();
-        const rooms = db.prepare(`SELECT r.rooms_id_pk,r.name,rb.world_books_id_fk world_books_id_fk FROM rooms r
+        const rooms = db.prepare(`SELECT r.rooms_id_pk AS id,r.name,rb.world_books_id_fk world_books_id_fk FROM rooms r
             LEFT JOIN room_books rb ON rb.rooms_id_fk=r.rooms_id_pk`).all();
         send(res, 200, { books, rooms });
     },
@@ -181,10 +190,10 @@ const router = {
         send(res, 200, { ok: true });
     },
     'GET /api/users': async (req, res, u) =>
-        send(res, 200, { users: db.prepare('SELECT id,handle FROM users ORDER BY users_id_pk').all() }),
+        send(res, 200, { users: db.prepare('SELECT users_id_pk AS id,handle FROM users ORDER BY users_id_pk').all() }),
     'POST /api/cards/avatar': async (req, res, u) => {
         const b = await readBody(req);
-        const card = db.prepare('SELECT owner_users_id_fk FROM cards WHERE users_id_pk=?').get(b.world_books_id_pk);
+        const card = db.prepare('SELECT owner_users_id_fk FROM cards WHERE cards_id_pk=?').get(b.world_books_id_pk);
         if (!card || card.owner_users_id_fk !== u.users_id_pk) return send(res, 403, { error: 'not your card' });
         const file = `cards/${b.world_books_id_pk}.png`;
         fs.writeFileSync(path.join(CARDS_DIR, `${b.world_books_id_pk}.png`), Buffer.from(b.png_b64, 'base64'));
@@ -314,7 +323,7 @@ const router = {
     'POST /api/users/delete': async (req, res, u) => {
         const b = await readBody(req);
         const target = b.handle
-            ? db.prepare('SELECT id FROM users WHERE handle=? COLLATE NOCASE').get(b.handle)?.id
+            ? db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=? COLLATE NOCASE').get(b.handle)?.id
             : b.world_books_id_pk;
         if (!target || target === u.users_id_pk) return send(res, 400, { error: 'no such user' });
         db.prepare('DELETE FROM sessions WHERE users_id_fk=?').run(target);
@@ -324,14 +333,16 @@ const router = {
         send(res, 200, { ok: true });
     },
     'GET /api/rooms': async (req, res, u) => {
-        const rooms = db.prepare(`SELECT r.rooms_id_pk, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget, r.mem_max, r.max_context FROM rooms r
+        const rooms = db.prepare(`SELECT DISTINCT r.rooms_id_pk AS id, r.name, r.ai_trigger, r.max_context,
+            r.mem_profiles_id_fk,
+            (SELECT COUNT(*) FROM room_members rm2 WHERE rm2.rooms_id_fk=r.rooms_id_pk) AS members, r.bg FROM rooms r
             JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE c.owner_users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk);
         send(res, 200, { rooms });
     },
     'POST /api/rooms': async (req, res, u) => {
         const b = await readBody(req);
         if (!b.name) return send(res, 400, { error: 'name required' });
-        const id = db.prepare('INSERT INTO rooms (name) VALUES (?)').run(b.name).lastInsertRowid;
+        const id = db.prepare(`INSERT INTO rooms (name,mem_profiles_id_fk) VALUES (?,(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1))`).run(b.name).lastInsertRowid;
         const pc0 = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk)?.cards_id_pk;
         if (pc0) {
             const mid3 = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc0)?.members_id_pk
@@ -349,7 +360,9 @@ const router = {
         const b = await readBody(req);
         db.prepare('DELETE FROM messages WHERE rooms_id_fk=?').run(b.world_books_id_pk);
         db.prepare('DELETE FROM room_members WHERE rooms_id_fk=?').run(b.world_books_id_pk);
-        db.prepare('DELETE FROM memories WHERE rooms_id_fk=?').run(b.world_books_id_pk);
+        db.prepare('DELETE FROM memory_cards WHERE memories_id_fk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(b.world_books_id_pk);
+        db.prepare('DELETE FROM memories WHERE memories_id_pk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(b.world_books_id_pk);
+        db.prepare('DELETE FROM room_memories WHERE rooms_id_fk=?').run(b.world_books_id_pk);
         db.prepare('DELETE FROM room_books WHERE rooms_id_fk=?').run(b.world_books_id_pk);
         db.prepare('DELETE FROM rooms WHERE rooms_id_pk=?').run(b.world_books_id_pk);
         send(res, 200, { ok: true });
@@ -407,13 +420,61 @@ const router = {
         db.prepare('DELETE FROM api_profiles WHERE api_profiles_id_pk=? AND users_id_fk=?').run(b.world_books_id_pk, u.users_id_pk);
         send(res, 200, { ok: true });
     },
+    // Smart-memory profiles: named presets of the mem_* room settings.
+    'GET /api/memprofiles': async (req, res, u) => {
+        const profiles = db.prepare('SELECT * FROM mem_profiles WHERE users_id_fk=? ORDER BY mem_profiles_id_pk').all(u.users_id_pk);
+        send(res, 200, { profiles });
+    },
+    'POST /api/memprofiles': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!b.name) return send(res, 400, { error: 'name required' });
+        const vals = [b.auto ? 1 : 0, b.every ?? 10, b.budget ?? 800, b.max ?? 50,
+            b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
+            b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
+            b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
+            b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0];
+        const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,auto_mem,mem_every,mem_budget,mem_max,
+            mem_max_fact,mem_max_event,mem_max_relationship,mem_max_preference,mem_extraction_prompt,
+            mem_context_threshold,mem_response_length,mem_gen_budget,mem_unlimited,mem_unified,mem_triggers,
+            mem_autotune,mem_refresh,mem_activity,mem_extraction_profile_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+            .run(u.users_id_pk, b.name, ...vals).lastInsertRowid;
+        send(res, 200, { id });
+    },
+    'POST /api/memprofiles/update': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare(`UPDATE mem_profiles SET auto_mem=?, mem_every=?, mem_budget=?, mem_max=?,
+            mem_max_fact=?, mem_max_event=?, mem_max_relationship=?, mem_max_preference=?,
+            mem_extraction_prompt=?, mem_context_threshold=?, mem_response_length=?,
+            mem_gen_budget=?, mem_unlimited=?, mem_unified=?, mem_triggers=?,
+            mem_autotune=?, mem_refresh=?, mem_activity=?, mem_extraction_profile_id=?
+            WHERE mem_profiles_id_pk=? AND users_id_fk=?`)
+            .run(b.auto ? 1 : 0, b.every ?? 10, b.budget ?? 800, b.max ?? 50,
+                b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
+                b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
+                b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
+                b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0,
+                b.id, u.users_id_pk);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/memprofiles/delete': async (req, res, u) => {
+        const b = await readBody(req);
+        // Rooms following the deleted profile are re-pointed at another one
+        // (0 = feature-less room columns only when NO profiles remain).
+        db.prepare(`UPDATE rooms SET mem_profiles_id_fk=COALESCE((SELECT mem_profiles_id_pk FROM mem_profiles WHERE mem_profiles_id_pk<>? ORDER BY mem_profiles_id_pk LIMIT 1),0) WHERE mem_profiles_id_fk=?`).run(b.id, b.id);
+        db.prepare('DELETE FROM mem_profiles WHERE mem_profiles_id_pk=? AND users_id_fk=?').run(b.id, u.users_id_pk);
+        send(res, 200, { ok: true });
+    },
     'GET /api/room': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('id') || 1);
         const msgs = db.prepare(MSG_SQL + ' WHERE m.rooms_id_fk=? ORDER BY m.messages_id_pk').all(roomId);
-        const members = db.prepare(`SELECT m.*, c.name card_name, c.avatar card_avatar, u.handle, pc.name persona_name, pc.avatar persona_avatar, pc.cards_id_pk persona_id FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
+        const members = db.prepare(`SELECT m.*, c.name card_name, c.avatar card_avatar, u.handle, pc.name persona_name, pc.avatar persona_avatar, pc.cards_id_pk persona_id,
+            CASE WHEN IFNULL(c.is_persona,0)=1 THEN 'human' ELSE 'ai' END kind,
+            CASE WHEN IFNULL(c.is_persona,0)=1 THEN c.owner_users_id_fk END users_id_fk
+            FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
             LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk LEFT JOIN users u ON u.users_id_pk=c.owner_users_id_fk
             LEFT JOIN cards pc ON pc.owner_users_id_fk=u.users_id_pk AND pc.is_persona=1 WHERE rm.rooms_id_fk=?`).all(roomId);
-        const lastMem = db.prepare("SELECT content text FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY memories_id_pk DESC LIMIT 1").get(roomId);
+        const lastMem = db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId);
         send(res, 200, { messages: msgs, members, lastMem });
     },
     'GET /api/stream': (req, res, u) => {
@@ -461,6 +522,29 @@ const router = {
         db.prepare('UPDATE rooms SET ai_trigger=? WHERE rooms_id_pk=?').run(b.mode || 'manual', b.room || 1);
         send(res, 200, { ok: true });
     },
+    'GET /api/roombg': (req, res) => {
+        const id = Number(new URL(req.url, 'http://x').searchParams.get('id'));
+        const r = db.prepare('SELECT bg FROM rooms WHERE rooms_id_pk=?').get(id);
+        const file = r?.bg && path.join(BG_DIR, r.bg);
+        if (!file || !fs.existsSync(file)) return send(res, 404, { error: 'no background' });
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        fs.createReadStream(file).pipe(res);
+    },
+    'POST /api/room/background': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!b.png_b64) return send(res, 400, { error: 'png_b64 required' });
+        const file = `${b.room || 1}.png`;
+        fs.writeFileSync(path.join(BG_DIR, file), Buffer.from(b.png_b64, 'base64'));
+        db.prepare('UPDATE rooms SET bg=? WHERE rooms_id_pk=?').run(file, b.room || 1);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/room/background/remove': async (req, res, u) => {
+        const b = await readBody(req);
+        const r = db.prepare('SELECT bg FROM rooms WHERE rooms_id_pk=?').get(b.room || 1);
+        if (r?.bg && fs.existsSync(path.join(BG_DIR, r.bg))) fs.unlinkSync(path.join(BG_DIR, r.bg));
+        db.prepare("UPDATE rooms SET bg='' WHERE rooms_id_pk=?").run(b.room || 1);
+        send(res, 200, { ok: true });
+    },
     'POST /api/room/settings': async (req, res, u) => {
         const b = await readBody(req);
         db.prepare('UPDATE rooms SET max_context=COALESCE(?,max_context) WHERE rooms_id_pk=?')
@@ -469,27 +553,30 @@ const router = {
     },
     'POST /api/memories/triggers': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('UPDATE memories SET triggers=? WHERE rooms_id_pk=?').run(b.triggers || '', b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+    db.prepare('UPDATE memories SET triggers=? WHERE memories_id_pk=?').run(b.triggers || '', id);
         send(res, 200, { ok: true });
     },
     'POST /api/memories/move': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('UPDATE memories SET cards_id_fk=? WHERE memories_id_pk=?').run(b.cardId || null, b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+    db.prepare('DELETE FROM memory_cards WHERE memories_id_fk=?').run(id);
+    if (b.cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, b.cardId);
         send(res, 200, { ok: true });
     },
     'POST /api/messages/delete': async (req, res, u) => {
         const b = await readBody(req);
-        const m = db.prepare('SELECT rooms_id_fk FROM messages WHERE memories_id_pk=?').get(b.world_books_id_pk);
+        const m = db.prepare('SELECT rooms_id_fk FROM messages WHERE messages_id_pk=?').get(b.world_books_id_pk);
         if (!m) return send(res, 404, { error: 'no message' });
         db.prepare('DELETE FROM messages WHERE messages_id_pk=?').run(b.world_books_id_pk);
         push(m.rooms_id_fk, { type: 'delete', id: b.world_books_id_pk });
         send(res, 200, { ok: true });
     },
     'POST /api/room/memsettings': async (req, res, u) => {
+        // Per-chat memory *settings* are gone — rooms follow a memory profile.
+        // The only per-room aspect left is which profile the room follows.
         const b = await readBody(req);
-        db.prepare(`UPDATE rooms SET auto_mem=COALESCE(?,auto_mem), mem_every=COALESCE(?,mem_every),
-            mem_budget=COALESCE(?,mem_budget), mem_max=COALESCE(?,mem_max) WHERE rooms_id_pk=?`)
-            .run(b.auto === undefined ? null : (b.auto ? 1 : 0), b.every, b.budget, b.max, b.room || 1);
+        if (b.memProfile !== undefined) db.prepare('UPDATE rooms SET mem_profiles_id_fk=? WHERE rooms_id_pk=?').run(Number(b.memProfile) || 0, b.room || 1);
         send(res, 200, { ok: true });
     },
     'POST /api/members/talkativeness': async (req, res, u) => {
@@ -501,7 +588,7 @@ const router = {
     'POST /api/generate': async (req, res, u) => {
         const b = await readBody(req);
         const roomId = b.room || 1;
-        const npc = db.prepare(`SELECT c.* FROM members m JOIN room_members rm ON rm.members_id_fk=m.members_id_pk JOIN cards c ON c.cards_id_pk=m.cards_id_fk
+        const npc = db.prepare(`SELECT c.*, c.cards_id_pk AS id FROM members m JOIN room_members rm ON rm.members_id_fk=m.members_id_pk JOIN cards c ON c.cards_id_pk=m.cards_id_fk
             WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 ${b.card ? 'AND c.cards_id_pk=?' : ''} ORDER BY m.cards_id_fk`).all(roomId, ...(b.card ? [b.card] : []))[0];
         if (!npc) return send(res, 404, { error: 'no AI member' });
         try {
@@ -524,9 +611,13 @@ http.createServer(async (req, res) => {
     const user = auth(req);
     // Unauthenticated: /api/* is off-limits except login; static files still
     // serve so the login page (and its css/js) can load.
-    if (!user && url.pathname.startsWith('/api/') && key !== 'POST /api/login' && key !== 'GET /api/avatar')
+    const firstUser = key === 'POST /api/register' && !db.prepare('SELECT 1 FROM users LIMIT 1').get();
+    if (!user && url.pathname.startsWith('/api/') && key !== 'POST /api/login' && key !== 'GET /api/avatar' && key !== 'GET /api/roombg' && !firstUser)
         return send(res, 401, { error: 'auth required' });
-    if (router[key]) return router[key](req, res, user);
+    if (router[key]) {
+        try { return await router[key](req, res, user); }
+        catch (e) { console.error(`[${key}]`, e); return send(res, 500, { error: String(e?.message || e) }); }
+    }
     // static
     const file = path.join(PUB, url.pathname === '/' ? 'index.html' : url.pathname);
     if (fs.existsSync(file) && file.startsWith(PUB)) {

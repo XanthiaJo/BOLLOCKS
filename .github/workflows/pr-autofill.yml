@@ -1,0 +1,51 @@
+name: PR Autofill
+
+# Maintains the commit list above any hand-written PR body, and leaves the PR
+# title unchanged (so merge commits keep GitHub's normal title format).
+# - Body: replaces/inserts an autofilled commit-list block above the manual body.
+#   Merge commits can inherit the body via repo squash/merge settings (PR_BODY).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  autofill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fill commit list
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Use the PR's commits as GitHub sees them (avoids huge/incorrect ranges
+          # when the head branch is diverged from the base).
+          LIST=$(gh pr view "$PR_NUMBER" --json commits --jq '.commits[] | "- " + (.oid[0:7]) + " " + .messageHeadline')
+          [ -z "$LIST" ] && LIST="- (no commits found)"
+
+          START='<!-- autofill:commits:start -->'
+          END='<!-- autofill:commits:end -->'
+          BLOCK=$(printf '%s\n## Commits\n%s\n%s' "$START" "$LIST" "$END")
+
+          EXISTING=$(gh pr view "$PR_NUMBER" --json body -q '.body // ""')
+          # Strip any previous autofill block; keep the rest as manual body.
+          MANUAL=$(printf '%s' "$EXISTING" | perl -0777 -pe 's/<!-- autofill:commits:start -->.*?<!-- autofill:commits:end -->\n?//s')
+          # Trim leading/trailing blank lines from manual content.
+          MANUAL=$(printf '%s' "$MANUAL" | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')
+
+          if [ -n "$MANUAL" ]; then
+            BODY=$(printf '%s\n\n%s' "$BLOCK" "$MANUAL")
+          else
+            BODY="$BLOCK"
+          fi
+
+          gh pr edit "$PR_NUMBER" --body "$BODY"
+          echo "$BODY"
