@@ -74,6 +74,7 @@ async function loadRoom() {
         if (d.type === 'message' && d.message.room_id === room) {
             addMsg(d.message);
             get(`lastmem?room=${room}`).then(renderLastMem);
+            renderToks();
         }
         if (d.type === 'delete') document.querySelector(`li[data-mid="${d.id}"]`)?.remove();
     };
