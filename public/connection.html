@@ -39,9 +39,10 @@ button.act{background:#4a7c3a}
     <input id="ed_headers" placeholder='Extra headers — JSON or "name: value" lines' title="Merged into every request (e.g. OpenRouter HTTP-Referer)">
     <h4 style="margin:14px 0 4px;color:#789">Chat Completion <small>(coming soon)</small></h4>
     <div style="opacity:.45;pointer-events:none">
-      <label class="cb"><input type="checkbox" disabled> Unlocked Context Size</label>
-      <input placeholder="Context Size (tokens)" disabled>
-      <input placeholder="Max Response Length (tokens)" disabled>
+      <label class="cap">Context Size <small>— prompt token cap, 0 = unlimited</small></label>
+      <input id="ed_ctx" type="number" min="0" step="512">
+      <label class="cap">Max Response Length <small>— tokens</small></label>
+      <input id="ed_maxr" type="number" min="128" step="128">
       <input placeholder="Multiple swipes per generation" disabled>
       <label class="cb"><input type="checkbox" disabled> Streaming</label>
       <input placeholder="Temperature" disabled>
@@ -99,12 +100,12 @@ async function load(){
 }
 
 function edit(p){document.querySelectorAll('.prof').forEach(el=>el.classList.remove('sel'));event?.target?.closest?.('.prof')?.classList.add('sel');
-  $('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';$('ed_headers').value=p.headers&&p.headers!=='{}'?p.headers:'';scrollTo(0,0)}
+  $('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';$('ed_headers').value=p.headers&&p.headers!=='{}'?p.headers:'';$('ed_ctx').value=p.context_size||0;$('ed_maxr').value=p.max_response||2048;scrollTo(0,0)}
 function clearEd(){$('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value=''}
 
 async function saveProf(){
   const id=$('ed_id').value;
-  const b={name:$('ed_name').value.trim(),apiUrl:$('ed_url').value.trim(),model:$('ed_model').value.trim(),key:$('ed_key').value.trim(),headers:$('ed_headers').value.trim()||'{}'};
+  const b={name:$('ed_name').value.trim(),apiUrl:$('ed_url').value.trim(),model:$('ed_model').value.trim(),key:$('ed_key').value.trim(),headers:$('ed_headers').value.trim()||'{}',contextSize:Number($('ed_ctx').value)||0,maxResponse:Number($('ed_maxr').value)||2048};
   if(b.headers!=='{}'){
     try{JSON.parse(b.headers)}
     catch{

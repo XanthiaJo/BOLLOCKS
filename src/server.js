@@ -312,7 +312,7 @@ const router = {
         send(res, 200, { ok: true });
     },
     'GET /api/profiles': async (req, res, u) => {
-        const profiles = db.prepare('SELECT id,name,api_url,model,active,strip_prefix,headers,(key!=\'\') has_key FROM api_profiles WHERE user_id=? ORDER BY id').all(u.id);
+        const profiles = db.prepare('SELECT id,name,api_url,model,active,strip_prefix,headers,context_size,max_response,(key!=\'\') has_key FROM api_profiles WHERE user_id=? ORDER BY id').all(u.id);
         send(res, 200, { profiles });
     },
     'POST /api/profiles': async (req, res, u) => {
@@ -328,6 +328,8 @@ const router = {
         const sets = ['name=?', 'api_url=?', 'model=?'];
         const args = [b.name, b.apiUrl, b.model];
         if (b.headers !== undefined) { sets.push('headers=?'); args.push(b.headers || '{}'); }
+        if (b.contextSize !== undefined) { sets.push('context_size=?'); args.push(Number(b.contextSize) || 0); }
+        if (b.maxResponse !== undefined) { sets.push('max_response=?'); args.push(Number(b.maxResponse) || 2048); }
         if (b.stripPrefix !== undefined) { sets.push('strip_prefix=?'); args.push(b.stripPrefix ? 1 : 0); }
         if (b.key) { sets.push('key=?'); args.push(b.key); }
         args.push(b.id, u.id);

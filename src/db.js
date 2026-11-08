@@ -150,6 +150,8 @@ export function migrateSchema() {
     const pcols = db.prepare('PRAGMA table_info(api_profiles)').all().map(c => c.name);
     if (!pcols.includes('strip_prefix')) db.exec('ALTER TABLE api_profiles ADD COLUMN strip_prefix INTEGER DEFAULT 1');
     if (!pcols.includes('headers')) db.exec("ALTER TABLE api_profiles ADD COLUMN headers TEXT DEFAULT '{}'");
+    if (!pcols.includes('context_size')) db.exec('ALTER TABLE api_profiles ADD COLUMN context_size INTEGER DEFAULT 0');
+    if (!pcols.includes('max_response')) db.exec('ALTER TABLE api_profiles ADD COLUMN max_response INTEGER DEFAULT 2048');
     // Legacy: entries keyed by room become a default book linked to that room.
     for (const r of db.prepare('SELECT DISTINCT room_id FROM world_entries WHERE book_id IS NULL').all()) {
         const bid = db.prepare('INSERT INTO world_books (owner_id,name) VALUES (NULL,?)').run('Room ' + r.room_id + ' book').lastInsertRowid;

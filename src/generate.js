@@ -101,7 +101,9 @@ export async function generateReply(roomId, card) {
     parts.Memories = tok(memText);
 
     // Context cap: drop oldest history lines until the prompt fits.
-    const maxCtx = db.prepare('SELECT max_context FROM rooms WHERE id=?').get(roomId)?.max_context || 0;
+    const roomCtx = db.prepare('SELECT max_context FROM rooms WHERE id=?').get(roomId)?.max_context || 0;
+    const caps = [roomCtx, conn.context_size || 0].filter(v => v > 0);
+    const maxCtx = caps.length ? Math.min(...caps) : 0;
     if (maxCtx > 0) {
         const overhead = Object.entries(parts).filter(([k]) => k !== 'Chat History')
             .reduce((a, [, v]) => a + v, 0);
@@ -136,13 +138,13 @@ export async function generateReply(roomId, card) {
                 { role: 'user', content: `${card.name}:` },
             ],
             temperature: 0.8,
-            max_tokens: 2048,
+            max_tokens: conn.max_response || 2048,
         }),
     });
     if (!resp.ok) throw new Error(`AI ${resp.status}: ${await resp.text()}`);
     const data = await resp.json();
     let text = data?.choices?.[0]?.message?.content?.trim();
-    if (!text) throw new Error('empty AI response');
+    if (!text) { console.log('[gen] empty — raw:', JSON.stringify(data).slice(0, 600)); throw new Error('empty AI response'); }
     genStats[roomId] = {
         at: Date.now(), card: card.name,
         est: Object.values(parts).reduce((a, b) => a + b, 0),
