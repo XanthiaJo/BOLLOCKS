@@ -4,6 +4,24 @@ import { db, activeProfile, MSG_SQL } from './db.js';
 export const genStats = {};
 const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
 
+// Fields a memory profile can override on a room's mem_* settings.
+const MEM_PROFILE_FIELDS = ['auto_mem', 'mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
+    'mem_max_event', 'mem_max_relationship', 'mem_max_preference', 'mem_extraction_prompt',
+    'mem_context_threshold', 'mem_response_length', 'mem_gen_budget', 'mem_unlimited',
+    'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
+    'mem_extraction_profile_id'];
+
+/** Effective memory settings for a room: the assigned memory profile's values
+ *  on top of the room's own columns (0/absent profile id = per-chat settings). */
+export function memProfileFor(room) {
+    if (!room?.mem_profiles_id_fk) return room;
+    const p = db.prepare('SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=?').get(room.mem_profiles_id_fk);
+    if (!p) return room;
+    const out = { ...room };
+    for (const k of MEM_PROFILE_FIELDS) if (k in p) out[k] = p[k];
+    return out;
+}
+
 /**
  * Server-side generation — the server owns the prompt AND the API call.
  * Prompt = card description (system) + recent messages (context). The API
@@ -63,10 +81,12 @@ export async function generateReply(roomId, card) {
         : null;
 
     // Long-term memories: shared room facts + this character's own.
-    // Capped at the room's injection token budget (chars/4 estimate).
+    // Capped at the injection token budget (chars/4 estimate); a room may
+    // follow a memory profile, which overrides the per-chat mem_* settings.
     const room = db.prepare('SELECT *, rooms_id_pk AS id FROM rooms WHERE rooms_id_pk=?').get(roomId);
-    const budget = room?.mem_budget ?? 800;
-    const refreshN = room?.mem_refresh || 1;
+    const mem = memProfileFor(room);
+    const budget = mem?.mem_budget ?? 800;
+    const refreshN = mem?.mem_refresh || 1;
     const refreshKey = room?.mem_refresh_count || 0;
     const injectMem = refreshN <= 1 || refreshKey % refreshN === 0;
     const cap = (rows, acc) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= budget); };
@@ -78,7 +98,7 @@ export async function generateReply(roomId, card) {
         .all(roomId, card.id).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
 
     const memText = (injectMem && (roomMems.length || mems.length))
-        ? (room?.mem_unified
+        ? (mem?.mem_unified
             ? ['Memories:\n' + [...roomMems.map(m => '- ' + m.content), ...mems.map(m => '- ' + m.content)].join('\n')].join('')
             : [
                 roomMems.length && 'What happened here:\n' + roomMems.map(m => '- ' + m.content).join('\n'),
@@ -183,10 +203,11 @@ export async function generateReply(roomId, card) {
  */
 export async function maybeSummarize(roomId) {
     const room = db.prepare('SELECT *, rooms_id_pk AS id FROM rooms WHERE rooms_id_pk=?').get(roomId);
-    if (!room?.auto_mem) return;
+    const mem = memProfileFor(room);
+    if (!mem?.auto_mem) return;
     const lastId = db.prepare('SELECT MAX(messages_id_pk) m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
-    const interval = room.mem_every || 10;
-    const threshold = room.mem_context_threshold || 80;
+    const interval = mem.mem_every || 10;
+    const threshold = mem.mem_context_threshold || 80;
     const maxCtx = room.max_context || 6400;
     // Messages since last extraction.
     const since = db.prepare('SELECT text FROM messages WHERE rooms_id_fk=? AND messages_id_pk>?').all(roomId, room.mem_last_messages_id);
@@ -198,8 +219,8 @@ export async function maybeSummarize(roomId) {
     const owner = db.prepare(`SELECT u.users_id_pk FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
         JOIN cards c ON c.cards_id_pk=m.cards_id_fk JOIN users u ON u.users_id_pk=c.owner_users_id_fk
         WHERE rm.rooms_id_fk=? AND c.is_persona=1 ORDER BY c.owner_users_id_fk LIMIT 1`).get(roomId);
-    const conn = room.mem_extraction_profile_id
-        ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(room.mem_extraction_profile_id)
+    const conn = mem.mem_extraction_profile_id
+        ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(mem.mem_extraction_profile_id)
         : activeProfile(owner?.id);
     if (!conn?.apiUrl) return;
     const excerpt = db.prepare(
@@ -213,10 +234,10 @@ export async function maybeSummarize(roomId) {
         body: JSON.stringify({
             model: conn.model || 'local',
             messages: [
-                { role: 'system', content: room.mem_extraction_prompt?.trim() || `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Each bullet must be a complete, self-contained sentence that names its subject (e.g. "Blake has a pending review pile for API configurations including Venice API."). Start with a type tag [fact], [event], [relationship] or [preference]. Use [shared] only for room-wide facts, and include the subject in the sentence. No narration, no pronouns without a named subject.${room.mem_triggers ? ' For each memory also append its trigger keywords in parentheses, e.g. "- [fact] Blake has a pending review pile. (triggers: pending, review)"' : ''}` },
+                { role: 'system', content: mem.mem_extraction_prompt?.trim() || `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Each bullet must be a complete, self-contained sentence that names its subject (e.g. "Blake has a pending review pile for API configurations including Venice API."). Start with a type tag [fact], [event], [relationship] or [preference]. Use [shared] only for room-wide facts, and include the subject in the sentence. No narration, no pronouns without a named subject.${mem.mem_triggers ? ' For each memory also append its trigger keywords in parentheses, e.g. "- [fact] Blake has a pending review pile. (triggers: pending, review)"' : ''}` },
                 { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
             ],
-            temperature: 0.3, max_tokens: room.mem_unlimited ? -1 : (room.mem_gen_budget || room.mem_response_length || 2000),
+            temperature: 0.3, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
         }),
     });
     if (!resp.ok) return;
@@ -237,10 +258,10 @@ export async function maybeSummarize(roomId) {
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
     db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
-    if (room.mem_activity) console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
+    if (mem.mem_activity) console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
     // Cap stored smart memories per type — oldest entries of each type drop off.
     for (const [type, col] of [['fact','mem_max_fact'],['event','mem_max_event'],['relationship','mem_max_relationship'],['preference','mem_max_preference']]) {
-        const cap = room[col] || 0;
+        const cap = mem[col] || 0;
         if (cap <= 0) continue;
         db.prepare(`DELETE FROM memories WHERE origin='smart' AND type=? AND memories_id_pk IN
             (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
@@ -251,7 +272,7 @@ export async function maybeSummarize(roomId) {
             .run(type, roomId, type, roomId, type, cap);
     }
     // Global cap (mem_max) as a safety net across all types.
-    const totalCap = room.mem_max || 0;
+    const totalCap = mem.mem_max || 0;
     if (totalCap > 0) {
         db.prepare(`DELETE FROM memories WHERE origin='smart' AND memories_id_pk IN
             (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
@@ -263,9 +284,9 @@ export async function maybeSummarize(roomId) {
     }
     // Auto-tune: when enabled, raise the injection budget so stored smart
     // memories aren't dropped purely for exceeding the current budget.
-    if (room.mem_autotune) {
+    if (mem.mem_autotune) {
         const used = db.prepare(`SELECT COALESCE(SUM(LENGTH(m.content)/4.0),0) AS s FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart'`).get(roomId)?.s || 0;
-        const b = room.mem_budget || 800;
+        const b = mem.mem_budget || 800;
         if (used > b && b < 8000) db.prepare('UPDATE rooms SET mem_budget=? WHERE rooms_id_pk=?').run(Math.ceil(used), roomId);
     }
 }
