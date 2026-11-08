@@ -196,7 +196,8 @@ function renderList(){
   $('list').innerHTML=curTab==='settings'?'':
     mems.map(m=>`
     <div class="card">
-      <div><div class="desc"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''} · ${esc(memScope(m.card_id))}</div></div>
+      <div><div class="desc"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''} · ${esc(memScope(m.card_id))}</div>
+      <input placeholder="trigger keywords — inject only when mentioned" value="${esc(m.triggers||'')}" style="font-size:.8em;margin-top:4px;width:70%" onchange="api('memories/triggers',{id:${m.id},triggers:this.value})"></div>
       <div class="btns"><button class="del" onclick="del(${m.id})">Delete</button></div>
     </div>`).join('')||`<small>No ${curTab==='auto'?'smart':'permanent'} memories yet.</small>`;
 }

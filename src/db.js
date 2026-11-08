@@ -147,6 +147,7 @@ export function migrateSchema() {
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
     if (!mecols.includes('source')) db.exec("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'manual'");
+    if (!mecols.includes('triggers')) db.exec("ALTER TABLE memories ADD COLUMN triggers TEXT DEFAULT ''");
     const pcols = db.prepare('PRAGMA table_info(api_profiles)').all().map(c => c.name);
     if (!pcols.includes('strip_prefix')) db.exec('ALTER TABLE api_profiles ADD COLUMN strip_prefix INTEGER DEFAULT 1');
     if (!pcols.includes('headers')) db.exec("ALTER TABLE api_profiles ADD COLUMN headers TEXT DEFAULT '{}'");

@@ -61,9 +61,12 @@ export async function generateReply(roomId, card) {
     // Capped at the room's injection token budget (chars/4 estimate).
     const budget = db.prepare('SELECT mem_budget FROM rooms WHERE id=?').get(roomId)?.mem_budget ?? 500;
     const cap = (rows, acc) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= budget); };
-    const roomMems = cap(db.prepare('SELECT content FROM memories WHERE room_id=? AND card_id IS NULL ORDER BY id DESC').all(roomId).reverse(), 0);
-    const mems = cap(db.prepare('SELECT content FROM memories WHERE card_id=? AND room_id=? ORDER BY id DESC')
-        .all(card.id, roomId).reverse(), roomMems.reduce((a, r) => a + tok(r.content), 0));
+    const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
+    const active = r => !r.triggers || r.triggers.split(/[\s,]+/).filter(Boolean)
+        .some(t => recentText.includes(t.toLowerCase()));
+    const roomMems = cap(db.prepare('SELECT content,triggers FROM memories WHERE room_id=? AND card_id IS NULL ORDER BY id DESC').all(roomId).reverse().filter(active), 0);
+    const mems = cap(db.prepare('SELECT content,triggers FROM memories WHERE card_id=? AND room_id=? ORDER BY id DESC')
+        .all(card.id, roomId).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
     const memText = (roomMems.length || mems.length)
         ? [
             roomMems.length && 'What happened here:\n' + roomMems.map(m => '- ' + m.content).join('\n'),
