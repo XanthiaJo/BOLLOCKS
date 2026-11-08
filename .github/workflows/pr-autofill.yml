@@ -1,7 +1,8 @@
 name: PR Autofill
 
-# Fills a PR's body from its commits when it's opened — every commit in the
-# PR as `- <sha> <message>`. The title is left alone (whatever's typed).
+# On PR open: title = highest-bump conventional commit (BREAKING/! > feat >
+# rest), body = every commit as `- <sha> <message>`. Merge commits inherit
+# the body via the repo's squash/merge commit-message settings (PR_BODY).
 
 on:
   pull_request:
@@ -19,7 +20,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fill body from commits
+      - name: Fill title and body from commits
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -27,7 +28,16 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           git fetch origin "$BASE" --depth=1 2>/dev/null || git fetch origin
-          BODY=$(git log --format='%h %s' "$BASE..$HEAD" 2>/dev/null | sed 's/^/- /')
+          COMMITS=$(git log --format='%h %s' "$BASE..$HEAD")
+
+          # Highest-bump commit type wins the title.
+          TITLE=$(echo "$COMMITS" | grep -oP '(?<= )(feat|fix|chore|docs|refactor|ci|test)(\(.+))?!:.*' | head -1 || true)
+          [ -z "$TITLE" ] && TITLE=$(echo "$COMMITS" | grep -oP '(?<= )feat(\(.+))?:.*' | head -1 || true)
+          [ -z "$TITLE" ] && TITLE=$(echo "$COMMITS" | head -1 | sed 's/^[^ ]* //')
+          [ -z "$TITLE" ] && TITLE="Update"
+
+          BODY=$(echo "$COMMITS" | sed 's/^/- /')
           [ -z "$BODY" ] && BODY="- (no commits found)"
-          gh pr edit "$PR_NUMBER" --body "$BODY"
-          echo "$BODY"
+
+          gh pr edit "$PR_NUMBER" --title "$TITLE" --body "$BODY"
+          echo "title: $TITLE"; echo "$BODY"
