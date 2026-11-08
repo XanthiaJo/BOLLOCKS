@@ -203,17 +203,14 @@ export async function maybeSummarize(roomId) {
     });
     if (!resp.ok) return;
     const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
-    const ins = db.prepare("INSERT INTO memories (card_id,room_id,content,type,source) VALUES (?,?,?,?,'auto')");
-    const findCard = n => roomCards.find(c => c.name.toLowerCase() === n.toLowerCase())?.id ?? null;
+    const ins = db.prepare("INSERT INTO memories (card_id,room_id,content,type,source) VALUES (NULL,?,?,?,'auto')");
     for (const line of text.split('\n')) {
         let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
-        const who = fact.match(/^\[([^\]]+)\]\s*/);
-        const cardId = who && who[1].toLowerCase() !== 'shared' ? findCard(who[1]) : null;
-        if (who) fact = fact.slice(who[0].length);
+        fact = fact.replace(/^\[[^\]]+\]\s*/, ''); // strip any [Name] prefix — shared scope only
         const tag = fact.match(/^\[(fact|event|relationship|preference)\]\s*/i);
         const type = tag ? tag[1].toLowerCase() : 'fact';
         if (tag) fact = fact.slice(tag[0].length);
-        if (fact.length > 10) ins.run(cardId, roomId, fact, type);
+        if (fact.length > 10) ins.run(roomId, fact, type);
     }
     // Cap stored smart memories — oldest auto entries drop off.
     db.prepare(`DELETE FROM memories WHERE room_id=? AND source='auto' AND id NOT IN
