@@ -44,20 +44,20 @@ Single SQLite file alongside the code. Schema:
 ```mermaid
 erDiagram
     USERS {
-        int id PK
+        int users_id_pk PK
         string handle
         string password_hash
         string salt
         string settings
     }
     SESSIONS {
-        string token PK
-        int user_id FK
+        string sessions_token_pk PK
+        int users_id_fk FK
         string created
     }
     API_PROFILES {
-        int id PK
-        int user_id FK
+        int api_profiles_id_pk PK
+        int users_id_fk FK
         string name
         string api_url
         string model
@@ -69,8 +69,8 @@ erDiagram
         int max_response
     }
     CARDS {
-        int id PK
-        int owner_id FK
+        int cards_id_pk PK
+        int owner_users_id_fk FK
         string name
         string description
         string personality
@@ -82,47 +82,45 @@ erDiagram
         string alternate_greetings
         string tags
         string creator
+        string creatorcomment
         string character_version
         string avatar
+        string card_json
         int is_persona
-        int profile_id FK
+        int api_profiles_id_fk FK
+    }
+    MEMBERS {
+        int members_id_pk PK
+        int cards_id_fk FK
+        int talkativeness
+    }
+    ROOM_MEMBERS {
+        int rooms_id_fk PK,FK
+        int members_id_fk PK,FK
     }
     ROOMS {
-        int id PK
+        int rooms_id_pk PK
         string name
-        int world_book_id FK
         string ai_trigger
         int auto_mem
         int mem_every
-        int mem_last_id
         int mem_budget
         int mem_max
-        int mem_profile_id FK
         int max_context
-    }
-    MEMBERS {
-        int id PK
-        int room_id FK
-        int user_id FK
-        int card_id FK
-        string kind
-        int talkativeness
+        int mem_last_messages_id
     }
     MESSAGES {
-        int id PK
-        int room_id FK
-        int sender_user_id FK
-        int card_id FK
-        string kind
-        string name
+        int messages_id_pk PK
+        int rooms_id_fk FK
+        int cards_id_fk FK
         string text
         string send_date
         int supersedes
     }
     MEMORIES {
-        int id PK
-        int card_id FK "null = shared"
-        int room_id FK
+        int memories_id_pk PK
+        int cards_id_fk FK "null = shared"
+        int rooms_id_fk FK
         string content
         string created
         string type
@@ -130,52 +128,64 @@ erDiagram
         string triggers
     }
     WORLD_BOOKS {
-        int id PK
-        int owner_id FK
+        int world_books_id_pk PK
+        int owner_users_id_fk FK
         string name
         string created
     }
     ROOM_BOOKS {
-        int room_id PK,FK
-        int book_id PK,FK
+        int rooms_id_fk PK,FK
+        int world_books_id_fk PK,FK
+    }
+    BOOK_ENTRIES {
+        int world_books_id_fk PK,FK
+        int world_entries_id_fk PK,FK
     }
     WORLD_ENTRIES {
-        int id PK
-        int book_id FK
-        string keys
-        string keysecondary
+        int world_entries_id_pk PK
         string content
         int constant
         int enabled
         int ord
         string comment
     }
+    WORLD_ENTRY_KEYS {
+        int world_entries_id_fk PK,FK
+        string word PK
+        string kind PK "primary|secondary"
+    }
 
     USERS ||--o{ SESSIONS : has
     USERS ||--o{ API_PROFILES : owns
     USERS ||--o{ CARDS : owns
-    USERS ||--o{ MEMBERS : "joins (human)"
-    USERS ||--o{ MESSAGES : sends
     USERS ||--o{ WORLD_BOOKS : owns
-    ROOMS ||--o{ MEMBERS : contains
+    CARDS ||--o{ MEMBERS : "is a member"
+    CARDS ||--o{ MESSAGES : speaks
+    CARDS ||--o{ MEMORIES : "scoped (null = room)"
+    CARDS }o--o| API_PROFILES : "optional override"
+    MEMBERS ||--o{ ROOM_MEMBERS : sits
+    ROOMS ||--o{ ROOM_MEMBERS : has
     ROOMS ||--o{ MESSAGES : holds
     ROOMS ||--o{ MEMORIES : has
     ROOMS ||--o{ ROOM_BOOKS : links
     WORLD_BOOKS ||--o{ ROOM_BOOKS : linked
-    CARDS ||--o{ MEMBERS : "joins (ai)"
-    CARDS }o--o| API_PROFILES : "uses (optional)"
-    CARDS ||--o{ MEMORIES : "scoped (null = room)"
-    CARDS ||--o{ MESSAGES : speaks
-    WORLD_BOOKS ||--o{ WORLD_ENTRIES : contains
-    WORLD_ENTRIES }o--|| ROOMS : "injected in"
+    WORLD_BOOKS ||--o{ BOOK_ENTRIES : contains
+    WORLD_ENTRIES ||--o{ BOOK_ENTRIES : member
+    WORLD_ENTRIES ||--o{ WORLD_ENTRY_KEYS : triggers
+    MESSAGES }o--o| MESSAGES : supersedes
 ```
 
-- **users** — accounts (handle, password hash/salt)
-- **sessions** — bearer tokens
-- **rooms** — chats (`ai_trigger`, `auto_mem`, `mem_every`, `mem_budget`, `mem_max`, `mem_profile_id`, `max_context`, `world_book_id`)
-- **members** — room roster (human `user_id` or AI `card_id`, `talkativeness`)
-- **cards** — characters (owner, ST fields, `is_persona`, `profile_id`, `avatar`)
+- **users** — accounts (`handle`, `password_hash`/`salt`)
+- **sessions** — bearer tokens (`sessions_token_pk`)
 - **api_profiles** — connections (`api_url`, `model`, `key`, `active`, `headers`, `context_size`, `max_response`)
-- **world_books / world_entries** — lorebooks (keys, secondary keys, constant, order, enabled)
-- **messages** — chat log (`room_id`, `sender_user_id`, `card_id`, `name`, `text`, `kind`)
-- **memories** — `room_id` + nullable `card_id` (NULL = shared house memory), `type`, `source` (manual/auto), `triggers`
+- **cards** — characters (owner, ST fields, `is_persona`, `api_profiles_id_fk` override, `avatar`)
+- **members** — a card's seat: `cards_id_fk` + `talkativeness` (persona card = human)
+- **room_members** — junction: which members sit in which rooms
+- **rooms** — chats (`ai_trigger`, `auto_mem`, `mem_every`, `mem_budget`, `mem_max`, `max_context`, `mem_last_messages_id`)
+- **messages** — chat log (`rooms_id_fk`, `cards_id_fk` sender, `text`, `supersedes`)
+- **memories** — `cards_id_fk` nullable (NULL = shared room memory), `type`, `source` (manual/auto), `triggers`
+- **world_books** — lorebooks (owner, name)
+- **room_books** — junction: which books feed which rooms
+- **world_entries** — lore entries (`content`, `constant`, `enabled`, `ord`, `comment`)
+- **world_entry_keys** — trigger keywords (`word`, `kind` primary|secondary)
+- **book_entries** — junction: which entries live in which books
