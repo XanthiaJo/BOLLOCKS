@@ -35,6 +35,7 @@ button.act{background:#4a7c3a}
     <input id="ed_url" placeholder="API URL e.g. https://openrouter.ai/api/v1">
     <input id="ed_model" placeholder="Model e.g. openrouter/free">
     <input id="ed_key" type="password" placeholder="API key (blank keeps existing)">
+    <input id="ed_headers" placeholder='Extra headers JSON — {"X-Title":"My App"}' title="Merged into every request (e.g. OpenRouter HTTP-Referer)">
     <h4 style="margin:14px 0 4px;color:#789">Chat Completion <small>(coming soon)</small></h4>
     <div style="opacity:.45;pointer-events:none">
       <label class="cb"><input type="checkbox" disabled> Unlocked Context Size</label>
@@ -96,12 +97,13 @@ async function load(){
     </div>`).join('')||'<small>No profiles yet.</small>';
 }
 
-function edit(p){$('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';scrollTo(0,0)}
+function edit(p){$('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';$('ed_headers').value=p.headers&&p.headers!=='{}'?p.headers:'';scrollTo(0,0)}
 function clearEd(){$('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value=''}
 
 async function saveProf(){
   const id=$('ed_id').value;
-  const b={name:$('ed_name').value.trim(),apiUrl:$('ed_url').value.trim(),model:$('ed_model').value.trim(),key:$('ed_key').value.trim()};
+  const b={name:$('ed_name').value.trim(),apiUrl:$('ed_url').value.trim(),model:$('ed_model').value.trim(),key:$('ed_key').value.trim(),headers:$('ed_headers').value.trim()||'{}'};
+  try{JSON.parse(b.headers)}catch{return alert('Headers must be valid JSON')}
   if(!b.name)return alert('needs a name');
   if(id)await api('profiles/update',{id:Number(id),...b});
   else await api('profiles',b);

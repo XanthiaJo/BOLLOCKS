@@ -121,6 +121,7 @@ export async function generateReply(roomId, card) {
         headers: {
             'Content-Type': 'application/json',
             ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
+            ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })(),
         },
         body: JSON.stringify({
             model: conn.model || 'local',
@@ -179,7 +180,8 @@ export async function maybeSummarize(roomId) {
     db.prepare('UPDATE rooms SET mem_last_id=? WHERE id=?').run(lastId, roomId);
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}) },
+        headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
+            ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })() },
         body: JSON.stringify({
             model: conn.model || 'local',
             messages: [
