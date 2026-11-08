@@ -219,10 +219,14 @@ const router = {
     // Card avatar image.
     'GET /api/avatar': (req, res) => {
         const id = Number(new URL(req.url, 'http://x').searchParams.get('id'));
-        const c = db.prepare('SELECT avatar FROM cards WHERE id=?').get(id);
-        if (!c?.avatar) return send(res, 404, { error: 'no avatar' });
-        const file = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', c.avatar);
-        if (!fs.existsSync(file)) return send(res, 404, { error: 'no avatar file' });
+        const c = db.prepare('SELECT avatar,name FROM cards WHERE id=?').get(id);
+        const file = c?.avatar && path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', c.avatar);
+        if (!c || !c.avatar || !fs.existsSync(file)) {
+            const ch = (c?.name || '?').replace(/[^A-Za-z0-9]/g, '').slice(0, 1).toUpperCase() || '?';
+            const hue = [...(c?.name || '')].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 360;
+            res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
+            return res.end(`<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72"><rect width="72" height="72" fill="hsl(${hue},40%,30%)"/><text x="36" y="47" font-family="system-ui" font-size="34" fill="#ddd" text-anchor="middle">${ch}</text></svg>`);
+        }
         res.writeHead(200, { 'Content-Type': 'image/png' });
         fs.createReadStream(file).pipe(res);
     },

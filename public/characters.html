@@ -108,7 +108,7 @@ async function load(){
   me=who.handle;
   $('list').innerHTML=(cards||[]).map(c=>`
     <div class="card" style="cursor:pointer" onclick='edit(${JSON.stringify(c).replace(/'/g,"&#39;")})'>
-      <img src="${c.avatar?'/api/avatar?id='+c.id:'/api/avatar?id=0'}" onerror="this.style.visibility='hidden'">
+      <img src="/api/avatar?id=${c.id}" onerror="this.style.visibility='hidden'">
       <div>
         <div class="name">${esc(c.name)}</div>
         <div class="desc">${esc(c.description)}</div>
