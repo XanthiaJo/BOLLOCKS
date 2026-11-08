@@ -64,7 +64,7 @@ export async function generateReply(roomId, card) {
 
     // Long-term memories: shared room facts + this character's own.
     // Capped at the room's injection token budget (chars/4 estimate).
-    const budget = db.prepare('SELECT mem_budget FROM rooms WHERE rooms_id_pk=?').get(roomId)?.mem_budget ?? 500;
+    const budget = db.prepare('SELECT mem_budget FROM rooms WHERE rooms_id_pk=?').get(roomId)?.mem_budget ?? 800;
     const cap = (rows, acc) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= budget); };
     const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
     const active = r => !r.triggers || r.triggers.split(/[\s,]+/).filter(Boolean)
@@ -188,14 +188,6 @@ export async function maybeSummarize(roomId) {
         MSG_SQL + ' WHERE m.rooms_id_fk=? AND m.messages_id_pk>? ORDER BY m.messages_id_pk LIMIT 30')
         .all(roomId, room.mem_last_messages_id);
     if (!excerpt.length) return;
-    const roomCards = [
-        ...db.prepare(`SELECT c.cards_id_pk,c.name FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards c ON c.cards_id_pk=m.cards_id_fk
-            WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0`).all(roomId),
-        // Human members' persona cards — facts about players belong to them too.
-        ...db.prepare(`SELECT c.cards_id_pk AS id,c.name FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
-            JOIN cards c ON c.cards_id_pk=m.cards_id_fk
-            WHERE rm.rooms_id_fk=? AND c.is_persona=1`).all(roomId),
-    ];
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
@@ -203,7 +195,7 @@ export async function maybeSummarize(roomId) {
         body: JSON.stringify({
             model: conn.model || 'local',
             messages: [
-                { role: 'system', content: `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Start each with the character it belongs to: [${roomCards.map(c => c.name).join('] [')}] or [shared] if room-wide. Then a type tag [fact], [event], [relationship] or [preference]. No narration.` },
+                { role: 'system', content: `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Each bullet must be a complete, self-contained sentence that names its subject (e.g. "Blake has a pending review pile for API configurations including Venice API."). Start with a type tag [fact], [event], [relationship] or [preference]. Use [shared] only for room-wide facts, and include the subject in the sentence. No narration, no pronouns without a named subject.` },
                 { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
             ],
             temperature: 0.3, max_tokens: 2048,
@@ -215,7 +207,7 @@ export async function maybeSummarize(roomId) {
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
     for (const line of text.split('\n')) {
         let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
-        fact = fact.replace(/^\[[^\]]+\]\s*/, ''); // strip any [Name] prefix — shared scope only
+        fact = fact.replace(/^\[[^\]]+\]\s*/, ''); // strip leading [Name]/[shared] scope tag
         const tag = fact.match(/^\[(fact|event|relationship|preference)\]\s*/i);
         const type = tag ? tag[1].toLowerCase() : 'fact';
         if (tag) fact = fact.slice(tag[0].length);
