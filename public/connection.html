@@ -35,7 +35,7 @@ button.act{background:#4a7c3a}
     <input id="ed_url" placeholder="API URL e.g. https://openrouter.ai/api/v1">
     <input id="ed_model" placeholder="Model e.g. openrouter/free">
     <input id="ed_key" type="password" placeholder="API key (blank keeps existing)">
-    <input id="ed_headers" placeholder='Extra headers JSON — {"X-Title":"My App"}' title="Merged into every request (e.g. OpenRouter HTTP-Referer)">
+    <input id="ed_headers" placeholder='Extra headers — JSON or "name: value" lines' title="Merged into every request (e.g. OpenRouter HTTP-Referer)">
     <h4 style="margin:14px 0 4px;color:#789">Chat Completion <small>(coming soon)</small></h4>
     <div style="opacity:.45;pointer-events:none">
       <label class="cb"><input type="checkbox" disabled> Unlocked Context Size</label>
@@ -103,7 +103,15 @@ function clearEd(){$('edtitle').textContent='New profile';$('ed_id').value='';$(
 async function saveProf(){
   const id=$('ed_id').value;
   const b={name:$('ed_name').value.trim(),apiUrl:$('ed_url').value.trim(),model:$('ed_model').value.trim(),key:$('ed_key').value.trim(),headers:$('ed_headers').value.trim()||'{}'};
-  try{JSON.parse(b.headers)}catch{return alert('Headers must be valid JSON')}
+  if(b.headers!=='{}'){
+    try{JSON.parse(b.headers)}
+    catch{
+      // Accept "name: value" lines and convert to JSON
+      const h={};
+      for(const line of b.headers.split(/[\n,]+/)){const i=line.indexOf(':');if(i<1)return alert('Headers must be JSON or "name: value" lines');h[line.slice(0,i).trim()]=line.slice(i+1).trim();}
+      b.headers=JSON.stringify(h);
+    }
+  }
   if(!b.name)return alert('needs a name');
   if(id)await api('profiles/update',{id:Number(id),...b});
   else await api('profiles',b);
