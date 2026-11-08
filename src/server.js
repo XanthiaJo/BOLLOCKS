@@ -360,7 +360,9 @@ const router = {
         const b = await readBody(req);
         db.prepare('DELETE FROM messages WHERE rooms_id_fk=?').run(b.world_books_id_pk);
         db.prepare('DELETE FROM room_members WHERE rooms_id_fk=?').run(b.world_books_id_pk);
-        db.prepare('DELETE FROM memories WHERE rooms_id_fk=?').run(b.world_books_id_pk);
+        db.prepare('DELETE FROM memory_cards WHERE memories_id_fk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(b.world_books_id_pk);
+        db.prepare('DELETE FROM memories WHERE memories_id_pk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(b.world_books_id_pk);
+        db.prepare('DELETE FROM room_memories WHERE rooms_id_fk=?').run(b.world_books_id_pk);
         db.prepare('DELETE FROM room_books WHERE rooms_id_fk=?').run(b.world_books_id_pk);
         db.prepare('DELETE FROM rooms WHERE rooms_id_pk=?').run(b.world_books_id_pk);
         send(res, 200, { ok: true });
@@ -472,7 +474,7 @@ const router = {
             FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
             LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk LEFT JOIN users u ON u.users_id_pk=c.owner_users_id_fk
             LEFT JOIN cards pc ON pc.owner_users_id_fk=u.users_id_pk AND pc.is_persona=1 WHERE rm.rooms_id_fk=?`).all(roomId);
-        const lastMem = db.prepare("SELECT content text FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY memories_id_pk DESC LIMIT 1").get(roomId);
+        const lastMem = db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId);
         send(res, 200, { messages: msgs, members, lastMem });
     },
     'GET /api/stream': (req, res, u) => {
@@ -564,7 +566,7 @@ const router = {
     },
     'POST /api/messages/delete': async (req, res, u) => {
         const b = await readBody(req);
-        const m = db.prepare('SELECT rooms_id_fk FROM messages WHERE memories_id_pk=?').get(b.world_books_id_pk);
+        const m = db.prepare('SELECT rooms_id_fk FROM messages WHERE messages_id_pk=?').get(b.world_books_id_pk);
         if (!m) return send(res, 404, { error: 'no message' });
         db.prepare('DELETE FROM messages WHERE messages_id_pk=?').run(b.world_books_id_pk);
         push(m.rooms_id_fk, { type: 'delete', id: b.world_books_id_pk });
