@@ -124,7 +124,7 @@ export function activeProfile(userId) {
 /** Schema touch-ups for existing DBs (CREATE TABLE only applies on fresh). */
 export function migrateSchema() {
     // rooms.world_book_id + duplicate world_books_id_fk are dead — junction handles links.
-    for (const col of ['world_book_id','world_books_id_fk','mem_last_id'])
+    for (const col of ['world_book_id','world_books_id_fk','mem_last_id','mem_profile_id'])
         if (db.prepare('PRAGMA table_info(rooms)').all().some(c => c.name === col))
             db.exec('ALTER TABLE rooms DROP COLUMN ' + col);
     // Proper key naming: {table}_id_pk / {ref}_id_fk � runs first so the
