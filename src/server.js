@@ -431,7 +431,7 @@ const router = {
         const vals = [b.auto ? 1 : 0, b.every ?? 10, b.budget ?? 800, b.max ?? 50,
             b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
             b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
-            b.genBudget ?? 8192, b.unlimited ? 1 : 0, b.unified ? 1 : 0, b.triggers ? 1 : 0,
+            b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
             b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0];
         const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,auto_mem,mem_every,mem_budget,mem_max,
             mem_max_fact,mem_max_event,mem_max_relationship,mem_max_preference,mem_extraction_prompt,
@@ -452,7 +452,7 @@ const router = {
             .run(b.auto ? 1 : 0, b.every ?? 10, b.budget ?? 800, b.max ?? 50,
                 b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
                 b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
-                b.genBudget ?? 8192, b.unlimited ? 1 : 0, b.unified ? 1 : 0, b.triggers ? 1 : 0,
+                b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
                 b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0,
                 b.id, u.users_id_pk);
         send(res, 200, { ok: true });

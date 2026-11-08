@@ -91,9 +91,9 @@ CREATE TABLE IF NOT EXISTS mem_profiles (
     mem_extraction_prompt TEXT DEFAULT '',
     mem_context_threshold INTEGER DEFAULT 80,
     mem_response_length INTEGER DEFAULT 2000,
-    mem_gen_budget INTEGER DEFAULT 8192,
+    mem_gen_budget INTEGER DEFAULT 2000,
     mem_unlimited INTEGER DEFAULT 0,
-    mem_unified INTEGER DEFAULT 0,
+    mem_unified INTEGER DEFAULT 1,
     mem_triggers INTEGER DEFAULT 0,
     mem_autotune INTEGER DEFAULT 0,
     mem_refresh INTEGER DEFAULT 1,
@@ -212,9 +212,9 @@ export function migrateSchema() {
     if (!rcols.includes('mem_extraction_prompt')) db.exec("ALTER TABLE rooms ADD COLUMN mem_extraction_prompt TEXT DEFAULT ''");
     if (!rcols.includes('mem_context_threshold')) db.exec('ALTER TABLE rooms ADD COLUMN mem_context_threshold INTEGER DEFAULT 80');
     if (!rcols.includes('mem_response_length')) db.exec('ALTER TABLE rooms ADD COLUMN mem_response_length INTEGER DEFAULT 2000');
-    if (!rcols.includes('mem_gen_budget')) db.exec('ALTER TABLE rooms ADD COLUMN mem_gen_budget INTEGER DEFAULT 8192');
+    if (!rcols.includes('mem_gen_budget')) db.exec('ALTER TABLE rooms ADD COLUMN mem_gen_budget INTEGER DEFAULT 2000');
     if (!rcols.includes('mem_unlimited')) db.exec('ALTER TABLE rooms ADD COLUMN mem_unlimited INTEGER DEFAULT 0');
-    if (!rcols.includes('mem_unified')) db.exec('ALTER TABLE rooms ADD COLUMN mem_unified INTEGER DEFAULT 0');
+    if (!rcols.includes('mem_unified')) db.exec('ALTER TABLE rooms ADD COLUMN mem_unified INTEGER DEFAULT 1');
     if (!rcols.includes('mem_triggers')) db.exec('ALTER TABLE rooms ADD COLUMN mem_triggers INTEGER DEFAULT 0');
     if (!rcols.includes('mem_autotune')) db.exec('ALTER TABLE rooms ADD COLUMN mem_autotune INTEGER DEFAULT 0');
     if (!rcols.includes('mem_refresh')) db.exec('ALTER TABLE rooms ADD COLUMN mem_refresh INTEGER DEFAULT 1');
@@ -223,6 +223,16 @@ export function migrateSchema() {
     if (!rcols.includes('mem_extraction_profile_id')) db.exec('ALTER TABLE rooms ADD COLUMN mem_extraction_profile_id INTEGER DEFAULT 0');
     if (!rcols.includes('mem_profiles_id_fk')) db.exec('ALTER TABLE rooms ADD COLUMN mem_profiles_id_fk INTEGER DEFAULT 0');
     if (!rcols.includes('max_context')) db.exec('ALTER TABLE rooms ADD COLUMN max_context INTEGER DEFAULT 0');
+    // One-time: sensible memory defaults — unified injection on by default,
+    // and a tighter extraction generation budget (extraction only emits a
+    // handful of bullets; the old 8192 default was far more headroom than
+    // any extraction response needs). Guarded by a PRAGMA user_version bump.
+    if (Number(db.prepare('PRAGMA user_version').get()?.user_version ?? 0) < 2) {
+        db.exec('UPDATE rooms SET mem_unified=1');
+        db.exec('UPDATE rooms SET mem_gen_budget=2000 WHERE mem_gen_budget=8192');
+        db.exec('UPDATE mem_profiles SET mem_unified=1, mem_gen_budget=2000 WHERE mem_gen_budget=8192');
+        db.exec('PRAGMA user_version=2');
+    }
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
     if (!mecols.includes('source')) db.exec("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'manual'");

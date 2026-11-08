@@ -76,7 +76,7 @@
     <div class="lbl" title="Which API profile runs memory extraction — pick a cheaper model here if you like.">Extraction profile (default = active)</div>
     <select id="set_profile" onchange="saveSet()" style="width:220px"></select>
     <div>
-      <div class="row"><span class="lbl" title="Max tokens the memory LLM may use per extraction call. Unlimited (-1) warns it may be slow/costly.">Generation budget (tokens)</span><input type="number" id="set_genbudget" min="256" max="32768" value="8192" onchange="saveSet()" style="width:80px;display:inline-block"></div>
+      <div class="row"><span class="lbl" title="Max tokens the memory LLM may use per extraction call. Unlimited (-1) warns it may be slow/costly.">Generation budget (tokens)</span><input type="number" id="set_genbudget" min="256" max="32768" value="2000" onchange="saveSet()" style="width:80px;display:inline-block"></div>
       <label class="cb"><input type="checkbox" id="set_unlimited" onchange="saveSet()"> Unlimited (-1)</label>
       <label class="cb"><input type="checkbox" id="set_activity" onchange="saveSet()"> Show activity indicator</label>
       <label class="cb"><input type="checkbox" id="set_unified" onchange="saveSet()"> Unified injection</label>
@@ -292,7 +292,7 @@ async function load(){
   $('set_auto').checked=!!sv.auto_mem;$('set_every').value=sv.mem_every||10;$('set_budget').value=sv.mem_budget||500;$('set_max').value=sv.mem_max||50;
   $('set_max_fact').value=sv.mem_max_fact||50;$('set_max_event').value=sv.mem_max_event||50;$('set_max_rel').value=sv.mem_max_relationship||50;$('set_max_pref').value=sv.mem_max_preference||50;
   $('set_prompt').value=sv.mem_extraction_prompt||'';$('set_ctx').value=sv.mem_context_threshold||80;$('set_resplen').value=sv.mem_response_length||2000;
-  $('set_genbudget').value=sv.mem_gen_budget||8192;$('set_unlimited').checked=!!sv.mem_unlimited;$('set_unified').checked=!!sv.mem_unified;$('set_triggers').checked=!!sv.mem_triggers;$('set_autotune').checked=!!sv.mem_autotune;$('set_refresh').value=sv.mem_refresh||1;
+  $('set_genbudget').value=sv.mem_gen_budget||2000;$('set_unlimited').checked=!!sv.mem_unlimited;$('set_unified').checked=!!sv.mem_unified;$('set_triggers').checked=!!sv.mem_triggers;$('set_autotune').checked=!!sv.mem_autotune;$('set_refresh').value=sv.mem_refresh||1;
   $('set_activity').checked=!!sv.mem_activity;
   $('set_profile').value=sv.mem_extraction_profile_id||0;
   lockSet(!!followed&&sv!==rm);
@@ -317,29 +317,29 @@ async function load(){
 function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') curTab='user';load()}
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
-function collectSet(){return {room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0,extractionPrompt:$('set_prompt').value,contextThreshold:Number($('set_ctx').value)||80,responseLength:Number($('set_resplen').value)||2000,profileId:$('set_profile').value?Number($('set_profile').value):0,genBudget:Number($('set_genbudget').value)||8192,unlimited:$('set_unlimited').checked?1:0,unified:$('set_unified').checked?1:0,triggers:$('set_triggers').checked?1:0,autotune:$('set_autotune').checked?1:0,refresh:Number($('set_refresh').value)||1,activity:$('set_activity').checked?1:0}}
+function collectSet(){return {room:ROOM,auto:$('set_auto').checked,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||500,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0,extractionPrompt:$('set_prompt').value,contextThreshold:Number($('set_ctx').value)||80,responseLength:Number($('set_resplen').value)||2000,profileId:$('set_profile').value?Number($('set_profile').value):0,genBudget:Number($('set_genbudget').value)||2000,unlimited:$('set_unlimited').checked?1:0,unified:$('set_unified').checked?1:0,triggers:$('set_triggers').checked?1:0,autotune:$('set_autotune').checked?1:0,refresh:Number($('set_refresh').value)||1,activity:$('set_activity').checked?1:0}}
 async function saveSet(){await api('room/memsettings',collectSet())}
 // --- Memory profiles (like API profiles: named presets assigned per chat) ---
 const SET_FIELDS=['set_auto','set_every','set_budget','set_max','set_max_fact','set_max_event','set_max_rel','set_max_pref','set_prompt','set_ctx','set_resplen','set_genbudget','set_unlimited','set_unified','set_triggers','set_autotune','set_refresh','set_activity','set_profile'];
 function lockSet(on){for(const id of SET_FIELDS)$(id).disabled=!!on;$('setbody').classList.toggle('ph',!!on);$('mpfolownote').style.display=on?'block':'none';}
 async function pickMProf(v){await api('room/memsettings',{room:ROOM,memProfile:Number(v)||0});load()}
 async function saveAsProfile(){const name=prompt('Name this memory profile:');if(!name)return;await api('memprofiles',{...collectSet(),name});load()}
-function ppCollect(){return {id:Number($('ed_pid').value)||0,name:$('ed_name').value.trim(),auto:$('ed_auto').checked,every:Number($('ed_every').value)||10,budget:Number($('ed_budget').value)||800,max:Number($('ed_max').value)||50,maxFact:Number($('ed_max_fact').value)||0,maxEvent:Number($('ed_max_event').value)||0,maxRel:Number($('ed_max_rel').value)||0,maxPref:Number($('ed_max_pref').value)||0,extractionPrompt:$('ed_prompt').value,contextThreshold:Number($('ed_ctx').value)||80,responseLength:Number($('ed_resplen').value)||2000,genBudget:Number($('ed_genbudget').value)||8192,unlimited:$('ed_unlimited').checked?1:0,unified:$('ed_unified').checked?1:0,triggers:$('ed_triggers').checked?1:0,autotune:$('ed_autotune').checked?1:0,refresh:Number($('ed_refresh').value)||1,activity:$('ed_activity').checked?1:0,profileId:Number($('ed_profile').value)||0}}
+function ppCollect(){return {id:Number($('ed_pid').value)||0,name:$('ed_name').value.trim(),auto:$('ed_auto').checked,every:Number($('ed_every').value)||10,budget:Number($('ed_budget').value)||800,max:Number($('ed_max').value)||50,maxFact:Number($('ed_max_fact').value)||0,maxEvent:Number($('ed_max_event').value)||0,maxRel:Number($('ed_max_rel').value)||0,maxPref:Number($('ed_max_pref').value)||0,extractionPrompt:$('ed_prompt').value,contextThreshold:Number($('ed_ctx').value)||80,responseLength:Number($('ed_resplen').value)||2000,genBudget:Number($('ed_genbudget').value)||2000,unlimited:$('ed_unlimited').checked?1:0,unified:$('ed_unified').checked?1:0,triggers:$('ed_triggers').checked?1:0,autotune:$('ed_autotune').checked?1:0,refresh:Number($('ed_refresh').value)||1,activity:$('ed_activity').checked?1:0,profileId:Number($('ed_profile').value)||0}}
 async function saveMP(){const b=ppCollect();if(!b.name)return alert('needs a name');await api(b.id?'memprofiles/update':'memprofiles',b);mpCloseEditor();load()}
 async function editMP(id){const p=(memProfiles||[]).find(x=>x.mem_profiles_id_pk===id);if(!p)return;
   $('ed_title').textContent='Edit '+p.name;$('ed_pid').value=p.mem_profiles_id_pk;$('ed_name').value=p.name;
   $('ed_auto').checked=!!p.auto_mem;$('ed_every').value=p.mem_every||10;$('ed_budget').value=p.mem_budget||800;$('ed_max').value=p.mem_max||50;
   $('ed_max_fact').value=p.mem_max_fact||50;$('ed_max_event').value=p.mem_max_event||50;$('ed_max_rel').value=p.mem_max_relationship||50;$('ed_max_pref').value=p.mem_max_preference||50;
   $('ed_prompt').value=p.mem_extraction_prompt||'';$('ed_ctx').value=p.mem_context_threshold||80;$('ed_resplen').value=p.mem_response_length||2000;
-  $('ed_genbudget').value=p.mem_gen_budget||8192;$('ed_refresh').value=p.mem_refresh||1;
+  $('ed_genbudget').value=p.mem_gen_budget||2000;$('ed_refresh').value=p.mem_refresh||1;
   $('ed_unlimited').checked=!!p.mem_unlimited;$('ed_unified').checked=!!p.mem_unified;$('ed_triggers').checked=!!p.mem_triggers;$('ed_autotune').checked=!!p.mem_autotune;$('ed_activity').checked=!!p.mem_activity;
   $('ed_profile').value=p.mem_extraction_profile_id||0;mpOpenEditor()}
 function newMP(){$('ed_title').textContent='New memory profile';$('ed_pid').value='';$('ed_name').value='';
   $('ed_auto').checked=false;$('ed_every').value=10;$('ed_budget').value=800;$('ed_max').value=50;
   $('ed_max_fact').value=50;$('ed_max_event').value=50;$('ed_max_rel').value=50;$('ed_max_pref').value=50;
   $('ed_prompt').value='';$('ed_ctx').value=80;$('ed_resplen').value=2000;
-  $('ed_genbudget').value=8192;$('ed_refresh').value=1;
-  $('ed_unlimited').checked=false;$('ed_unified').checked=false;$('ed_triggers').checked=false;$('ed_autotune').checked=false;$('ed_activity').checked=false;
+  $('ed_genbudget').value=2000;$('ed_refresh').value=1;
+  $('ed_unlimited').checked=false;$('ed_unified').checked=true;$('ed_triggers').checked=false;$('ed_autotune').checked=false;$('ed_activity').checked=false;
   $('ed_profile').value='0';mpOpenEditor()}
 async function delMP(id){if(confirm('Delete this memory profile? Chats following it fall back to per-chat settings.')){await api('memprofiles/delete',{id});load()}}
 function setupAcc(){
