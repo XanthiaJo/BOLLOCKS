@@ -88,10 +88,11 @@ const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.json());
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+let allProfs=[];
 async function load(){
-  const {profiles}=await get('profiles');
-  $('list').innerHTML=(profiles||[]).map(p=>`
-    <div class="prof${p.active?' on':''}" style="cursor:pointer" onclick='edit(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
+  const {profiles}=await get('profiles');allProfs=profiles||[];
+  $('list').innerHTML=allProfs.map((p,i)=>`
+    <div class="prof${p.active?' on':''}" style="cursor:pointer" onclick="editIdx(${i})">
       <div>
         <div class="name">${esc(p.name)}${p.active?'<span class="badge">active</span>':''}</div>
         <div class="url">${esc(p.api_url)}</div>
@@ -104,6 +105,7 @@ async function load(){
     </div>`).join('')||'<small>No profiles yet.</small>';
 }
 
+function editIdx(i){edit(allProfs[i])}
 function edit(p){document.querySelectorAll('.prof').forEach(el=>el.classList.remove('sel'));event?.target?.closest?.('.prof')?.classList.add('sel');
   $('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';$('ed_headers').value=p.headers&&p.headers!=='{}'?p.headers:'';$('ed_ctx').value=p.context_size||0;$('ed_maxr').value=p.max_response||2048;mpOpenEditor('inline')}
 async function fetchModels(){
@@ -135,7 +137,7 @@ async function saveProf(){
 }
 async function activate(id){await api('profiles/activate',{id});load()}
 async function del(id){if(confirm('Delete this profile?')){await api('profiles/delete',{id});load()}}
-load();
+load().then(newProf);
 </script>
 </body>
 </html>
