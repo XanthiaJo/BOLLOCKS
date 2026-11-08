@@ -16,7 +16,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 - `public/` — frontend (no build step): HTML pages + shared `app.js`, `layout.js`, `layout.css`
 - `scripts/` — maintenance/util scripts (Node ESM `.mjs`)
 - `.github/workflows/` — GitHub Actions
-  - `pr-autofill.yml` — keeps PR title Conventional-Commit-aligned and maintains an autofilled commit list above any hand-written PR body (runs on PR open/sync/reopen)
+  - `pr-autofill.yml` — maintains an autofilled commit list above any hand-written PR body (runs on PR open/sync/reopen); leaves the PR title unchanged
   - `pr-checks.yml` — PR lint checks
   - `beta.yml` / `release.yml` — manual release flows (reusable workflow in `Box-of-Dragons/StructuredChaos`)
 - `data/` — runtime data (gitignored): SQLite DB, imported card images, etc.
@@ -53,7 +53,7 @@ npm run lint:fix
 
 - Use **Conventional Commits** where practical (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`, `test:`, `perf:`, `style:`; `!`/`BREAKING` for breaking changes). CI/release automation relies on commit conventions.
 - Branch flow and release automation are coordinated with `StructuredChaos` workflows (`dev` → beta/release processes; see workflow files). Do not change release/beta workflow behavior without understanding that integration.
-- PRs: `pr-autofill.yml` aligns the title to Conventional Commits and refreshes an autofilled commit list above any manual PR description; `pr-checks.yml` runs lint on PR updates. Ensure `npm run lint` passes before opening/updating a PR.
+- PRs: `pr-autofill.yml` refreshes an autofilled commit list above any manual PR description (without changing the PR title); `pr-checks.yml` runs lint on PR updates. Ensure `npm run lint` passes before opening/updating a PR.
 
 ## Validation
 
