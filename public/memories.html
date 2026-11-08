@@ -205,7 +205,7 @@ let roomCards=[];
 const cardName=id=>id?(roomCards.find(c=>c.id===id)?.name||'#'+id):'shared';
 const roomCardOpts=cur=>`<option value="0"${!cur?' selected':''}>shared</option>`+
   roomCards.map(c=>`<option value="${c.id}"${cur===c.id?' selected':''}>${esc(c.name)}</option>`).join('');
-async function move(id,cardId){await api('memories/move',{id,cardId:Number(cardId)||null});loadMems();}
+async function move(id,cardId){await api('memories/move',{id,cardId:Number(cardId)||null});load();}
 let roomName='';
 async function load(){
   const [{cards},{rooms},{profiles}]=await Promise.all([get('cards'),get('rooms'),get('profiles')]);
