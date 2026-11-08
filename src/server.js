@@ -209,11 +209,12 @@ const router = {
         send(res, 200, { users: db.prepare('SELECT users_id_pk AS id,handle FROM users ORDER BY users_id_pk').all() }),
     'POST /api/cards/avatar': async (req, res, u) => {
         const b = await readBody(req);
-        const card = db.prepare('SELECT owner_users_id_fk FROM cards WHERE cards_id_pk=?').get(b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+        const card = db.prepare('SELECT owner_users_id_fk FROM cards WHERE cards_id_pk=?').get(id);
         if (!card || card.owner_users_id_fk !== u.users_id_pk) return send(res, 403, { error: 'not your card' });
-        const file = `cards/${b.world_books_id_pk}.png`;
-        fs.writeFileSync(path.join(CARDS_DIR, `${b.world_books_id_pk}.png`), Buffer.from(b.png_b64, 'base64'));
-        db.prepare('UPDATE cards SET avatar=? WHERE cards_id_pk=?').run(file, b.world_books_id_pk);
+        const file = `cards/${id}.png`;
+        fs.writeFileSync(path.join(CARDS_DIR, `${id}.png`), Buffer.from(b.png_b64, 'base64'));
+        db.prepare('UPDATE cards SET avatar=? WHERE cards_id_pk=?').run(file, id);
         send(res, 200, { ok: true, avatar: file });
     },
     'GET /api/cards': async (req, res, u) => {
@@ -296,17 +297,18 @@ const router = {
             first_message=COALESCE(?,first_message), mes_example=COALESCE(?,mes_example),
             system_prompt=COALESCE(?,system_prompt), post_history_instructions=COALESCE(?,post_history_instructions),
             tags=COALESCE(?,tags), creator=COALESCE(?,creator), api_profiles_id_fk=? WHERE cards_id_pk=? AND owner_users_id_fk=?`)
-            .run(b.name, b.description, b.personality, b.scenario, b.first_message, b.mes_example,
-                b.system_prompt, b.post_history_instructions,
+            .run(b.name ?? null, b.description ?? null, b.personality ?? null, b.scenario ?? null, b.first_message ?? null, b.mes_example ?? null,
+                b.system_prompt ?? null, b.post_history_instructions ?? null,
                 b.tags !== undefined ? JSON.stringify(typeof b.tags === 'string' ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : b.tags) : null,
-                b.creator, b.profileId ?? null, b.world_books_id_pk, u.users_id_pk);
+                b.creator ?? null, b.profileId ?? null, b.id || b.world_books_id_pk, u.users_id_pk);
         send(res, 200, { ok: true });
     },
     'POST /api/cards/delete': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('DELETE FROM cards WHERE cards_id_pk=? AND owner_users_id_fk=?').run(b.world_books_id_pk, u.users_id_pk);
-        db.prepare('DELETE FROM room_members WHERE members_id_fk IN (SELECT members_id_pk FROM members WHERE cards_id_fk=?)').run(b.world_books_id_pk);
-            db.prepare('DELETE FROM members WHERE cards_id_fk=?').run(b.world_books_id_pk);
+        const id = b.id || b.world_books_id_pk;
+        db.prepare('DELETE FROM cards WHERE cards_id_pk=? AND owner_users_id_fk=?').run(id, u.users_id_pk);
+        db.prepare('DELETE FROM room_members WHERE members_id_fk IN (SELECT members_id_pk FROM members WHERE cards_id_fk=?)').run(id);
+            db.prepare('DELETE FROM members WHERE cards_id_fk=?').run(id);
         send(res, 200, { ok: true });
     },
     'POST /api/members': async (req, res, u) => {
@@ -350,7 +352,7 @@ const router = {
         const b = await readBody(req);
         const target = b.handle
             ? db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=? COLLATE NOCASE').get(b.handle)?.id
-            : b.world_books_id_pk;
+            : (b.id || b.world_books_id_pk);
         if (!target || target === u.users_id_pk) return send(res, 400, { error: 'no such user' });
         db.prepare('DELETE FROM sessions WHERE users_id_fk=?').run(target);
         db.prepare('DELETE FROM room_members WHERE members_id_fk IN (SELECT members_id_pk FROM members WHERE cards_id_fk IN (SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=?))').run(target);
@@ -436,19 +438,19 @@ const router = {
         if (b.maxResponse !== undefined) { sets.push('max_response=?'); args.push(Number(b.maxResponse) || 2048); }
         if (b.stripPrefix !== undefined) { sets.push('strip_prefix=?'); args.push(b.stripPrefix ? 1 : 0); }
         if (b.key) { sets.push('key=?'); args.push(b.key); }
-        args.push(b.world_books_id_pk, u.users_id_pk);
+        args.push(b.id || b.world_books_id_pk, u.users_id_pk);
         db.prepare(`UPDATE api_profiles SET ${sets.join(',')} WHERE api_profiles_id_pk=? AND users_id_fk=?`).run(...args);
         send(res, 200, { ok: true });
     },
     'POST /api/profiles/activate': async (req, res, u) => {
         const b = await readBody(req);
         db.prepare('UPDATE api_profiles SET active=0 WHERE users_id_fk=?').run(u.users_id_pk);
-        db.prepare('UPDATE api_profiles SET active=1 WHERE api_profiles_id_pk=? AND users_id_fk=?').run(b.world_books_id_pk, u.users_id_pk);
+        db.prepare('UPDATE api_profiles SET active=1 WHERE api_profiles_id_pk=? AND users_id_fk=?').run(b.id || b.world_books_id_pk, u.users_id_pk);
         send(res, 200, { ok: true });
     },
     'POST /api/profiles/delete': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('DELETE FROM api_profiles WHERE api_profiles_id_pk=? AND users_id_fk=?').run(b.world_books_id_pk, u.users_id_pk);
+        db.prepare('DELETE FROM api_profiles WHERE api_profiles_id_pk=? AND users_id_fk=?').run(b.id || b.world_books_id_pk, u.users_id_pk);
         send(res, 200, { ok: true });
     },
     // Smart-memory profiles: named presets of the mem_* room settings.
@@ -607,10 +609,11 @@ const router = {
     },
     'POST /api/messages/delete': async (req, res, u) => {
         const b = await readBody(req);
-        const m = db.prepare('SELECT rooms_id_fk FROM messages WHERE messages_id_pk=?').get(b.world_books_id_pk);
+        const m = db.prepare('SELECT rooms_id_fk FROM messages WHERE messages_id_pk=?').get(b.id || b.world_books_id_pk);
         if (!m) return send(res, 404, { error: 'no message' });
-        db.prepare('DELETE FROM messages WHERE messages_id_pk=?').run(b.world_books_id_pk);
-        push(m.rooms_id_fk, { type: 'delete', id: b.world_books_id_pk });
+        const id = b.id || b.world_books_id_pk;
+        db.prepare('DELETE FROM messages WHERE messages_id_pk=?').run(id);
+        push(m.rooms_id_fk, { type: 'delete', id });
         send(res, 200, { ok: true });
     },
     'POST /api/room/memsettings': async (req, res, u) => {

@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS cards (
     id INTEGER PRIMARY KEY, owner_users_id_fk INTEGER REFERENCES users(id),
     name TEXT NOT NULL, description TEXT DEFAULT '',
     first_message TEXT DEFAULT '',
-    api_profiles_id_fk INTEGER REFERENCES api_profiles(id)
+    api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk)
 );
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -143,6 +143,28 @@ export function migrateSchema() {
     const ccols2 = db.prepare('PRAGMA table_info(cards)').all().map(c => c.name);
     if (ccols2.includes('profile_id')) db.exec('ALTER TABLE cards DROP COLUMN profile_id');
     if (!ccols2.includes('api_profiles_id_fk')) db.exec('ALTER TABLE cards ADD COLUMN api_profiles_id_fk INTEGER');
+    // Older builds declared cards.api_profiles_id_fk -> api_profiles(id), which no
+    // longer exists after the PK rename — any write to it fails "foreign key
+    // mismatch". Rebuild cards with the corrected FK when that signature shows.
+    const cardSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='cards'").get()?.sql || '';
+    if (cardSql.includes('REFERENCES api_profiles(id)')) {
+        db.exec('PRAGMA foreign_keys=OFF');
+        db.exec(`BEGIN;
+            CREATE TABLE cards_new (cards_id_pk INTEGER PRIMARY KEY, owner_users_id_fk INTEGER REFERENCES users(users_id_pk),
+                name TEXT NOT NULL, description TEXT DEFAULT '', first_message TEXT DEFAULT '',
+                personality TEXT DEFAULT '', scenario TEXT DEFAULT '', mes_example TEXT DEFAULT '',
+                system_prompt TEXT DEFAULT '', post_history_instructions TEXT DEFAULT '',
+                alternate_greetings TEXT DEFAULT '[]', tags TEXT DEFAULT '[]', creator TEXT DEFAULT '',
+                creatorcomment TEXT DEFAULT '', character_version TEXT DEFAULT '', avatar TEXT DEFAULT '',
+                card_json TEXT DEFAULT '', is_persona INTEGER DEFAULT 0,
+                api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk));
+            INSERT INTO cards_new SELECT cards_id_pk, owner_users_id_fk, name, description, first_message,
+                personality, scenario, mes_example, system_prompt, post_history_instructions,
+                alternate_greetings, tags, creator, creatorcomment, character_version, avatar,
+                card_json, is_persona, api_profiles_id_fk FROM cards;
+            DROP TABLE cards; ALTER TABLE cards_new RENAME TO cards; COMMIT;`);
+        db.exec('PRAGMA foreign_keys=ON');
+    }
     // rooms.world_book_id + duplicate world_books_id_fk are dead — junction handles links.
     for (const col of ['world_book_id','world_books_id_fk','mem_last_id','mem_profile_id','api_profiles_id_fk'])
         if (db.prepare('PRAGMA table_info(rooms)').all().some(c => c.name === col))
