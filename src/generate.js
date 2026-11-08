@@ -15,7 +15,7 @@ export async function generateReply(roomId, card) {
         WHERE rm.rooms_id_fk=? AND m.kind='human' ORDER BY m.users_id_fk LIMIT 1`).get(roomId);
     // Card's own profile wins; otherwise the room owner's active profile.
     const p = card.api_profiles_id_fk
-        ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE users_id_pk=?').get(card.api_profiles_id_fk)
+        ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(card.api_profiles_id_fk)
         : null;
     const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(owner?.id);
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
@@ -174,8 +174,7 @@ export async function maybeSummarize(roomId) {
     if (lastId - room.mem_last_messages_id < (room.mem_every || 10)) return;
     const owner = db.prepare(`SELECT u.users_id_pk FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN users u ON u.users_id_pk=m.users_id_fk
         WHERE rm.rooms_id_fk=? AND m.kind='human' ORDER BY m.users_id_fk LIMIT 1`).get(roomId);
-    const p = room.api_profiles_id_fk ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE users_id_pk=?').get(room.api_profiles_id_fk) : null;
-    const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(owner?.id);
+    const conn = activeProfile(owner?.id);
     if (!conn?.apiUrl) return;
     const excerpt = db.prepare(
         MSG_SQL + ' WHERE m.rooms_id_fk=? AND m.messages_id_pk>? ORDER BY m.messages_id_pk LIMIT 30')

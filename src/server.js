@@ -305,7 +305,7 @@ const router = {
         send(res, 200, { ok: true });
     },
     'GET /api/rooms': async (req, res, u) => {
-        const rooms = db.prepare(`SELECT r.rooms_id_pk, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget, r.mem_max, r.api_profiles_id_fk, r.max_context FROM rooms r
+        const rooms = db.prepare(`SELECT r.rooms_id_pk, r.name, r.ai_trigger, r.auto_mem, r.mem_every, r.mem_budget, r.mem_max, r.max_context FROM rooms r
             JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN members m ON m.members_id_pk=rm.members_id_fk WHERE m.users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk);
         send(res, 200, { rooms });
     },
@@ -465,8 +465,8 @@ const router = {
     'POST /api/room/memsettings': async (req, res, u) => {
         const b = await readBody(req);
         db.prepare(`UPDATE rooms SET auto_mem=COALESCE(?,auto_mem), mem_every=COALESCE(?,mem_every),
-            mem_budget=COALESCE(?,mem_budget), mem_max=COALESCE(?,mem_max), api_profiles_id_fk=? WHERE rooms_id_pk=?`)
-            .run(b.auto === undefined ? null : (b.auto ? 1 : 0), b.every, b.budget, b.max, b.profileId ?? null, b.room || 1);
+            mem_budget=COALESCE(?,mem_budget), mem_max=COALESCE(?,mem_max) WHERE rooms_id_pk=?`)
+            .run(b.auto === undefined ? null : (b.auto ? 1 : 0), b.every, b.budget, b.max, b.room || 1);
         send(res, 200, { ok: true });
     },
     'POST /api/members/talkativeness': async (req, res, u) => {

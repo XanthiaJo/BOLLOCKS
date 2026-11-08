@@ -124,7 +124,7 @@ export function activeProfile(userId) {
 /** Schema touch-ups for existing DBs (CREATE TABLE only applies on fresh). */
 export function migrateSchema() {
     // rooms.world_book_id + duplicate world_books_id_fk are dead — junction handles links.
-    for (const col of ['world_book_id','world_books_id_fk','mem_last_id','mem_profile_id'])
+    for (const col of ['world_book_id','world_books_id_fk','mem_last_id','mem_profile_id','api_profiles_id_fk'])
         if (db.prepare('PRAGMA table_info(rooms)').all().some(c => c.name === col))
             db.exec('ALTER TABLE rooms DROP COLUMN ' + col);
     // Proper key naming: {table}_id_pk / {ref}_id_fk � runs first so the
@@ -174,14 +174,12 @@ export function migrateSchema() {
     if (!wcols.includes('comment')) db.exec("ALTER TABLE world_entries ADD COLUMN comment TEXT DEFAULT ''");
     if (!wcols.includes('keysecondary')) db.exec("ALTER TABLE world_entries ADD COLUMN keysecondary TEXT DEFAULT '[]'");
     const rcols = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);
-    if (!rcols.includes('world_books_id_fk')) db.exec('ALTER TABLE rooms ADD COLUMN world_books_id_fk INTEGER REFERENCES world_books(id)');
     if (!rcols.includes('ai_trigger')) db.exec("ALTER TABLE rooms ADD COLUMN ai_trigger TEXT DEFAULT 'manual'");
     if (!rcols.includes('auto_mem')) db.exec('ALTER TABLE rooms ADD COLUMN auto_mem INTEGER DEFAULT 0');
     if (!rcols.includes('mem_every')) db.exec('ALTER TABLE rooms ADD COLUMN mem_every INTEGER DEFAULT 10');
     if (!rcols.includes('mem_last_messages_id')) db.exec('ALTER TABLE rooms ADD COLUMN mem_last_messages_id INTEGER DEFAULT 0');
     if (!rcols.includes('mem_budget')) db.exec('ALTER TABLE rooms ADD COLUMN mem_budget INTEGER DEFAULT 500');
     if (!rcols.includes('mem_max')) db.exec('ALTER TABLE rooms ADD COLUMN mem_max INTEGER DEFAULT 50');
-    if (!rcols.includes('api_profiles_id_fk')) db.exec('ALTER TABLE rooms ADD COLUMN api_profiles_id_fk INTEGER');
     if (!rcols.includes('max_context')) db.exec('ALTER TABLE rooms ADD COLUMN max_context INTEGER DEFAULT 0');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
@@ -238,8 +236,9 @@ export function migrateSchema() {
         rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
         world_books_id_fk INTEGER NOT NULL REFERENCES world_books(id),
         UNIQUE(rooms_id_fk, world_books_id_fk))`);
-    db.exec(`INSERT OR IGNORE INTO room_books (rooms_id_fk,world_books_id_fk)
-        SELECT rooms_id_pk, world_books_id_fk FROM rooms WHERE world_books_id_fk IS NOT NULL`);
+    if (db.prepare('PRAGMA table_info(rooms)').all().some(c => c.name === 'world_books_id_fk'))
+        db.exec(`INSERT OR IGNORE INTO room_books (rooms_id_fk,world_books_id_fk)
+            SELECT rooms_id_pk, world_books_id_fk FROM rooms WHERE world_books_id_fk IS NOT NULL`);
     // Entries belong to books, not rooms — drop the column.
     const wecols = db.prepare('PRAGMA table_info(world_entries)').all().map(c => c.name);
     if (wecols.includes('rooms_id_fk')) {
