@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, seed, login, userForToken, createUser, activeProfile, migrateProfiles, migrateSchema, MSG_SQL } from './db.js';
+import { db, seed, login, userForToken, createUser, migrateProfiles, migrateSchema, MSG_SQL } from './db.js';
 import { generateReply, genStats, maybeSummarize } from './generate.js';
 import { extractCardJson, normalizeCard } from './pngcard.js';
 
