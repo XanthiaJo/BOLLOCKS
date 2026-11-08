@@ -35,6 +35,8 @@ button.del{background:#7c3a3a}
       <div id="cropbox" style="position:absolute;border:2px solid #4a7c3a;background:rgba(74,124,58,.15);cursor:move"></div>
     </div>
     <div style="margin-top:10px">
+      <label class="cap" style="display:inline-block;margin-right:8px">Size</label>
+      <input type="range" id="cropsize" min="30" max="100" value="90" style="width:160px;vertical-align:middle" oninput="cropResize(this.value)">
       <button onclick="cropConfirm()">Use crop</button>
       <button onclick="$('cropmodal').style.display='none'" style="background:#555">Cancel</button>
     </div>
@@ -150,6 +152,13 @@ function openCrop(img){
   cropSize=Math.min($('cropimg').width,$('cropimg').height)*0.9;cropX=cropY=0;
   const box=$('cropbox');box.style.width=box.style.height=cropSize+'px';box.style.left=box.style.top='0px';
   $('cropmodal').style.display='flex';
+}
+function cropResize(pct){
+  const maxS=Math.min($('cropimg').width,$('cropimg').height);
+  cropSize=maxS*pct/100;
+  cropX=Math.max(0,Math.min($('cropimg').width-cropSize,cropX));
+  cropY=Math.max(0,Math.min($('cropimg').height-cropSize,cropY));
+  const box=$('cropbox');box.style.width=box.style.height=cropSize+'px';box.style.left=cropX+'px';box.style.top=cropY+'px';
 }
 function cropConfirm(){
   const sx=cropX/cropScale,sy=cropY/cropScale,ss=cropSize/cropScale;
