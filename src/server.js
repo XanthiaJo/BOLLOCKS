@@ -468,6 +468,7 @@ const router = {
             const msg = db.prepare('SELECT * FROM messages WHERE id=?').get(r.lastInsertRowid);
             push(roomId, { type: 'message', message: msg });
             send(res, 200, msg);
+            maybeSummarize(roomId).catch(e => console.error('[mem]', e.message));
         } catch (err) {
             send(res, 500, { error: String(err?.message || err) });
         }
