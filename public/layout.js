@@ -15,7 +15,7 @@
     ];
     const here = location.pathname === '/index.html' ? '/' : location.pathname;
     const nav = document.createElement('nav');
-    nav.innerHTML = '<span class="brand">🍒 B.O.L.L.O.C.K.S</span>' +
+    nav.innerHTML = '<span class="brand">🍒 B.O.L.L.O.C.K.S<span class="ver" id="mpver"></span></span>' +
         NAV.map(([label, href]) =>
             `<a href="${href}"${href === here ? ' class="on"' : ''}>${label}</a>`).join('') +
         '<span style="flex:1"></span>' +
@@ -42,6 +42,10 @@
     shell.appendChild(content);
     if (rside) shell.appendChild(rside);
     document.body.prepend(nav, shell);
+    fetch('/api/version').then(r => r.json()).then(d => {
+        const el = document.getElementById('mpver');
+        if (el && d.version) el.textContent = 'v' + d.version;
+    }).catch(() => {});
 })();
 
 // Right-sidebar profile quick-activate (used by connection page's rail).

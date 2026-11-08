@@ -7,6 +7,7 @@ import { generateReply, genStats, maybeSummarize } from './generate.js';
 import { extractCardJson, normalizeCard } from './pngcard.js';
 
 const PUB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
+const VERSION = JSON.parse(fs.readFileSync(path.join(PUB, '..', 'package.json'), 'utf8')).version;
 const PORT = Number(process.env.PORT || 8100);
 migrateSchema();
 migrateProfiles();
@@ -477,6 +478,7 @@ const router = {
         const lastMem = db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId);
         send(res, 200, { messages: msgs, members, lastMem });
     },
+    'GET /api/version': async (req, res) => send(res, 200, { version: VERSION }),
     'GET /api/stream': (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room') || 1);
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
@@ -612,7 +614,7 @@ http.createServer(async (req, res) => {
     // Unauthenticated: /api/* is off-limits except login; static files still
     // serve so the login page (and its css/js) can load.
     const firstUser = key === 'POST /api/register' && !db.prepare('SELECT 1 FROM users LIMIT 1').get();
-    if (!user && url.pathname.startsWith('/api/') && key !== 'POST /api/login' && key !== 'GET /api/avatar' && key !== 'GET /api/roombg' && !firstUser)
+    if (!user && url.pathname.startsWith('/api/') && key !== 'POST /api/login' && key !== 'GET /api/version' && key !== 'GET /api/avatar' && key !== 'GET /api/roombg' && !firstUser)
         return send(res, 401, { error: 'auth required' });
     if (router[key]) {
         try { return await router[key](req, res, user); }
