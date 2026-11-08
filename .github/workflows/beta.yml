@@ -1,0 +1,96 @@
+name: Beta Release
+
+# Manual beta drops — Actions → Beta Release → Run workflow (from dev).
+#
+# Flow: plan the upcoming version → mirror the dispatch branch into the beta
+# branch via auto-PR (main is never touched) → tag the beta tip
+# vX.Y.Z-beta.N as a GitHub pre-release with notes grouped by conventional
+# commit type — a preview of the stable version those commits will become.
+#
+# Beta tags use a prerelease suffix so they never collide with the strict
+# vX.Y.Z namespace the stable planner reads.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  plan:
+    uses: Box-of-Dragons/StructuredChaos/.github/workflows/family-release.yml@master
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      create-tag: false
+      create-release: false
+      deploy: false
+    secrets: inherit
+
+  # Mirror the dispatch branch into beta (auto-PR + merge, beta merged back
+  # into the dispatch branch so the histories stay reconciled).
+  mirror:
+    needs: plan
+    uses: Box-of-Dragons/StructuredChaos/.github/workflows/family-release.yml@master
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      release-branch: beta
+      create-tag: false
+      create-release: false
+      deploy: false
+    secrets: inherit
+
+  # Tag the new beta tip as a pre-release of the planned stable version.
+  tag-beta:
+    name: Tag beta pre-release
+    needs: [plan, mirror]
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out shared release tooling
+        uses: actions/checkout@v4
+        with:
+          repository: Box-of-Dragons/StructuredChaos
+          ref: master
+          path: .family
+          sparse-checkout: |
+            scripts/family-release.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Tag beta tip and create pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE: ${{ needs.plan.outputs.release_tag }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_RELEASE_NOTES_MODEL: ${{ vars.OPENAI_RELEASE_NOTES_MODEL }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
+        run: |
+          # Grouped release notes via the shared planner — covers everything
+          # since the latest stable vX.Y.Z tag (beta tags are ignored).
+          if git fetch --depth=1 origin release-notes-cache 2>/dev/null; then
+            git show FETCH_HEAD:release-notes.ai.json > release-notes.ai.json 2>/dev/null || true
+          fi
+          node .family/scripts/family-release.mjs plan --root=. \
+            --notes=.github/beta-notes.md --json=.github/beta-plan.json --ai-notes=true
+
+          git fetch origin beta --tags
+          LAST=$(git tag -l "${BASE}-beta.*" | sed 's/.*-beta\.//' | sort -n | tail -1)
+          N=$(( ${LAST:-0} + 1 ))
+          TAG="${BASE}-beta.${N}"
+          SHA=$(git rev-parse origin/beta)
+
+          sed -i "1s/.*/# ${TAG} — beta preview of ${BASE}/" .github/beta-notes.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG" "$SHA"
+          git push origin "$TAG"
+          gh release create "$TAG" --title "$TAG" --prerelease \
+            --notes-file .github/beta-notes.md --target "$SHA"
