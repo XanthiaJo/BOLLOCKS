@@ -123,12 +123,16 @@ export function activeProfile(userId) {
 
 /** Schema touch-ups for existing DBs (CREATE TABLE only applies on fresh). */
 export function migrateSchema() {
+    // rooms.world_book_id + duplicate world_books_id_fk are dead — junction handles links.
+    for (const col of ['world_book_id','world_books_id_fk','mem_last_id'])
+        if (db.prepare('PRAGMA table_info(rooms)').all().some(c => c.name === col))
+            db.exec('ALTER TABLE rooms DROP COLUMN ' + col);
     // Proper key naming: {table}_id_pk / {ref}_id_fk � runs first so the
     // rest of the schema + migrations see the new names.
     const REN = {
       users:{id:'users_id_pk'},
       sessions:{token:'sessions_token_pk',user_id:'users_id_fk'},
-      rooms:{id:'rooms_id_pk',world_book_id:'world_books_id_fk',mem_profile_id:'api_profiles_id_fk',mem_last_id:'mem_last_messages_id'},
+      rooms:{id:'rooms_id_pk',mem_profile_id:'api_profiles_id_fk',mem_last_id:'mem_last_messages_id'},
       members:{id:'members_id_pk',room_id:'rooms_id_fk',user_id:'users_id_fk',card_id:'cards_id_fk'},
       cards:{id:'cards_id_pk',owner_id:'owner_users_id_fk',profile_id:'api_profiles_id_fk'},
       messages:{id:'messages_id_pk',room_id:'rooms_id_fk',sender_user_id:'sender_users_id_fk',card_id:'cards_id_fk'},
