@@ -1,7 +1,8 @@
 *{box-sizing:border-box}
 body{font-family:system-ui;background:#1a1b1e;color:#ddd;margin:0;height:100vh;display:flex;flex-direction:column}
 nav{display:flex;gap:14px;align-items:center;padding:8px 16px;background:#141517;border-bottom:1px solid #2a2b2e;flex:none}
-nav .brand{font-weight:700;margin-right:8px}
+nav .brand{font-weight:700;margin-right:8px;display:flex;flex-direction:column;line-height:1.1}
+nav .brand .ver{font-size:.68em;font-weight:400;color:#678;letter-spacing:.03em}
 nav a{color:#9ab;text-decoration:none;padding:5px 10px;border-radius:5px;font-size:.95em}
 nav a:hover{background:#232426;color:#ddd}
 nav a.on{background:#2b3a5e;color:#fff}
