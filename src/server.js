@@ -553,6 +553,7 @@ const router = {
     'GET /api/stream': (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room') || 1);
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+        res.flushHeaders(); // writeHead alone buffers until the first write — flush so EventSource connects now
         if (!streams.has(roomId)) streams.set(roomId, new Set());
         streams.get(roomId).add(res);
         req.on('close', () => streams.get(roomId)?.delete(res));
