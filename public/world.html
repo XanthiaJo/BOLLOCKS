@@ -56,7 +56,7 @@ async function importBook(input){
   if(r.error)return alert(r.error);
   location='/world-edit.html?id='+r.id;
 }
-load();
+load().then(newBookPanel);
 </script>
 </body>
 </html>
