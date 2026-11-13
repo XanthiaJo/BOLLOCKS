@@ -175,6 +175,7 @@ jobs:
     env:
       TAG: ${{ needs.plan.outputs.release_tag }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }} # no checkout in this job; gh needs it to resolve the repo
     steps:
       - name: Generate and prepend TL;DR
         run: |
