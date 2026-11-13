@@ -2,14 +2,17 @@ let token = localStorage.mp_token || '';
 let me = '';
 let room = Number(localStorage.mp_room || 1);
 let es = null;
+let roomIsOwner = false;
+let allUsers = [], allCards = [], memberCur = new Set();
 
 const AS = '';
 const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const api = (p, b, method = 'POST') => fetch(`/api/${p}`, {
     method,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     ...(method === 'POST' ? { body: JSON.stringify(b || {}) } : {}),
-}).then(r => r.json());
+}).then(r => r.status === 401 ? location = '/login.html' : r.json());
 const get = p => api(p, null, 'GET');
 
 // Minimal markdown for RP text: *i* **b** ***bi*** _i_ __b__ ~~s~~ `code` #..####
@@ -58,7 +61,7 @@ async function loadRoom() {
             `<img class="mav" src="/api/avatar?id=${m.cards_id_fk || m.persona_id || 0}" onerror="this.style.display='none'">` +
             (m.kind === 'ai' && m.cards_id_fk
                 ? `<span class="mname">${m.card_name}</span>` +
-                  `<input type="range" class="talk" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setTalk(${m.cards_id_fk},this.value)">` +
+                  `<input type="range" class="talk" data-mine="${m.mine ? 1 : 0}" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setTalk(${m.cards_id_fk},this.value)">` +
                   `<span class="tv">${m.talkativeness ?? 50}%</span>` +
                   `<button class="fgen" title="Generate" onclick="genCard(${m.cards_id_fk},this)">▶</button>` +
                   `<button class="frem" title="Remove" onclick="remMember(${m.cards_id_fk},null,this)">✕</button>`
@@ -68,12 +71,10 @@ async function loadRoom() {
         .join('') + `<div class="member" style="margin-top:6px"><select id="addpick" style="flex:1;font-size:.85em"></select>` +
             `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
     renderLastMem(r.lastMem);
-            `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
-    const cur = new Set((r.members || []).flatMap(m => [m.cards_id_fk ? 'c' + m.cards_id_fk : null, m.users_id_fk ? 'u' + m.users_id_fk : null]).filter(Boolean));
+    memberCur = new Set((r.members || []).flatMap(m => [m.cards_id_fk ? 'c' + m.cards_id_fk : null, m.users_id_fk ? 'u' + m.users_id_fk : null]).filter(Boolean));
     const [{ users }, { cards }] = await Promise.all([get('users'), get('cards')]);
-    $('addpick').innerHTML =
-        (users || []).filter(x => !cur.has('u' + x.id)).map(x => `<option value="u${x.id}">${x.handle}</option>`).join('') +
-        (cards || []).filter(x => !cur.has('c' + x.id)).map(x => `<option value="c${x.id}">${x.name} (ai)</option>`).join('') || '<option>— everyone\'s in —</option>';
+    allUsers = users || []; allCards = cards || [];
+    fillAddPick();
     document.title = `BOLLOCKS · room ${room}`;
     if (es) es.close();
     es = new EventSource(`/api/stream?room=${room}&token=${token}`);
@@ -85,13 +86,18 @@ async function loadRoom() {
             renderToks();
         }
         if (d.type === 'delete') document.querySelector(`li[data-mid="${d.id}"]`)?.remove();
+        if (d.type === 'mem') mpFlashSaved(d.phase === 'done' ? (d.count ? `${d.count} new memories` : 'Memories updated') : 'Extracting memories…');
     };
     renderRooms();
     renderWorld();
     renderToks();
     get('rooms').then(({ rooms }) => {
         const r = (rooms || []).find(x => x.id === room);
-        if (r) { $('trigsel').value = r.ai_trigger || 'manual'; $('ctxmax').value = r.max_context || 0; }
+        document.title = `BOLLOCKS · ${r?.name || `room ${room}`}`;
+        $('chatname').textContent = r?.name || `room ${room}`;
+        roomIsOwner = !!r?.is_owner;
+        applyOwnerUI();
+        if (r) { $('trigsel').value = r.ai_trigger || 'manual'; $('ctxmax').value = r.max_context || 0; renderMProf(r); }
         $('chat').style.setProperty('--bg', r?.bg ? `url(/api/roombg?id=${room})` : 'none');
     });
 }
@@ -100,10 +106,26 @@ async function renderRooms() {
     const { rooms } = await get('rooms');
     $('rooms').innerHTML = (rooms || [])
         .map(r => `<div class="room${r.id === room ? ' on' : ''}" onclick="pick(${r.id})"><span style="font-size:.85em">${(r.members||0)>2?'👥':'👤'}</span><span class="n">${r.name}</span>` +
-            `${(r.members||0)>2?`<span style="font-size:.72em;color:#789">${r.members}</span>`:''}` +
-            `<span class="rbtns"><a href="#" title="Rename" onclick="event.stopPropagation();renameRoom(${r.id});return false">✎</a>` +
-            `<a href="#" title="Delete" onclick="event.stopPropagation();delRoom(${r.id});return false" style="color:#a55">✕</a></span></div>`)
+            `${(r.members||0)>2?`<span style="font-size:.72em;color:var(--dim)">${r.members}</span>`:''}` +
+            (r.is_owner ? `<span class="rbtns"><a href="#" title="Rename" onclick="event.stopPropagation();renameRoom(${r.id});return false">✎</a>` +
+            `<a href="#" title="Delete" onclick="event.stopPropagation();delRoom(${r.id});return false" style="color:var(--err)">✕</a></span>` : '') + `</div>`)
         .join('');
+}
+function applyOwnerUI() {
+    for (const id of ['trigsel', 'worldsel', 'mprofsel', 'ctxmax', 'bgfile']) {
+        const el = $(id); if (el) el.disabled = !roomIsOwner;
+    }
+    document.querySelectorAll('#members .talk').forEach(el => el.disabled = !(roomIsOwner || el.dataset.mine === '1'));
+    fillAddPick();
+}
+function fillAddPick() {
+    const sel = $('addpick'); if (!sel) return;
+    // Non-owners may only seat their own characters; seating other users is owner-only.
+    const users = roomIsOwner ? allUsers : [];
+    const cards = roomIsOwner ? allCards : allCards.filter(c => c.owner === me);
+    sel.innerHTML =
+        users.filter(x => !memberCur.has('u' + x.id)).map(x => `<option value="u${x.id}">${x.handle}</option>`).join('') +
+        cards.filter(x => !memberCur.has('c' + x.id)).map(x => `<option value="c${x.id}">${x.name} (ai)</option>`).join('') || '<option>— everyone\'s in —</option>';
 }
 function pick(id) { room = id; localStorage.mp_room = id; loadRoom(); }
 async function renameRoom(id) {
@@ -132,7 +154,8 @@ async function addMember() {
     const v = $('addpick').value;
     if (!v) return;
     const [kind, id] = [v[0], Number(v.slice(1))];
-    await api('members', kind === 'c' ? { room, cardId: id, kind: 'ai' } : { room, userId: id });
+    const r = await api('members', kind === 'c' ? { room, cardId: id } : { room, userId: id });
+    if (r.error) alert(r.error);
     loadRoom();
 }
 async function remMember(cardId, userId, btn) {
@@ -145,6 +168,21 @@ async function setTrig(mode) {
 }
 async function setCtx(v) {
     await api('room/settings', { room, maxContext: Math.max(0, Number(v) || 0) });
+}
+async function renderMProf(r) {
+    const sel = $('mprofsel'); if (!sel) return;
+    // Owners pick from their own profiles; members only see the followed name.
+    if (roomIsOwner) {
+        const { profiles } = await get('memprofiles');
+        sel.innerHTML = '<option value="0">Disabled</option>' +
+            (profiles || []).map(p => `<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
+        sel.value = String(r?.mem_profiles_id_fk || 0);
+    } else {
+        sel.innerHTML = `<option>${esc(r?.mem_profile_name || 'Disabled')}</option>`;
+    }
+}
+async function setMProf(v) {
+    await api('room/memsettings', { room, memProfile: Number(v) || 0 });
 }
 async function uploadBg(inp) {
     const f = inp.files?.[0]; if (!f) return;
@@ -170,7 +208,7 @@ async function say() {
     const text = $('in').value.trim();
     if (!text) return;
     $('in').value = '';
-    await api('say', { room, name: persona?.name || me, cardId: persona?.id || null, text });
+    await api('say', { room, cardId: persona?.id || null, text });
 }
 async function gen() {
     const r = await api('generate', { room });
@@ -194,27 +232,64 @@ async function delMsg(id, btn) {
     await api('messages/delete', { id });
 }
 function renderLastMem(m) {
-    $('lastmem').innerHTML = m ? `<div style="font-size:.8em;color:#9ab;line-height:1.4">${m.text}</div>` : '<div style="font-size:.8em;color:#555">none yet</div>';
+    $('lastmem').innerHTML = m ? `<div style="font-size:.8em;color:var(--muted);line-height:1.4">${m.text}</div>` : '<div style="font-size:.8em;color:var(--neutral)">none yet</div>';
+}
+let lastStats = null;
+const PAGE_LINKS = { 'World Info': '/world.html', 'Memories': '/memories.html' };
+function showJson(title, obj) {
+    let v = document.getElementById('partview');
+    if (!v) {
+        v = document.createElement('div');
+        v.id = 'partview'; v.className = 'mp-veil';
+        v.onclick = e => { if (e.target === v) v.remove(); };
+        document.body.appendChild(v);
+    }
+    v.innerHTML = `<div class="card" style="width:min(720px,94vw);max-height:82vh;overflow-y:auto;background:var(--panel);padding:16px">
+        <h3 style="margin:0 0 10px">${title}</h3>
+        <pre style="white-space:pre-wrap;font-size:.8em;color:var(--pre);margin:0 0 14px">${String(obj ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+        <button onclick="document.getElementById('partview').remove()">Close</button></div>`;
+}
+function showRequest() { showJson('Request JSON', JSON.stringify(lastStats?.request, null, 2)); }
+function showPart(k) {
+    const txt = (lastStats?.texts || {})[k];
+    let v = document.getElementById('partview');
+    if (!v) {
+        v = document.createElement('div');
+        v.id = 'partview'; v.className = 'mp-veil';
+        v.onclick = e => { if (e.target === v) v.remove(); };
+        document.body.appendChild(v);
+    }
+    const esc = String(txt ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    v.innerHTML = `<div class="card" style="width:min(720px,94vw);max-height:82vh;overflow-y:auto;background:var(--panel);padding:16px">
+        <h3 style="margin:0 0 10px">${k}</h3>
+        <pre style="white-space:pre-wrap;font-size:.85em;color:var(--pre);margin:0 0 14px">${esc || '(empty)'}</pre>
+        <button onclick="document.getElementById('partview').remove()">Close</button></div>`;
 }
 async function renderToks() {
     const { stats } = await get('genstats?room=' + room);
+    lastStats = stats;
     if (!stats) { $('toks').innerHTML = '<small>generate to see</small>'; return; }
     const total = stats.prompt_tokens ?? stats.est;
+    // The API only reports the prompt total — scale the per-section
+    // estimates so they sum to it (≈ attribution, not exact counts).
+    const entries = Object.entries(stats.parts).filter(([, v]) => v);
+    const estSum = entries.filter(([k]) => !k.startsWith('(')).reduce((a, [, v]) => a + v, 0);
+    const scale = stats.prompt_tokens && estSum ? stats.prompt_tokens / estSum : 1;
     $('toks').innerHTML =
-        `<small style="color:#789">${stats.card} · ${stats.prompt_tokens ? 'actual' : 'estimated'}</small>` +
+        `<small style="color:var(--dim)">${stats.card} · <a href="#" onclick="showRequest();return false" style="color:var(--muted)" title="View full request JSON">${stats.prompt_tokens ? 'actual' : 'estimated'}</a></small>` +
         `<div style="display:flex;justify-content:space-between;font-weight:600;font-size:.85em"><span>Prompt tokens</span><span>${total}</span></div>` +
-        (stats.completion_tokens ? `<div style="display:flex;justify-content:space-between;font-size:.8em;color:#789"><span>Reply tokens</span><span>${stats.completion_tokens}</span></div>` : '') +
-        Object.entries(stats.parts).filter(([, v]) => v).map(([k, v]) => {
-            const href = {
-                'World Info': '/world.html', 'Memories': '/memories.html',
-                'Main Prompt': '/characters.html', 'Char Description': '/characters.html',
-                'Char Personality': '/characters.html', 'Scenario': '/characters.html',
-                'Chat Examples': '/characters.html', 'Other Characters': '/characters.html',
-                'Post-History Instructions': '/characters.html',
-            }[k];
+        (stats.completion_tokens ? `<div style="display:flex;justify-content:space-between;font-size:.8em;color:var(--dim)"><span>Reply tokens</span><span>${stats.completion_tokens}</span></div>` : '') +
+        (scale !== 1 ? `<small style="color:var(--faint)">sections ≈ scaled to actual total</small>` : '') +
+        entries.map(([k, v]) => {
+            const shown = k.startsWith('(') ? v : Math.round(v * scale);
+            const href = PAGE_LINKS[k];
+            const hasText = k in (lastStats?.texts || {});
             const lbl = href
-                ? `<a href="${href}" style="color:#9ab">${k}</a>` : `<span>${k}</span>`;
-            return `<div style="display:flex;justify-content:space-between;font-size:.8em;color:#9ab"><span>${lbl}</span><span>${v}</span></div>`;
+                ? `<a href="${href}" style="color:var(--muted)">${k}</a>`
+                : hasText
+                    ? `<a href="#" onclick="showPart('${k}');return false" style="color:var(--muted)">${k}</a>`
+                    : `<span>${k}</span>`;
+            return `<div style="display:flex;justify-content:space-between;font-size:.8em;color:var(--muted)" title="est ${v}"><span>${lbl}</span><span>${shown}</span></div>`;
         }).join('');
 }
 

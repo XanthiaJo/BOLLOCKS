@@ -5,8 +5,11 @@ name: PR Autofill
 # - Body: replaces/inserts an autofilled commit-list block above the manual body.
 #   Merge commits can inherit the body via repo squash/merge settings (PR_BODY).
 
+# pull_request_target so fork PRs get a write token — safe here because the
+# job only calls the GitHub API (gh pr view/edit) and never checks out or
+# executes code from the PR head.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
 
 permissions:
@@ -17,18 +20,16 @@ jobs:
   autofill:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Fill commit list
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           # Use the PR's commits as GitHub sees them (avoids huge/incorrect ranges
-          # when the head branch is diverged from the base).
-          LIST=$(gh pr view "$PR_NUMBER" --json commits --jq '.commits[] | "- " + (.oid[0:7]) + " " + .messageHeadline')
+          # when the head branch is diverged from the base). messageHeadline is
+          # pre-truncated with an ellipsis — pull the raw message's first line.
+          LIST=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER/commits" --paginate --jq '.[] | "- " + (.sha[0:7]) + " " + (.commit.message | split("\n")[0])')
           [ -z "$LIST" ] && LIST="- (no commits found)"
 
           START='<!-- autofill:commits:start -->'

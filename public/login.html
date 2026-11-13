@@ -3,13 +3,21 @@
 <head>
 <meta charset="utf-8"><title>BOLLOCKS · Login</title>
 <style>
-body{margin:0;background:#0d0e10;color:#ddd;font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.box{width:300px;padding:28px;border:1px solid #2b3a5e;border-radius:8px;background:#191b24}
+/* Self-contained copy of the palette subset — this page is served without
+   a session so it can't pull layout.css. Mirror of :root in layout.css. */
+:root{
+  --bg-deep:#0d0e10; --panel:#191b24; --edge:#2b3a5e;
+  --input:#2a2b2e; --border:#444; --text:#ddd; --white:#fff;
+  --dim:#789; --err:#dd2e44;
+  --accent:#2b3a5e;
+}
+body{margin:0;background:var(--bg-deep);color:var(--text);font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.box{width:300px;padding:28px;border:1px solid var(--edge);border-radius:8px;background:var(--panel)}
 h1{font-size:1.3em;font-weight:700;text-align:center;margin:0 0 18px}
-label{display:block;font-size:.78em;color:#789;text-transform:uppercase;letter-spacing:.04em;margin:10px 0 3px}
-input{width:100%;padding:10px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:6px;box-sizing:border-box}
-button{width:100%;padding:10px;background:#3a5ccc;border:none;color:#fff;border-radius:6px;cursor:pointer;margin-top:16px}
-.err{color:#c66;text-align:center;font-size:.85em;min-height:1.2em;margin-top:8px}
+label{display:block;font-size:.78em;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin:10px 0 3px}
+input{width:100%;padding:10px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;box-sizing:border-box}
+button{width:100%;padding:10px;background:var(--accent);border:none;color:var(--white);border-radius:6px;cursor:pointer;margin-top:16px}
+.err{color:var(--err);text-align:center;font-size:.85em;min-height:1.2em;margin-top:8px}
 </style>
 </head>
 <body>

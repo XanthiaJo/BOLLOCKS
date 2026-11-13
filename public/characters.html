@@ -2,53 +2,47 @@
 <html>
 <head>
 <meta charset="utf-8"><title>BOLLOCKS · Characters</title>
-<link rel="stylesheet" href="layout.css">
+<link rel="stylesheet" href="css/layout.css">
 <style>
 #content{max-width:none;padding:0}
 main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto}
 textarea{min-height:90px;font-family:inherit;width:100%}
-.card{display:grid;grid-template-columns:64px 1fr auto;gap:10px;padding:12px;border:1px solid #2a2b2e;border-radius:6px;margin-bottom:10px;background:#141517}
-.card img{width:64px;height:64px;object-fit:cover;border-radius:6px;background:#232426}
-.cap{display:block;font-size:.78em;color:#789;margin:10px 0 2px;text-transform:uppercase;letter-spacing:.04em}
-.cap small{text-transform:none;color:#567}
+.card{display:grid;grid-template-columns:64px 1fr auto;gap:10px;padding:12px;border:1px solid var(--line);border-radius:6px;margin-bottom:10px;background:var(--surface)}
+.card img{width:64px;height:64px;object-fit:cover;border-radius:6px;background:var(--surface2)}
 .card .name{font-weight:700}
-.card .desc{color:#abc;font-size:.9em;white-space:pre-wrap;margin-top:4px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.card .meta{color:#567;font-size:.8em;margin-top:4px}
+.card .desc{color:var(--desc);font-size:.9em;white-space:pre-wrap;margin-top:4px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.card .meta{color:var(--faint);font-size:.8em;margin-top:4px}
 .card .btns{display:flex;flex-direction:column;gap:6px}
 .card button{width:auto}
-button.del{background:#7c3a3a}
-#editor{display:none;border:1px solid #2b3a5e;border-radius:6px;padding:14px;background:#191b24;margin-bottom:14px}
+#editor{display:none;border:1px solid var(--edge);border-radius:6px;padding:14px;background:var(--panel);margin-bottom:14px}
 #editor h3{margin-top:0}
 #editor input{width:100%}
 </style>
 </head>
 <body>
-<aside id="rsidebar">
-  <h3>Characters</h3>
-  <div id="list"></div>
-  <button onclick="newCard()" style="width:100%;margin-top:8px">+ New character</button>
-</aside>
-<div id="cropmodal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center">
-  <div style="background:#191b24;padding:16px;border-radius:10px;text-align:center">
+<aside id="rsidebar"></aside>
+<div id="cropmodal" style="display:none;position:fixed;inset:0;background:var(--veil-deep);z-index:100;align-items:center;justify-content:center">
+  <div style="background:var(--panel);padding:16px;border-radius:10px;text-align:center">
     <div class="cap" style="margin:0 0 8px">Drag to crop — confirm keeps the square</div>
     <div id="cropwrap" style="position:relative;display:inline-block">
       <img id="cropimg" draggable="false">
-      <div id="cropbox" style="position:absolute;border:2px solid #4a7c3a;background:rgba(74,124,58,.15);cursor:move"></div>
+      <div id="cropbox" style="position:absolute;border:2px solid var(--ok);background:var(--ok-tint);cursor:move"></div>
     </div>
     <div style="margin-top:10px">
       <label class="cap" style="display:inline-block;margin-right:8px">Size</label>
       <input type="range" id="cropsize" min="30" max="100" value="90" style="width:160px;vertical-align:middle" oninput="cropResize(this.value)">
       <button onclick="cropConfirm()">Use crop</button>
-      <button onclick="$('cropmodal').style.display='none'" style="background:#555">Cancel</button>
+      <button class="sec" onclick="$('cropmodal').style.display='none'">Cancel</button>
     </div>
   </div>
 </div>
 <div id="content">
 <main>
+  <div class="cvhead"><h2>Characters</h2></div>
   <div id="editor">
-    <h3 id="edtitle">New character</h3>
+    <div class="edhead" data-save="saveCard" data-cancel="cancelEd"><h3 id="edtitle">New character</h3></div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <img id="ed_av" src="" onload="this.style.visibility='visible'" onerror="this.style.visibility='hidden'" style="width:140px;height:140px;object-fit:cover;border-radius:10px;background:#232426;cursor:pointer" title="Change picture" onclick="$('avpick').click()">
+      <img id="ed_av" src="" onload="this.style.visibility='visible'" onerror="this.style.visibility='hidden'" style="width:140px;height:140px;object-fit:cover;border-radius:10px;background:var(--surface2);cursor:pointer" title="Change picture" onclick="$('avpick').click()">
       <div><div class="cap" style="margin-top:0">Picture</div>
       <button onclick="$('avpick').click()" style="padding:6px 12px">Choose image</button>
       <input type="file" id="avpick" accept="image/*" style="display:none" onchange="pickAvatar(this)"></div>
@@ -74,132 +68,15 @@ button.del{background:#7c3a3a}
     <input id="ed_tags">
     <input type="hidden" id="ed_creator">
     <label class="cap">API profile <small>— uses default unless changed</small></label>
-    <select id="ed_profile" style="width:100%;padding:8px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:4px"></select>
+    <select id="ed_profile" style="width:100%;padding:8px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:4px"></select>
     <div style="margin-top:18px">
-    <button onclick="saveCard()">Save</button>
-    <button onclick="clearEd()" style="background:#444">Clear</button>
-    <button onclick="document.getElementById('imp').click()" style="background:#5a4a7c">Import card…</button>
+    <button class="imp" onclick="document.getElementById('imp').click()">Import card…</button>
     <input type="file" id="imp" accept=".png,.json" style="display:none" onchange="importCard(this)">
     </div>
   </div>
 </main>
 </div>
-<script src="layout.js"></script>
-<script>
-const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
-const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.json());
-const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.json());
-const $=id=>document.getElementById(id);
-// Crop-drag wiring
-document.addEventListener('DOMContentLoaded',()=>{
-  const box=$('cropbox');let drag=null;
-  const mv=e=>{
-    if(!drag)return;const p=e.touches?e.touches[0]:e;
-    cropX=Math.max(0,Math.min($('cropimg').width-cropSize,p.clientX-drag.x));
-    cropY=Math.max(0,Math.min($('cropimg').height-cropSize,p.clientY-drag.y));
-    box.style.left=cropX+'px';box.style.top=cropY+'px';
-  };
-  const dn=e=>{const p=e.touches?e.touches[0]:e;const r=box.getBoundingClientRect();drag={x:p.clientX-cropX,y:p.clientY-cropY};e.preventDefault();};
-  box.addEventListener('mousedown',dn);box.addEventListener('touchstart',dn);
-  document.addEventListener('mousemove',mv);document.addEventListener('touchmove',mv);
-  document.addEventListener('mouseup',()=>drag=null);document.addEventListener('touchend',()=>drag=null);
-});
-
-let me='',allCards=[];
-async function load(){
-  const [{cards},who]=await Promise.all([get('cards'),get('me')]);
-  me=who.handle;allCards=cards||[];
-  $('list').innerHTML=allCards.map((c,i)=>`
-    <div class="card" style="cursor:pointer" onclick="editIdx(${i})">
-      <img src="/api/avatar?id=${c.id}" onerror="this.style.visibility='hidden'">
-      <div>
-        <div class="name">${esc(c.name)}</div>
-        <div class="desc">${esc(c.description)}</div>
-        <div class="meta">#${c.id} · owner ${esc(c.owner||'?')}${profName(c)}</div>
-      </div>
-      <div class="btns" id="btns${c.id}" onclick="event.stopPropagation()">
-        ${c.owner===me?`<button style="background:${c.is_persona?'#4a7c3a':'#5a5a4a'}" onclick="api('persona',{cardId:${c.is_persona?'null':c.id}}).then(load)">★${c.is_persona?' persona':''}</button>`:''}
-        ${c.owner===me?`<button class="del" onclick="del(${c.id})">Delete</button>`:''}
-      </div>
-    </div>`).join('');
-}
-const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let profs=[];
-const profName=c=>c.api_profiles_id_fk?(' · '+(profs.find(p=>p.id===c.api_profiles_id_fk)?.name||'custom api')):'';
-async function loadProfs(){
-  const {profiles}=await get('profiles');
-  profs=profiles||[];
-  $('ed_profile').innerHTML='<option value="">� default �</option>'+
-    profs.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
-}
-
-function editIdx(i){edit(allCards[i])}
-function edit(c){
-  const mine=c.owner===me;
-  document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=!mine);
-  $('edtitle').textContent=(mine?'Edit ':'')+c.name+(mine?'':` (${c.owner})`);
-  $('ed_av').src=c.avatar?'/api/avatar?id='+c.id+'&t='+Date.now():'';
-  if(!mine){$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');mpOpenEditor('inline');return;}$('edtitle').textContent='Edit '+c.name;$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');$('ed_creator').value=c.creator||'';$('ed_profile').value=c.api_profiles_id_fk||'';mpOpenEditor('inline')}
-let cropImg=null,cropX=0,cropY=0,cropSize=0,cropScale=1;
-function pickAvatar(inp){
-  const f=inp.files[0];inp.value='';if(!f)return;
-  const img=new Image();
-  img.onerror=()=>alert('Could not read that image — HEIC phone photos are not supported, save as JPG or PNG first');
-  img.onload=()=>{cropImg=img;openCrop(img);};
-  img.src=URL.createObjectURL(f);
-}
-function openCrop(img){
-  const MAXD=400;cropScale=Math.min(1,MAXD/Math.max(img.width,img.height));
-  $('cropimg').src=img.src;$('cropimg').width=img.width*cropScale;$('cropimg').height=img.height*cropScale;
-  cropSize=Math.min($('cropimg').width,$('cropimg').height)*0.9;cropX=cropY=0;
-  const box=$('cropbox');box.style.width=box.style.height=cropSize+'px';box.style.left=box.style.top='0px';
-  $('cropmodal').style.display='flex';
-}
-function cropResize(pct){
-  const maxS=Math.min($('cropimg').width,$('cropimg').height);
-  cropSize=maxS*pct/100;
-  cropX=Math.max(0,Math.min($('cropimg').width-cropSize,cropX));
-  cropY=Math.max(0,Math.min($('cropimg').height-cropSize,cropY));
-  const box=$('cropbox');box.style.width=box.style.height=cropSize+'px';box.style.left=cropX+'px';box.style.top=cropY+'px';
-}
-function cropConfirm(){
-  const sx=cropX/cropScale,sy=cropY/cropScale,ss=cropSize/cropScale;
-  const cv=document.createElement('canvas');cv.width=cv.height=512;
-  cv.getContext('2d').drawImage(cropImg,sx,sy,ss,ss,0,0,512,512);
-  const url=cv.toDataURL('image/png'),b64=url.split(',')[1],id=$('ed_id').value;
-  $('cropmodal').style.display='none';
-  if(id)api('cards/avatar',{id:Number(id),png_b64:b64}).then(r=>{
-    if(r.error)alert(r.error);else $('ed_av').src='/api/avatar?id='+id+'&t='+Date.now();});
-  else{$('ed_av').src=url;$('ed_av').dataset.pending=b64;}
-}
-function clearEd(){$('editor').style.display='none';$('edtitle').textContent='New character';['ed_id','ed_name','ed_desc','ed_personality','ed_scenario','ed_first','ed_mesex','ed_sysp','ed_phi','ed_tags','ed_creator'].forEach(i=>$(i).value='');$('ed_profile').value='';$('ed_av').src='';$('ed_av').dataset.pending=''}
-function newCard(){clearEd();document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=false);mpOpenEditor('inline')}
-
-async function saveCard(){
-  const id=$('ed_id').value;
-  const b={name:$('ed_name').value.trim(),description:$('ed_desc').value,personality:$('ed_personality').value,scenario:$('ed_scenario').value,first_message:$('ed_first').value,mes_example:$('ed_mesex').value,system_prompt:$('ed_sysp').value,post_history_instructions:$('ed_phi').value,tags:$('ed_tags').value,creator:me,profileId:Number($('ed_profile').value)||null};
-  if(!b.name)return alert('needs a name');
-  if(id)await api('cards/update',{id:Number(id),...b});
-  else await api('cards',b);
-  mpCloseEditor();clearEd();load();
-}
-async function del(id){if(confirm('Delete this character?')){await api('cards/delete',{id});load()}}
-async function addToRoom(id){await api('members',{room:Number(localStorage.mp_room||1),cardId:id,kind:'ai'});alert('added to current chat')}
-
-async function importCard(input){
-  const f=input.files[0];input.value='';
-  if(!f)return;
-  let r;
-  if(f.name.endsWith('.json')){
-    r=await api('cards/import',{card:await f.text()});
-  }else{
-    const b64=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result.split(',')[1]);fr.readAsDataURL(f)});
-    r=await api('cards/import',{png_b64:b64});
-  }
-  if(r.error)return alert(r.error);
-  alert('imported '+r.name);load();
-}
-Promise.all([load(),loadProfs()]).then(newCard);
-</script>
+<script src="js/layout.js"></script>
+<script src="js/characters.js"></script>
 </body>
 </html>

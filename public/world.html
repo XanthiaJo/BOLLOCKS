@@ -2,65 +2,157 @@
 <html>
 <head>
 <meta charset="utf-8"><title>BOLLOCKS · World</title>
-<link rel="stylesheet" href="layout.css">
+<link rel="stylesheet" href="css/layout.css">
+<style>
+textarea{min-height:80px;font-family:inherit}
+</style>
 </head>
 <body>
-<aside id="rsidebar">
-  <h3>Books</h3>
-  <div id="list"></div>
-</aside>
+<aside id="rsidebar"></aside>
 <div id="content">
 <main>
-  <div class="panel">
-    <h3>New book</h3>
-    <input id="newname" placeholder="Book name">
-    <button onclick="newBook()">Create</button>
-    <button onclick="document.getElementById('imp').click()" style="background:#5a4a7c">Import ST book…</button>
+  <div class="panel" id="bookPanel" style="display:none">
+    <div class="edhead" data-save="saveBook" data-cancel="cancelBook"><h3 id="booktitle">New book</h3></div>
+    <input id="book_name" placeholder="Book name">
+    <small class="hint" id="book_meta"></small>
+    <div style="display:flex;gap:6px;margin-top:10px">
+      <button class="imp" id="book_impbtn" onclick="document.getElementById('imp').click()">Import ST book…</button>
+      <button class="del" id="book_del" onclick="delBook(selBook)" style="display:none">Delete book</button>
+    </div>
     <input type="file" id="imp" accept=".json" style="display:none" onchange="importBook(this)">
+  </div>
+  <div id="bookView" style="display:none">
+    <div class="cvhead">
+      <h2 id="bname"></h2>
+      <span class="cvbtns">
+        <button class="sec" onclick="renameBook()">Rename book</button>
+        <button class="act" onclick="newEntry()">+ New entry</button>
+      </span>
+    </div>
+    <div class="panel" id="editor" style="display:none"></div>
+    <div class="panel" id="elist"></div>
   </div>
 </main>
 </div>
-<script src="layout.js"></script>
+<script src="js/layout.js"></script>
 <script>
 const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
-const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.json());
-const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.json());
+const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.status===401?location='/login.html':r.json());
+const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.status===401?location='/login.html':r.json());
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const ROOM=Number(localStorage.mp_room||1);
-let me='';
+
+let books=[],rooms=[],allEntries=[],me='';
+let selBook=Number(new URLSearchParams(location.search).get('id')||localStorage.mp_worldbook||0),selEntry=0;
+function setSelBook(id){selBook=id;localStorage.mp_worldbook=id}
+initSidebar({
+  tabs:[{label:'Books',on:true,onclick:'newBookPanel()'}],
+  sections:[{title:'Books',id:'rbooks'}],
+  buttons:[{label:'+ New book',onclick:'newBookPanel()'}],
+  footer:'Select a book to browse and edit its entries — they reach the AI when their keywords appear in chat. Link a book to a room in that room\'s chat settings.'
+});
 
 async function load(){
-  const [{books,rooms},who]=await Promise.all([get('world/books'),get('me')]);
-  me=who.handle;
-  const room=rooms.find(r=>r.id===ROOM);
-  $('list').innerHTML=(books||[]).map(b=>{
+  const [{books:bb,rooms:rr},who]=await Promise.all([get('world/books'),get('me')]);
+  books=bb||[];rooms=rr||[];me=who.handle;
+  if(selBook&&!books.some(b=>b.id===selBook))setSelBook(0);
+  const {entries}=selBook?await get('world?book='+selBook):{entries:[]};
+  allEntries=entries||[];
+  if(selEntry&&!allEntries.some(e=>e.id===selEntry))selEntry=0;
+  $('rbooks').innerHTML=books.map(b=>{
     const usedIn=rooms.filter(r=>r.world_books_id_fk===b.id).map(r=>r.name);
     const mine=!b.owner||b.owner===me;
-    return `
-    <div class="rprof" onclick="location='/world-edit.html?id=${b.id}'">
-      <div class="n">${esc(b.name)}</div>
-      <div class="m">${b.cnt||0} entries · ${esc(b.owner||'shared')}${usedIn.length?' · in: '+esc(usedIn.join(', ')):''}
-        ${mine?` <a href="#" onclick="event.stopPropagation();delBook(${b.id});return false" style="color:#c66">✕</a>`:''}
+    return rprofRow({name:esc(b.name),
+      meta:`${b.cnt||0} entries · ${esc(b.owner||'shared')}${usedIn.length?' · in: '+esc(usedIn.join(', ')):''}`,
+      sel:b.id===selBook,onclick:`pickBook(${b.id})`,
+      btns:mine?`<button class="del" onclick="delBook(${b.id})">Delete</button>`:''});
+  }).join('')||'<small>No books yet — create one with "+ New book" or import an ST export.</small>';
+  if(!selBook)return;
+  const b=books.find(x=>x.id===selBook);
+  $('bname').textContent=b?.name||('Book #'+selBook);
+  const draft=$('ed_id')&&$('ed_id').closest('#elist')?draftFields(ED_FIELDS):null;
+  $('elist').innerHTML=allEntries.map((e,i)=>{
+    if(e.id===selEntry)return `<div class="card editing">${entryForm()}</div>`;
+    const keys=JSON.parse(e.keys||'[]'),sec=JSON.parse(e.keysecondary||'[]');
+    return `<div class="card${e.enabled?'':' off'}">
+      <div>
+        ${e.comment?`<div class="comment">${esc(e.comment)}</div>`:''}
+        <div class="keys">${e.constant?'⚡ always':esc(keys.join(', ')||'(no keys)')}${sec.length?' + '+esc(sec.join(', ')):''}</div>
+        <div class="desc">${esc(e.content)}</div>
+        <div class="meta">#${e.id} · order ${e.ord}${e.enabled?'':' · disabled'}</div>
+      </div>
+      <div class="btns">
+        <button onclick="editIdx(${i})">Edit</button>
+        <button class="sec" onclick="toggle(${e.id},${e.enabled?0:1})">${e.enabled?'Disable':'Enable'}</button>
+        <button class="del" onclick="del(${e.id})">Delete</button>
       </div>
     </div>`;
-  }).join('')||'<small>No books yet — create one above or import an ST export.</small>';
+  }).join('')||'<small>No entries yet — "+ New entry".</small>';
+  initEdHeads($('elist'));
+  const ed=allEntries.find(x=>x.id===selEntry);if(ed){fillEnt(ed);if(draft)fillFields(draft)}
 }
 
-async function newBook(){
-  const name=$('newname').value.trim();if(!name)return;
-  $('newname').value='';
-  const r=await api('world/books',{name});
-  if(r.id)location='/world-edit.html?id='+r.id;
+function showPanel(p){$('bookPanel').style.display=p==='book'?'block':'none';$('bookView').style.display=p==='view'?'block':'none'}
+
+/* books */
+function fillBook(b){
+  $('booktitle').textContent=b?'Edit book: '+b.name:'New book';
+  $('book_name').value=b?.name||'';
+  $('book_meta').textContent=b?`#${b.id} · ${b.cnt||0} entries · ${b.owner||'shared'}`:'';
+  $('book_del').style.display=b?'':'none';
+  $('book_impbtn').style.display=b?'none':'';
 }
-async function delBook(id){if(confirm('Delete this book and all its entries?')){await api('world/books/delete',{id});load()}}
+function pickBook(id){setSelBook(id);selEntry=0;$('editor').innerHTML='';$('editor').style.display='none';showPanel('view');load()}
+function renameBook(){fillBook(books.find(b=>b.id===selBook));showPanel('book')}
+function newBookPanel(){setSelBook(0);fillBook(null);showPanel('book');$('book_name').focus()}
+function cancelBook(){fillBook(selBook?books.find(b=>b.id===selBook):null)}
+async function saveBook(){
+  const name=$('book_name').value.trim();if(!name)return;
+  if(selBook)await api('world/books/update',{id:selBook,name});
+  else{const r=await api('world/books',{name});if(r?.id)setSelBook(r.id);}
+  await load();fillBook(books.find(b=>b.id===selBook));
+}
+async function delBook(id){if(confirm('Delete this book and all its entries?')){if(selBook===id)newBookPanel();await api('world/books/delete',{id});load()}}
 async function importBook(input){
   const f=input.files[0];input.value='';if(!f)return;
-  const r=await api('world/import',{room:ROOM,book:await f.text(),name:f.name.replace(/\.json$/,'')});
+  const r=await api('world/import',{book:await f.text(),name:f.name.replace(/\.json$/,'')});
   if(r.error)return alert(r.error);
-  location='/world-edit.html?id='+r.id;
+  if(r?.id)pickBook(r.id);
 }
-load();
+
+/* entries — the form renders either into the top panel (new) or
+   in place of the entry's own card (edit in place) */
+function entryForm(){return `
+  <div class="edhead" data-save="saveEnt" data-cancel="cancelEd"><h3 id="edtitle"></h3></div>
+  <input type="hidden" id="ed_id">
+  <input id="ed_comment" placeholder="Title / comment (for your reference)">
+  <input id="ed_keys" placeholder="Keywords — comma separated (any match triggers)">
+  <input id="ed_keys2" placeholder="Secondary keywords — ALL must also match">
+  <textarea id="ed_content" placeholder="Content — lore, location details, rules"></textarea>
+  <label class="cb"><input type="checkbox" id="ed_const"> Always active (no keyword needed)</label>
+  <label class="cb"><input type="checkbox" id="ed_enabled" checked> Enabled</label>
+  <input id="ed_ord" type="number" placeholder="Order (0 = first)" value="0">`}
+const ED_FIELDS=['ed_id','ed_comment','ed_keys','ed_keys2','ed_content','ed_const','ed_enabled','ed_ord'];
+function fillEnt(e){
+  $('edtitle').textContent=e?'Edit entry #'+e.id:'New entry';
+  fillFields({ed_id:e?.id||'',ed_comment:e?.comment||'',ed_keys:e?JSON.parse(e.keys||'[]').join(', '):'',ed_keys2:e?JSON.parse(e.keysecondary||'[]').join(', '):'',ed_content:e?.content||'',ed_const:!!e?.constant,ed_enabled:e?!!e.enabled:true,ed_ord:e?.ord||0});
+}
+function newEntry(){selEntry=0;$('editor').innerHTML=entryForm();initEdHeads($('editor'));fillEnt(null);$('editor').style.display='block';mpScrollTo($('editor'));load()}
+function editIdx(i){edit(allEntries[i])}
+async function edit(e){selEntry=e.id;$('editor').innerHTML='';$('editor').style.display='none';await load();document.querySelector('.card.editing')?.scrollIntoView({behavior:'smooth',block:'start'})}
+function cancelEd(){selEntry=0;$('editor').innerHTML='';$('editor').style.display='none';load()}
+async function saveEnt(){
+  const id=$('ed_id').value;
+  const b={book:selBook,comment:$('ed_comment').value.trim(),keys:$('ed_keys').value,keysecondary:$('ed_keys2').value,content:$('ed_content').value,constant:$('ed_const').checked,enabled:$('ed_enabled').checked,ord:Number($('ed_ord').value)||0};
+  if(!b.content.trim())return alert('needs content');
+  if(id)await api('world/update',{id:Number(id),...b});
+  else await api('world',b);
+  selEntry=0;$('editor').innerHTML='';$('editor').style.display='none';
+  load();
+}
+async function toggle(id,en){await api('world/update',{id,enabled:!!en});load()}
+async function del(id){if(confirm('Delete this entry?')){await api('world/delete',{id});if(selEntry===id)selEntry=0;load()}}
+load().then(()=>selBook?pickBook(selBook):newBookPanel());
 </script>
 </body>
 </html>

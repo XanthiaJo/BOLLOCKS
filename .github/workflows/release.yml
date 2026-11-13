@@ -3,11 +3,11 @@ name: Stable Release
 # Releases are always manual — Actions → Stable Release → Run workflow (from dev).
 #
 # Flow: plan the version → bump package.json on the dispatch branch → mirror
-# the dispatch branch into main via auto-PR → tag the merge commit vX.Y.Z →
+# the dispatch branch into master via auto-PR → tag the merge commit vX.Y.Z →
 # create the GitHub Release.
 #
 # Versioning follows StructuredChaos docs/git-rules.md: feat → minor,
-# BREAKING/! → major, everything else → patch. Dispatch on main directly for
+# BREAKING/! → major, everything else → patch. Dispatch on master directly for
 # hotfixes (sync is skipped, tag lands on the branch tip).
 
 on:
@@ -55,7 +55,7 @@ jobs:
           git commit -m "chore(package): bump version to $RELEASE_TAG"
           git push origin "HEAD:$BRANCH"
 
-  # The real release: syncs the dispatch branch into main via auto-PR (and
+  # The real release: syncs the dispatch branch into master via auto-PR (and
   # back-merges so tags stay reachable from dev), tags the merge commit, and
   # creates the GitHub Release.
   release:
@@ -69,6 +69,30 @@ jobs:
       contents: write
       pull-requests: write
     with:
-      release-branch: main
+      release-branch: master
       deploy: false
     secrets: inherit
+
+  # Keep only the newest 5 stable releases — older ones (and their tags)
+  # are deleted so the release list stays readable.
+  prune:
+    name: Prune old stable releases
+    needs: [plan, release]
+    if: always() && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete stable releases beyond the newest 5
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP: 5
+        run: |
+          gh release list --limit 100 --json tagName,isPrerelease \
+            | jq -r --argjson keep "$KEEP" \
+                '[.[] | select(.isPrerelease == false)] | .[keep:] | .[].tagName' \
+            | while read -r tag; do
+                [ -z "$tag" ] && continue
+                echo "pruning $tag"
+                gh release delete "$tag" --yes --cleanup-tag
+              done

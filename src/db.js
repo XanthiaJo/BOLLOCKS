@@ -3,8 +3,9 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { identiconPng } from './lib/identicon.js';
 
-const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
+export const DATA_DIR = path.resolve(process.env.BOLLOCKS_DATA || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data'));
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 export const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
@@ -35,7 +36,7 @@ CREATE TABLE IF NOT EXISTS cards (
     id INTEGER PRIMARY KEY, owner_users_id_fk INTEGER REFERENCES users(id),
     name TEXT NOT NULL, description TEXT DEFAULT '',
     first_message TEXT DEFAULT '',
-    api_profiles_id_fk INTEGER REFERENCES api_profiles(id)
+    api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk)
 );
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,17 +85,17 @@ CREATE TABLE IF NOT EXISTS mem_profiles (
     mem_every INTEGER DEFAULT 10,
     mem_budget INTEGER DEFAULT 800,
     mem_max INTEGER DEFAULT 50,
-    mem_max_fact INTEGER DEFAULT 50,
-    mem_max_event INTEGER DEFAULT 50,
-    mem_max_relationship INTEGER DEFAULT 50,
-    mem_max_preference INTEGER DEFAULT 50,
+    mem_max_fact INTEGER DEFAULT 15,
+    mem_max_event INTEGER DEFAULT 15,
+    mem_max_relationship INTEGER DEFAULT 15,
+    mem_max_preference INTEGER DEFAULT 15,
     mem_extraction_prompt TEXT DEFAULT '',
     mem_context_threshold INTEGER DEFAULT 80,
     mem_response_length INTEGER DEFAULT 2000,
     mem_gen_budget INTEGER DEFAULT 2000,
     mem_unlimited INTEGER DEFAULT 0,
     mem_unified INTEGER DEFAULT 1,
-    mem_triggers INTEGER DEFAULT 0,
+    mem_triggers INTEGER DEFAULT 1,
     mem_autotune INTEGER DEFAULT 0,
     mem_refresh INTEGER DEFAULT 1,
     mem_activity INTEGER DEFAULT 0,
@@ -109,8 +110,10 @@ export const verify = (pw, salt, h) =>
 
 export function createUser(handle, password) {
     const { salt, hash: h } = hash(password);
-    return db.prepare('INSERT INTO users (handle,password_hash,salt) VALUES (?,?,?)')
+    const id = db.prepare('INSERT INTO users (handle,password_hash,salt) VALUES (?,?,?)')
         .run(handle, h, salt).lastInsertRowid;
+    db.prepare("INSERT INTO prompt_profiles (users_id_fk,name,active) VALUES (?,'Default',1)").run(id);
+    return id;
 }
 export function login(handle, password) {
     const u = db.prepare('SELECT *, users_id_pk AS id FROM users WHERE handle = ? COLLATE NOCASE').get(handle);
@@ -143,6 +146,28 @@ export function migrateSchema() {
     const ccols2 = db.prepare('PRAGMA table_info(cards)').all().map(c => c.name);
     if (ccols2.includes('profile_id')) db.exec('ALTER TABLE cards DROP COLUMN profile_id');
     if (!ccols2.includes('api_profiles_id_fk')) db.exec('ALTER TABLE cards ADD COLUMN api_profiles_id_fk INTEGER');
+    // Older builds declared cards.api_profiles_id_fk -> api_profiles(id), which no
+    // longer exists after the PK rename — any write to it fails "foreign key
+    // mismatch". Rebuild cards with the corrected FK when that signature shows.
+    const cardSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='cards'").get()?.sql || '';
+    if (cardSql.includes('REFERENCES api_profiles(id)')) {
+        db.exec('PRAGMA foreign_keys=OFF');
+        db.exec(`BEGIN;
+            CREATE TABLE cards_new (cards_id_pk INTEGER PRIMARY KEY, owner_users_id_fk INTEGER REFERENCES users(users_id_pk),
+                name TEXT NOT NULL, description TEXT DEFAULT '', first_message TEXT DEFAULT '',
+                personality TEXT DEFAULT '', scenario TEXT DEFAULT '', mes_example TEXT DEFAULT '',
+                system_prompt TEXT DEFAULT '', post_history_instructions TEXT DEFAULT '',
+                alternate_greetings TEXT DEFAULT '[]', tags TEXT DEFAULT '[]', creator TEXT DEFAULT '',
+                creatorcomment TEXT DEFAULT '', character_version TEXT DEFAULT '', avatar TEXT DEFAULT '',
+                card_json TEXT DEFAULT '', is_persona INTEGER DEFAULT 0,
+                api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk));
+            INSERT INTO cards_new SELECT cards_id_pk, owner_users_id_fk, name, description, first_message,
+                personality, scenario, mes_example, system_prompt, post_history_instructions,
+                alternate_greetings, tags, creator, creatorcomment, character_version, avatar,
+                card_json, is_persona, api_profiles_id_fk FROM cards;
+            DROP TABLE cards; ALTER TABLE cards_new RENAME TO cards; COMMIT;`);
+        db.exec('PRAGMA foreign_keys=ON');
+    }
     // rooms.world_book_id + duplicate world_books_id_fk are dead — junction handles links.
     for (const col of ['world_book_id','world_books_id_fk','mem_last_id','mem_profile_id','api_profiles_id_fk'])
         if (db.prepare('PRAGMA table_info(rooms)').all().some(c => c.name === col))
@@ -191,6 +216,8 @@ export function migrateSchema() {
     };
     for (const [col, def] of Object.entries(v2))
         if (!cols.includes(col)) db.exec(`ALTER TABLE cards ADD COLUMN ${col} ${def}`);
+    const ucols = db.prepare('PRAGMA table_info(users)').all().map(c => c.name);
+    if (!ucols.includes('email')) db.exec("ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''");
     // World lorebook model: books own entries; rooms link to one book.
     const wcols = db.prepare('PRAGMA table_info(world_entries)').all().map(c => c.name);
     if (!wcols.includes('world_books_id_fk')) db.exec('ALTER TABLE world_entries ADD COLUMN world_books_id_fk INTEGER REFERENCES world_books(world_books_id_pk)');
@@ -231,17 +258,17 @@ export function migrateSchema() {
                 mem_every INTEGER DEFAULT 10,
                 mem_budget INTEGER DEFAULT 800,
                 mem_max INTEGER DEFAULT 50,
-                mem_max_fact INTEGER DEFAULT 50,
-                mem_max_event INTEGER DEFAULT 50,
-                mem_max_relationship INTEGER DEFAULT 50,
-                mem_max_preference INTEGER DEFAULT 50,
+                mem_max_fact INTEGER DEFAULT 15,
+                mem_max_event INTEGER DEFAULT 15,
+                mem_max_relationship INTEGER DEFAULT 15,
+                mem_max_preference INTEGER DEFAULT 15,
                 mem_extraction_prompt TEXT DEFAULT '',
                 mem_context_threshold INTEGER DEFAULT 80,
                 mem_response_length INTEGER DEFAULT 2000,
                 mem_gen_budget INTEGER DEFAULT 2000,
                 mem_unlimited INTEGER DEFAULT 0,
                 mem_unified INTEGER DEFAULT 1,
-                mem_triggers INTEGER DEFAULT 0,
+                mem_triggers INTEGER DEFAULT 1,
                 mem_autotune INTEGER DEFAULT 0,
                 mem_refresh INTEGER DEFAULT 1,
                 mem_activity INTEGER DEFAULT 0,
@@ -272,10 +299,34 @@ export function migrateSchema() {
             'mem_autotune', 'mem_refresh', 'mem_activity', 'mem_extraction_profile_id'];
         for (const c of DROP) if (rcolsNow.includes(c)) db.exec(`ALTER TABLE rooms DROP COLUMN ${c}`);
     }
-    if (uv !== 4) db.exec('PRAGMA user_version=4');
+    // One-time: auto-tune is shelved (the UI control is disabled) — force it
+    // off on every profile so it stops running server-side too.
+    if (uv < 5) db.exec('UPDATE mem_profiles SET mem_autotune=0');
+    if (uv !== 5) db.exec('PRAGMA user_version=5');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
     if (!mecols.includes('source')) db.exec("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'manual'");
+    // prompt_profiles: injection/prompt-assembly presets. prompt order moved
+    // off mem_profiles — it positions card/world blocks too, so it was never
+    // memory-scoped. The user's active profile applies to all their
+    // generations regardless of which API connection is used.
+    const mpcols = db.prepare('PRAGMA table_info(mem_profiles)').all().map(c => c.name);
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='prompt_profiles'").get()) {
+        db.exec(`CREATE TABLE prompt_profiles (
+            prompt_profiles_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+            users_id_fk INTEGER NOT NULL REFERENCES users(users_id_pk),
+            name TEXT NOT NULL,
+            prompt_order TEXT,
+            active INTEGER DEFAULT 0)`);
+        for (const u of db.prepare('SELECT users_id_pk FROM users').all()) {
+            const old = mpcols.includes('mem_prompt_order')
+                ? db.prepare('SELECT mem_prompt_order FROM mem_profiles WHERE users_id_fk=? AND mem_prompt_order IS NOT NULL ORDER BY mem_profiles_id_pk LIMIT 1').get(u.users_id_pk)
+                : null;
+            db.prepare("INSERT INTO prompt_profiles (users_id_fk,name,prompt_order,active) VALUES (?,'Default',?,1)")
+                .run(u.users_id_pk, old?.mem_prompt_order || null);
+        }
+    }
+    if (mpcols.includes('mem_prompt_order')) db.exec('ALTER TABLE mem_profiles DROP COLUMN mem_prompt_order');
     // members = entity (card/user + talkativeness); room_members = junction.
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='room_members'").get()) {
         db.exec(`CREATE TABLE room_members (
@@ -377,9 +428,24 @@ export function migrateSchema() {
     }
     // Books ↔ rooms is many-to-many — junction replaces rooms.world_books_id_fk.
     db.exec(`CREATE TABLE IF NOT EXISTS room_books (
-        rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
-        world_books_id_fk INTEGER NOT NULL REFERENCES world_books(id),
+        rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+        world_books_id_fk INTEGER NOT NULL REFERENCES world_books(world_books_id_pk),
         UNIQUE(rooms_id_fk, world_books_id_fk))`);
+    // room_books was first created pointing at rooms(id)/world_books(id), which no
+    // longer exist after the pk renames — every insert failed with "foreign key mismatch".
+    const rbSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='room_books'").get()?.sql || '';
+    if (rbSql.includes('REFERENCES rooms(id)') || rbSql.includes('REFERENCES world_books(id)')) {
+        db.exec('PRAGMA foreign_keys=OFF');
+        db.exec(`BEGIN;
+            CREATE TABLE room_books_new (
+                rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+                world_books_id_fk INTEGER NOT NULL REFERENCES world_books(world_books_id_pk),
+                UNIQUE(rooms_id_fk, world_books_id_fk));
+            INSERT OR IGNORE INTO room_books_new (rooms_id_fk, world_books_id_fk)
+                SELECT rooms_id_fk, world_books_id_fk FROM room_books;
+            DROP TABLE room_books; ALTER TABLE room_books_new RENAME TO room_books; COMMIT;`);
+        db.exec('PRAGMA foreign_keys=ON');
+    }
     if (db.prepare('PRAGMA table_info(rooms)').all().some(c => c.name === 'world_books_id_fk'))
         db.exec(`INSERT OR IGNORE INTO room_books (rooms_id_fk,world_books_id_fk)
             SELECT rooms_id_pk, world_books_id_fk FROM rooms WHERE world_books_id_fk IS NOT NULL`);
@@ -424,7 +490,9 @@ export function migrateSchema() {
     }
     const roomLinks = hasRoomsFk
         ? db.prepare('SELECT memories_id_pk, rooms_id_fk FROM memories').all()
-        : [];
+        : (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='room_memories'").get()
+            ? db.prepare('SELECT memories_id_fk AS memories_id_pk, rooms_id_fk FROM room_memories').all()
+            : []);
     // Fix stale memory_cards FK (older builds referenced memories(id)).
     const mcSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='memory_cards'").get()?.sql || '';
     if (mcSql && mcSql.includes('memories(id)')) {
@@ -492,6 +560,17 @@ export function migrateSchema() {
     for (const r of existingCardLinks) insCard.run(r.memory_id_fk, r.cards_id_fk);
     // Duplicate-member dedupe removed — membership lives in room_members
     // junction (UNIQUE on room+member) so dupes can't form.
+    // Room owner: the user whose persona sits in the room (lowest user id,
+    // matching the convention generation uses for memory extraction).
+    const rcolsEnd = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);
+    if (!rcolsEnd.includes('owner_users_id_fk')) db.exec('ALTER TABLE rooms ADD COLUMN owner_users_id_fk INTEGER');
+    db.exec(`UPDATE rooms SET owner_users_id_fk=COALESCE((
+        SELECT MIN(c.owner_users_id_fk) FROM room_members rm
+        JOIN members m ON m.members_id_pk=rm.members_id_fk
+        JOIN cards c ON c.cards_id_pk=m.cards_id_fk
+        WHERE rm.rooms_id_fk=rooms.rooms_id_pk AND c.is_persona=1),
+        (SELECT users_id_pk FROM users ORDER BY users_id_pk LIMIT 1))
+        WHERE owner_users_id_fk IS NULL`);
 }
 
 /** One-time: import legacy settings-JSON connections as a "Default" profile. */
@@ -507,24 +586,36 @@ export function migrateProfiles() {
     }
 }
 
+// Deterministic identicon avatar for a card — files land in data/cards and
+// the column stores the api-facing path, same shape as an uploaded avatar.
+function seedAvatar(cardId, name) {
+    const file = `cards/${cardId}.png`;
+    fs.mkdirSync(path.join(DATA_DIR, 'cards'), { recursive: true });
+    fs.writeFileSync(path.join(DATA_DIR, file), identiconPng(`${name}:${cardId}`));
+    db.prepare('UPDATE cards SET avatar=? WHERE cards_id_pk=?').run(file, cardId);
+}
+
 export function seed() {
     // Test users — every account gets membership in room 1.
     const room = db.prepare('SELECT rooms_id_pk AS id FROM rooms ORDER BY rooms_id_pk LIMIT 1').get()?.id
-        || db.prepare(`INSERT INTO rooms (name,mem_profiles_id_fk) VALUES ('The House',(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1))`).lastInsertRowid;
-    for (const h of ['creamms', 'karima', 'blake', 'entropy75']) {
+        || db.prepare(`INSERT INTO rooms (name,mem_profiles_id_fk) VALUES ('The House',(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1))`).run().lastInsertRowid;
+    for (const h of ['admin', 'alice', 'bob', 'carol']) {
         if (!db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get(h))
             createUser(h, 'changeme');
     }
     // Only auto-join the test users on a fresh install (no humans anywhere).
     const memberFor = (uid, handle) => {
         let pc = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(uid)?.cards_id_pk;
-        if (!pc) pc = db.prepare('INSERT INTO cards (owner_users_id_fk,name,is_persona) VALUES (?,?,1)').run(uid, handle).lastInsertRowid;
+        if (!pc) {
+            pc = db.prepare('INSERT INTO cards (owner_users_id_fk,name,is_persona) VALUES (?,?,1)').run(uid, handle).lastInsertRowid;
+            seedAvatar(pc, handle);
+        }
         let mid = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc)?.members_id_pk;
         if (!mid) mid = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(pc).lastInsertRowid;
         return mid;
     };
     if (!db.prepare('SELECT 1 FROM members LIMIT 1').get()) {
-        for (const h of ['creamms', 'karima', 'blake', 'entropy75']) {
+        for (const h of ['admin', 'alice', 'bob', 'carol']) {
             const uid = db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get(h).id;
             db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)')
                 .run(room, memberFor(uid, h));
@@ -540,5 +631,72 @@ export function seed() {
     const mptest = db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get('mptest')?.id;
     if (mptest) db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)')
         .run(room, memberFor(mptest, 'mptest'));
+    seedExamples(room);
     console.log('[db] users + room ensured');
+}
+
+// First-run example content: a demo character in the shared room, a small
+// lorebook linked to it, a few memories in each scope, and a short welcome
+// exchange — so a fresh install isn't a blank page. One-shot via a `meta`
+// flag: pieces the user deletes are never resurrected. Skipped entirely on
+// installs that already hold user-created cards or lorebooks, so upgrading
+// an existing database doesn't get demo content injected.
+function seedExamples(room) {
+    db.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)');
+    if (db.prepare('SELECT 1 FROM meta WHERE key=?').get('examples_seeded')) return;
+    const flag = db.prepare('INSERT INTO meta (key,value) VALUES (?,?)');
+    if (db.prepare('SELECT 1 FROM cards WHERE IFNULL(is_persona,0)=0 LIMIT 1').get()
+        || db.prepare('SELECT 1 FROM world_books LIMIT 1').get()) {
+        flag.run('examples_seeded', '0');
+        return;
+    }
+    const uid = db.prepare('SELECT users_id_pk AS id FROM users ORDER BY users_id_pk LIMIT 1').get()?.id;
+    if (!uid) { flag.run('examples_seeded', '0'); return; }
+
+    const wren = db.prepare(`INSERT INTO cards (owner_users_id_fk,name,description,personality,scenario,first_message,mes_example,tags,creator)
+        VALUES (?,?,?,?,?,?,?,?,?)`).run(uid, 'Wren',
+        "Wren is the caretaker of The House — a quiet, attentive figure who keeps the place running. She appears when she's needed: refills the kettle, fixes the draughty window, leaves notes on the kitchen board. She speaks plainly, with dry warmth, and knows every creak in the floorboards.",
+        "Calm, observant, dry humour. Helpful without fussing. Notices the small things about people and remembers them.",
+        "The House is a shared living space where its residents come and go. Wren keeps it — nobody remembers hiring her, but the plants are always watered.",
+        "The kettle had just boiled when you walked in. Wren set down a second cup without being asked. \"You look like you've had a day. Sit — the armchair by the window's the good one.\"",
+        "<START>\n{{user}}: Do you ever sleep, Wren?\n{{char}}: \"The House sleeps. I keep it.\" She folds a tea towel with surgical precision. \"But if it makes you feel better, I'll close my eyes on Tuesdays.\"\n<START>\n{{user}}: What's behind the locked door upstairs?\n{{char}}: \"Storage.\" A pause that lands exactly one beat too long. \"And the previous caretaker's dignity.\"",
+        '["demo"]', 'seed').lastInsertRowid;
+    seedAvatar(wren, 'wren');
+    const wmid = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(wren).lastInsertRowid;
+    db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(room, wmid);
+
+    const book = db.prepare('INSERT INTO world_books (owner_users_id_fk,name) VALUES (?,?)')
+        .run(uid, 'The House — notes').lastInsertRowid;
+    const ins = db.prepare('INSERT INTO world_entries (comment,content,constant,enabled,ord) VALUES (?,?,?,?,?)');
+    const link = db.prepare('INSERT INTO book_entries (world_books_id_fk,world_entries_id_fk) VALUES (?,?)');
+    const ik = db.prepare('INSERT OR IGNORE INTO world_entry_keys (world_entries_id_fk,word,kind) VALUES (?,?,?)');
+    for (const e of [
+        { comment: 'Wren (always in context)', content: "Wren has been the caretaker of The House for as long as anyone can remember.", constant: 1, keys: [] },
+        { comment: 'About The House', content: "The House is a three-storey Edwardian terrace that somehow always has enough rooms. It creaks, it leaks heat, and it is loved.", keys: ['house'] },
+        { comment: 'The kitchen', content: "The kitchen is the heart of The House — a long wooden table, a kettle that never quite stops steaming, and a pinboard of notes and bills.", keys: ['kitchen', 'kettle', 'tea'] },
+        { comment: 'The garden', content: "Out back is a walled garden gone slightly feral — lavender, a leaning apple tree, and a greenhouse where Wren keeps seedlings.", keys: ['garden', 'greenhouse', 'apple'] },
+    ]) {
+        const eid = ins.run(e.comment, e.content, e.constant ? 1 : 0, 1, 0).lastInsertRowid;
+        for (const w of e.keys) ik.run(eid, w, 'primary');
+        link.run(book, eid);
+    }
+    db.prepare('INSERT INTO room_books (rooms_id_fk,world_books_id_fk) VALUES (?,?)').run(room, book);
+
+    const mem = (content, type, origin, triggers, cardId) => {
+        const id = db.prepare('INSERT INTO memories (content,type,origin,triggers) VALUES (?,?,?,?)')
+            .run(content, type, origin, triggers).lastInsertRowid;
+        db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(room, id);
+        if (cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, cardId);
+    };
+    mem('The House has a leaning apple tree in the back garden.', 'fact', 'user', 'garden, apple', 0);
+    mem('Residents take their tea strong — Wren keeps biscuits in the blue tin.', 'preference', 'user', 'tea, biscuits', 0);
+    mem('Wren once fixed the upstairs window during a storm without being asked.', 'event', 'user', 'window, storm', wren);
+    mem('Wren considers everyone under the roof hers to look after.', 'relationship', 'smart', 'wren, caretaker', 0);
+
+    const imsg = db.prepare('INSERT INTO messages (rooms_id_fk,cards_id_fk,text) VALUES (?,?,?)');
+    imsg.run(room, null, 'Welcome to BOLLOCKS — this is a seeded example chat. Set up an API connection on the Connection page, then say something and Wren will answer.');
+    imsg.run(room, wren, "The kettle had just boiled when you walked in. Wren set down a second cup without being asked. \"You look like you've had a day. Sit — the armchair by the window's the good one.\"");
+
+    flag.run('examples_seeded', '1');
+    console.log('[db] seeded example content (Wren, lorebook, memories)');
 }
