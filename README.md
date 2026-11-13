@@ -82,6 +82,10 @@ Two tabs. **Connection** is the OpenAI-compatible endpoint — URL, model, key (
 
 ![Connection](docs/screenshots/connection.png)
 
+# Where it's going
+
+User management, a proper room settings view, smarter memory organization and more — see [docs/roadmap.md](docs/roadmap.md).
+
 # Nerdy Details
 
 ## Tech Stack
