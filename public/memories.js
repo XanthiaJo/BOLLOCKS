@@ -34,7 +34,7 @@ function renderList(){
     <h4 style="margin:12px 0 4px;color:var(--dim);font-size:.85em;text-transform:uppercase;letter-spacing:.04em">${esc(t)} (${groups[t].length})</h4>
     ${groups[t].map(m=>editId===m.id?editForm(m):`
     <div class="card">
-      <div><div class="comment"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="keys">${m.triggers?esc(m.triggers):'(always on)'}</div><div class="meta">#${m.id} · ${m.created||''} · ${esc(memScope(m.cards_id_fk))}</div></div>
+      <div><div class="comment">${esc(m.content)}</div><div class="keys"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${m.triggers?esc(m.triggers):'(always on)'}</div><div class="meta">#${m.id} · ${m.created||''} · ${esc(memScope(m.cards_id_fk))}</div></div>
       <div class="btns"><button onclick="editMem(${m.id})">Edit</button>${curTab==='smart'?`<button onclick="permPick(${m.id})">&rarr; perm</button>`:(cardId===0?`<button onclick="toSmart(${m.id})">&rarr; smart</button>`:'')}<button class="del" onclick="del(${m.id})">Delete</button></div>
     </div>
     ${permPicker(m)}</div>`).join('')}`).join('');
