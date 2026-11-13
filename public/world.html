@@ -15,7 +15,7 @@
     <h3>New book</h3>
     <input id="newname" placeholder="Book name">
     <button onclick="newBook()">Create</button>
-    <button onclick="document.getElementById('imp').click()" style="background:#5a4a7c">Import ST book…</button>
+    <button onclick="document.getElementById('imp').click()" style="background:var(--violet)">Import ST book…</button>
     <input type="file" id="imp" accept=".json" style="display:none" onchange="importBook(this)">
   </div>
 </main>
@@ -41,7 +41,7 @@ async function load(){
     <div class="rprof" onclick="location='/world-edit.html?id=${b.id}'">
       <div class="n">${esc(b.name)}</div>
       <div class="m">${b.cnt||0} entries · ${esc(b.owner||'shared')}${usedIn.length?' · in: '+esc(usedIn.join(', ')):''}
-        ${mine?` <a href="#" onclick="event.stopPropagation();delBook(${b.id});return false" style="color:#c66">✕</a>`:''}
+        ${mine?` <a href="#" onclick="event.stopPropagation();delBook(${b.id});return false" style="color:var(--err)">✕</a>`:''}
       </div>
     </div>`;
   }).join('')||'<small>No books yet — create one above or import an ST export.</small>';
