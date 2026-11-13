@@ -31,7 +31,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | `characters.html` | Card list + editor, avatar upload with in-browser crop |
 | `world.html` | Lorebook list (create/delete/link-to-room, ST JSON import) |
 | `world-edit.html` | Entry editor for one book (`?id=<book>`): keys, secondary keys, content, constant/enabled, order |
-| `memories.html` + `memories.js` + `memprofiles.js` + `memories.css` | Memory page: markup + browser script (tabs, filter by card/room, triggers, move between card↔room scope) + profile-editor script (settings panel, accordions, prompt order) + page styles. `memprofiles.js` loads last and calls `load()` |
+| `memories.html` + `memories.js` + `memprofiles.js` | Memory page: markup + browser script (tabs, filter by card/room, triggers, move between card↔room scope) + profile-editor script (settings panel, accordions, prompt order). `memprofiles.js` loads last and calls `load()`. All styles live in `layout.css` — settings grids via `class="panel settings"` |
 | `connection.html` | API profiles (OpenAI-compatible endpoints: url/model/key/headers/context), memory profiles, user admin |
 | `layout.js` | Shared shell injected into every page: top nav + sidebar toggles + version badge. Also `mpOpenEditor`/`mpCloseEditor`/`mpFlashSaved` and `activateProf` helpers |
 | `layout.css` | Shared styles for the shell and pages |

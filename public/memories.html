@@ -3,8 +3,6 @@
 <head>
 <meta charset="utf-8"><title>BOLLOCKS · Memories</title>
 <link rel="stylesheet" href="layout.css">
-
-<link rel="stylesheet" href="memories.css">
 </head>
 <body>
 <aside id="rsidebar">
@@ -26,8 +24,8 @@
       <textarea id="newmem" placeholder="e.g. Fig hates the colour green" style="min-height:60px;width:100%"></textarea>
       <button onclick="add()">Add memory</button>
     </div>
-    <div id="smartbar" style="display:none">
-      <div><span class="lbl" title="Which memory profile (preset of smart-memory settings) this chat follows.">Memory profile for this chat</span></div>
+    <div id="smartbar" style="display:none;margin:8px 0">
+      <div><span class="lbl" style="margin-bottom:3px" title="Which memory profile (preset of smart-memory settings) this chat follows.">Memory profile for this chat</span></div>
       <select id="smart_mprof" onchange="pickMProf(this.value)" style="width:240px"></select>
       <label class="cb" style="display:block;margin-top:6px"><input type="checkbox" id="smart_auto" onchange="toggleSmartAuto(this.checked)"> Enable Smart Memory</label>
       <span class="hint">When on, a second AI periodically reads new messages in this chat and stores lasting facts. Those memories are added to the prompt when relevant, so characters remember things between sessions.</span>
@@ -35,13 +33,13 @@
     </div>
   </div>
   <div id="list"></div>
-  <div class="panel" id="setpanel">
+  <div class="panel settings" id="setpanel">
     <h3>Memory profiles</h3>
     <div id="mprof_list"></div>
     <div style="display:flex;gap:6px;margin-top:6px"><button onclick="newMP()">New profile</button><button onclick="saveAsProfile()">Save current as profile…</button></div>
     <small style="color:var(--dim);display:block;margin-top:8px">Select a profile to make or edit it — its settings open in a new panel below. Chats pick which profile they follow on the Smart tab.</small>
   </div>
-  <div class="panel" id="profpanel" style="display:none">
+  <div class="panel settings" id="profpanel" style="display:none">
     <h3 id="pf_title"></h3>
     <label class="lbl" style="display:block">Profile name</label><input id="pf_name" style="width:240px;margin:2px 0" onchange="saveProf()">
     <div style="opacity:.45;pointer-events:none"><label class="cb"><input type="checkbox" disabled> Read-only mode — protect memories</label></div>

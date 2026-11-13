@@ -133,3 +133,54 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 .mp-veil #editor{display:block!important;width:min(720px,94vw);max-height:86vh;overflow-y:auto;border:1px solid var(--edge);border-radius:8px;padding:18px;background:var(--panel);box-shadow:0 12px 40px var(--veil)}
 .mp-saved{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--toast-bg);color:var(--toast-text);border:1px solid var(--ok);padding:8px 20px;border-radius:20px;font-size:.9em;opacity:0;transition:opacity .25s;pointer-events:none;z-index:99}
 .mp-saved.show{opacity:1}
+
+/* ===== shared components ===== */
+
+/* captions under labels / intro text */
+.hint{display:block;font-size:.8em;font-style:italic;color:var(--dim);margin:1px 0 6px}
+
+/* field labels */
+.lbl{display:block;font-size:.9em;color:var(--text)}
+
+/* tab switcher */
+.tabs{display:flex;gap:6px;margin:8px 0}
+.tab{background:var(--input);border:1px solid var(--line2);color:var(--muted);padding:5px 14px;border-radius:4px;cursor:pointer;width:auto;font-size:.85em}
+.tab.on{background:var(--accent);color:var(--white);border-color:var(--accent)}
+
+/* small type tag chips (memory types etc.) */
+.mtag{display:inline-block;font-size:.7em;font-weight:700;padding:1px 6px;border-radius:3px;background:var(--mtag);color:var(--muted);margin-right:4px}
+.mtag.mevent{background:var(--ok-deep);color:var(--mev)}
+.mtag.mrelationship{background:var(--mrel-bg);color:var(--mrel)}
+.mtag.mpreference{background:var(--mpref-bg);color:var(--mpref)}
+
+/* selectable list rows (profile pickers) */
+.mprofrow{display:flex;align-items:center;gap:6px;margin:4px 0;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;background:var(--panel2)}
+.mprofrow.sel{border-color:var(--accent);background:var(--accent-bg)}
+.mprofrow .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mprofrow small{color:var(--faint)}
+
+/* settings panels — add class="settings" to a .panel for the
+   label/caption-left, control-right grid rows */
+.settings h4{color:var(--dim);margin:16px 0 4px;font-size:.85em;text-transform:uppercase;letter-spacing:.04em}
+.settings .lbl{margin-top:12px}
+.settings .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:0 12px;margin:12px 0 4px}
+.settings .row .lbl{grid-column:1;margin-top:0}
+.settings .row .hint{grid-column:1;margin:0}
+.settings .row>:last-child{grid-column:2;grid-row:1/3;justify-self:end}
+.settings .row input[type=checkbox]{margin:0}
+.settings label.cbrow{cursor:pointer}
+.settings .row input[type=number]{width:80px}
+.settings .row input:not([type=number]):not([type=checkbox]){width:200px}
+.settings input[type=number]{display:inline-block}
+.settings .ph{opacity:.45;pointer-events:none;margin-top:4px}
+
+/* accordion — setupAcc() wraps <h4> sections; usable on any page */
+.acc{background:var(--surface3);border:1px solid var(--line2);border-radius:8px;margin:10px 0;overflow:hidden;box-shadow:0 2px 6px var(--shadow)}
+.acc-h{background:var(--input);padding:7px 10px;cursor:pointer;font-size:.9em;font-weight:700;color:var(--muted);display:flex;justify-content:space-between;align-items:center;user-select:none}
+.acc-h:hover{background:var(--input2)}
+.acc-h .arrow{transition:transform .15s;font-size:.9em}
+.acc-t{min-width:0}
+.acc-h .hint{font-weight:400;margin:2px 0 0}
+.acc-h.open .arrow{transform:rotate(90deg)}
+.acc-b{padding:8px 10px;display:none}
+.acc-b.open{display:block}
