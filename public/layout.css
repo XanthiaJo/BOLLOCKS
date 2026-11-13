@@ -102,7 +102,7 @@ input,textarea,select,button{padding:8px;background:var(--input);border:1px soli
 input,textarea,select{width:100%}
 select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23789'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
 select option{background:var(--input);color:var(--text)}
-button{background:var(--accent);cursor:pointer;border:none}
+button{background:var(--edge);cursor:pointer;border:none}
 button.del{background:var(--danger)}
 button.act{background:var(--ok)}
 small{color:var(--dim)}
