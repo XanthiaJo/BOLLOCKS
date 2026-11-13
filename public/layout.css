@@ -17,7 +17,7 @@
     --line:#2a2b2e;        /* thin borders/dividers */
     --line2:#3a3b3e;       /* borders on tabs/accordions/rows */
     --border:#444;         /* input borders */
-    --edge:#2b3a5e;        /* accent borders, selected panels */
+    --edge:var(--accent);   /* accent borders, selected panels */
     --track:#333;          /* range slider track */
     /* text */
     --text:#ddd;
@@ -30,7 +30,7 @@
     --it:#b8c9e8;          /* message italics */
     --neutral:#555;        /* plain gray */
     /* actions */
-    --accent:#3a5ccc;
+    --accent:#2b3a5e;
     --accent-bg:#1e2438;   /* selected-row tint */
     --ok:#4a7c3a;
     --ok-deep:#3a4a3e;     /* dark green tint */
@@ -70,7 +70,7 @@ nav .brand{font-weight:700;margin-right:8px;display:flex;flex-direction:column;l
 nav .brand .ver{font-size:.68em;font-weight:400;color:var(--faint);letter-spacing:.03em;text-align:center;margin-top:5px}
 nav a{color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:5px;font-size:.95em}
 nav a:hover{background:var(--surface2);color:var(--text)}
-nav a.on{background:var(--edge);color:var(--white)}
+nav a.on{background:var(--accent);color:var(--white)}
 #shell{flex:1;display:flex;min-height:0}
 #content{flex:1;min-width:0;display:flex;flex-direction:column}
 #sidebar{width:220px;flex:none}
@@ -102,7 +102,7 @@ input,textarea,select,button{padding:8px;background:var(--input);border:1px soli
 input,textarea,select{width:100%}
 select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23789'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
 select option{background:var(--input);color:var(--text)}
-button{background:var(--edge);cursor:pointer;border:none}
+button{background:var(--accent);cursor:pointer;border:none}
 button.del{background:var(--danger)}
 button.act{background:var(--ok)}
 small{color:var(--dim)}
@@ -122,7 +122,7 @@ label.cb input{margin:0;cursor:pointer}
 /* Checkboxes render as toggle switches app-wide. */
 input[type=checkbox]{appearance:none;-webkit-appearance:none;width:34px;height:18px;border-radius:9px;background:var(--input);border:1px solid var(--border);position:relative;cursor:pointer;margin:0;padding:0;flex:none;transition:background .15s,border-color .15s;vertical-align:middle}
 input[type=checkbox]::after{content:'';position:absolute;top:1px;left:1px;width:14px;height:14px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
-input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+input[type=checkbox]:checked{background:var(--accent);border-color:var(--edge)}
 input[type=checkbox]:checked::after{transform:translateX(16px);background:var(--white)}
 input[type=checkbox]:disabled{opacity:.5;cursor:default}
 .badge{display:inline-block;background:var(--ok);color:var(--white);font-size:.75em;padding:1px 7px;border-radius:8px;margin-left:6px;vertical-align:middle}
