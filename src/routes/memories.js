@@ -1,7 +1,7 @@
 // Memory routes: list/create/update/delete/triggers/move + lastmem.
 import { db } from '../db.js';
-import { send, readBody } from '../util.js';
-import { roomMember, memoryShared } from '../access.js';
+import { send, readBody } from '../lib/util.js';
+import { roomMember, memoryShared } from '../lib/access.js';
 
 export default {
     'GET /api/lastmem': async (req, res, u) => {

@@ -3,7 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { identiconPng } from './identicon.js';
+import { identiconPng } from './lib/identicon.js';
 
 export const DATA_DIR = path.resolve(process.env.BOLLOCKS_DATA || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data'));
 fs.mkdirSync(DATA_DIR, { recursive: true });

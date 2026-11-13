@@ -3,9 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { db, MSG_SQL } from '../db.js';
-import { send, readBody } from '../util.js';
-import { roomOwnerOnly, roomMember } from '../access.js';
-import { BG_DIR } from '../files.js';
+import { send, readBody } from '../lib/util.js';
+import { roomOwnerOnly, roomMember } from '../lib/access.js';
+import { BG_DIR } from '../lib/files.js';
 
 export default {
     'POST /api/members': async (req, res, u) => {

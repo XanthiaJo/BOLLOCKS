@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import zlib from 'node:zlib';
-import { extractCardJson, normalizeCard } from '../src/pngcard.js';
+import { extractCardJson, normalizeCard } from '../src/lib/pngcard.js';
 import { pngCardBuffer } from './helpers.js';
 
 function pngWithChunk(type, keyword, payload) {

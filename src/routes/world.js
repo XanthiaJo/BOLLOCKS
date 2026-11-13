@@ -1,7 +1,7 @@
 // Lorebook routes: books, entries, ST import, room linking.
 import { db } from '../db.js';
-import { send, readBody } from '../util.js';
-import { roomOwnerOnly, worldEntryOk } from '../access.js';
+import { send, readBody } from '../lib/util.js';
+import { roomOwnerOnly, worldEntryOk } from '../lib/access.js';
 
 export default {
     'GET /api/world/books': async (req, res, u) => {

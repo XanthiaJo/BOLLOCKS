@@ -1,5 +1,5 @@
 import { db, activeProfile, MSG_SQL } from './db.js';
-import { push } from './sse.js';
+import { push } from './lib/sse.js';
 
 // Latest prompt composition per room — exposed for the chat sidebar.
 export const genStats = {};

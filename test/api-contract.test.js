@@ -119,7 +119,7 @@ function returnedKeys(src, fnName) {
 
 function parseCalls() {
     const calls = [];
-    const files = fs.readdirSync(PUB).filter(f => /\.(html|js)$/.test(f));
+    const files = fs.readdirSync(PUB, { recursive: true }).filter(f => /\.(html|js)$/.test(f));
     for (const f of files) {
         const src = fs.readFileSync(path.join(PUB, f), 'utf8');
         for (const m of src.matchAll(/(?<![\w$.])(api|get)\(/g)) {

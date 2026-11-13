@@ -1,5 +1,5 @@
 // Permission helpers shared by route handlers.
-import { db } from './db.js';
+import { db } from '../db.js';
 
 export const roomOwner = id => db.prepare('SELECT owner_users_id_fk AS o FROM rooms WHERE rooms_id_pk=?').get(id)?.o;
 export const roomOwnerOnly = (roomId, u) => roomOwner(roomId) === u.users_id_pk;
