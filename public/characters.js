@@ -17,23 +17,17 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.addEventListener('mouseup',()=>drag=null);document.addEventListener('touchend',()=>drag=null);
 });
 
+initSidebar({tabs:[{label:'Characters',on:true,onclick:'newCard()'}],sections:[{title:'Characters',id:'list'}],buttons:[{label:'+ New character',onclick:'newCard()'}]});
 let me='',allCards=[];
 async function load(){
   const [{cards},who]=await Promise.all([get('cards'),get('me')]);
   me=who.handle;allCards=cards||[];
-  $('list').innerHTML=allCards.map((c,i)=>`
-    <div class="card" style="cursor:pointer" onclick="editIdx(${i})">
-      <img src="/api/avatar?id=${c.id}" onerror="this.style.visibility='hidden'">
-      <div>
-        <div class="name">${esc(c.name)}</div>
-        <div class="desc">${esc(c.description)}</div>
-        <div class="meta">#${c.id} · owner ${esc(c.owner||'?')}${profName(c)}</div>
-      </div>
-      <div class="btns" id="btns${c.id}" onclick="event.stopPropagation()">
-        ${c.owner===me?`<button style="background:${c.is_persona?'var(--ok)':'var(--olive)'}" onclick="api('persona',{cardId:${c.is_persona?'null':c.id}}).then(load)">★${c.is_persona?' persona':''}</button>`:''}
-        ${c.owner===me?`<button class="del" onclick="del(${c.id})">Delete</button>`:''}
-      </div>
-    </div>`).join('');
+  $('list').innerHTML=allCards.map((c,i)=>rprofRow({
+      img:`<img src="/api/avatar?id=${c.id}" onerror="this.style.visibility='hidden'">`,
+      name:esc(c.name),meta:`#${c.id} · ${esc(c.owner||'?')}${profName(c)}`,onclick:`editIdx(${i})`,
+      btns:`${c.owner===me?`<button class="${c.is_persona?'act':'sec'}" onclick="api('persona',{cardId:${c.is_persona?'null':c.id}}).then(load)">★${c.is_persona?' persona':''}</button>`:''}` +
+        `${c.owner===me?`<button class="del" onclick="del(${c.id})">Delete</button>`:''}`,
+    })).join('');
 }
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let profs=[];

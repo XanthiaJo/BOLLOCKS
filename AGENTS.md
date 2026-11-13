@@ -33,7 +33,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | `world-edit.html` | Entry editor for one book (`?id=<book>`): keys, secondary keys, content, constant/enabled, order |
 | `memories.html` + `memories.js` | Memory browser: Permanent/Smart tabs, sidebar scope picker (room-shared or per-character; Smart stays room-scoped for now). `memsettings.html` + `memsettings.js` | Smart memory page (nav: "Smart memory"): profile list in sidebar → editor panel (`class="panel settings"` accordions). `memprofiles.js` | Shared profile-editor code loaded by both pages — it ends by calling the page's own `load()`. All styles live in `layout.css` |
 | `connection.html` + `connection.js` | Profiles page, tabbed: Connection (API profiles — OpenAI-compatible url/model/key/headers/context) and Injection (prompt_profiles — prompt-assembly presets incl. prompt order) |
-| `layout.js` | Shared shell injected into every page: top nav + sidebar toggles + version badge. Also `mpOpenEditor`/`mpCloseEditor`/`mpFlashSaved` and `activateProf` helpers |
+| `layout.js` | Shared shell injected into every page: top nav + sidebar toggles + version badge. Helpers: `mpOpenEditor`/`mpCloseEditor`/`mpFlashSaved`, `activateProf`, and `rprofRow()` — the single builder for sidebar picker rows (`.rprof` in layout.css is its style) |
 | `layout.css` | Shared styles for the shell and pages |
 
 ### Everything else
@@ -94,6 +94,7 @@ Core tables:
 - `localStorage` keys: `mp_token` (session), `mp_room` (last room).
 - Images/SSE can't send headers — `/api/avatar`, `/api/roombg` authenticate via the `mp_token` cookie; `EventSource` uses `?token=`. Don't re-add public exemptions for them.
 - Element IDs like `$('msgs')`, `$('members')` come from each page's markup; the `$` helper is defined per-page.
+- **Sidebar anatomy** — every settings page declares a bare `<aside id="rsidebar"></aside>` and calls `initSidebar({tabs, sections, buttons, footer})` (layout.js); the skeleton (tabs → h3 → list → buttons → caption) exists only there. Picker rows render through `rprofRow()` and style via `.rprof` (layout.css): `sel:` is the single accent "selected" state, "in use/active" is a `.badge` — don't hand-write row HTML or per-page highlight classes.
 - Logout: nav link → `GET /api/logout` (deletes session server-side + clears cookie + redirects); the click handler clears `localStorage.mp_token`.
 
 ## Tech stack and runtime

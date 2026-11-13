@@ -14,18 +14,13 @@ textarea{min-height:90px;font-family:inherit;width:100%}
 .card .meta{color:var(--faint);font-size:.8em;margin-top:4px}
 .card .btns{display:flex;flex-direction:column;gap:6px}
 .card button{width:auto}
-button.del{background:var(--danger)}
 #editor{display:none;border:1px solid var(--edge);border-radius:6px;padding:14px;background:var(--panel);margin-bottom:14px}
 #editor h3{margin-top:0}
 #editor input{width:100%}
 </style>
 </head>
 <body>
-<aside id="rsidebar">
-  <h3>Characters</h3>
-  <div id="list"></div>
-  <button onclick="newCard()" style="width:100%;margin-top:8px">+ New character</button>
-</aside>
+<aside id="rsidebar"></aside>
 <div id="cropmodal" style="display:none;position:fixed;inset:0;background:var(--veil-deep);z-index:100;align-items:center;justify-content:center">
   <div style="background:var(--panel);padding:16px;border-radius:10px;text-align:center">
     <div class="cap" style="margin:0 0 8px">Drag to crop — confirm keeps the square</div>
@@ -37,7 +32,7 @@ button.del{background:var(--danger)}
       <label class="cap" style="display:inline-block;margin-right:8px">Size</label>
       <input type="range" id="cropsize" min="30" max="100" value="90" style="width:160px;vertical-align:middle" oninput="cropResize(this.value)">
       <button onclick="cropConfirm()">Use crop</button>
-      <button onclick="$('cropmodal').style.display='none'" style="background:var(--neutral)">Cancel</button>
+      <button class="sec" onclick="$('cropmodal').style.display='none'">Cancel</button>
     </div>
   </div>
 </div>
@@ -75,8 +70,8 @@ button.del{background:var(--danger)}
     <select id="ed_profile" style="width:100%;padding:8px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:4px"></select>
     <div style="margin-top:18px">
     <button onclick="saveCard()">Save</button>
-    <button onclick="clearEd()" style="background:var(--border)">Clear</button>
-    <button onclick="document.getElementById('imp').click()" style="background:var(--violet)">Import card…</button>
+    <button class="sec" onclick="clearEd()">Clear</button>
+    <button class="imp" onclick="document.getElementById('imp').click()">Import card…</button>
     <input type="file" id="imp" accept=".png,.json" style="display:none" onchange="importCard(this)">
     </div>
   </div>

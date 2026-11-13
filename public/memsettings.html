@@ -5,13 +5,7 @@
 <link rel="stylesheet" href="layout.css">
 </head>
 <body>
-<aside id="rsidebar">
-  <h3 style="margin-top:0">Smart memory profiles</h3>
-  <div id="plist"></div>
-  <button onclick="newMP()" style="width:100%;margin-top:8px">+ New profile</button>
-  <button onclick="saveAsProfile()" style="width:100%;margin-top:4px;background:var(--border)">Save current as profile…</button>
-  <small style="color:var(--dim);display:block;margin-top:10px">Chats pick which smart-memory profile they follow on the <a href="/memories.html" style="color:var(--muted)">Memories</a> page's Smart tab. Select a profile to edit it.</small>
-</aside>
+<aside id="rsidebar"></aside>
 <div id="content">
 <main>
   <div class="panel settings" id="profpanel" style="display:none">
@@ -140,7 +134,7 @@
       <label class="cb"><input type="checkbox" disabled> Keep model in memory</label>
     </div>
 
-    <div style="display:flex;gap:6px;margin-top:12px"><button onclick="saveProf()">Save profile</button><button onclick="delMP(selProf)" style="background:var(--danger)">Delete profile</button><button onclick="deselectProf()" style="background:var(--border)">Close</button></div>
+    <div style="display:flex;gap:6px;margin-top:12px"><button onclick="saveProf()">Save profile</button><button class="del" onclick="delMP(selProf)">Delete profile</button><button class="sec" onclick="deselectProf()">Close</button></div>
   </div>
 </main>
 </div>

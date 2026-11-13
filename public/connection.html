@@ -9,15 +9,7 @@
 </style>
 </head>
 <body>
-<aside id="rsidebar">
-  <h3 style="margin-top:0">Profiles</h3>
-  <div class="tabs">
-    <button class="tab on" id="t_api" onclick="connTab('api')">Connection</button>
-    <button class="tab" id="t_inj" onclick="connTab('inj')">Injection</button>
-  </div>
-  <div id="list"></div>
-  <button onclick="newProf()" style="width:100%;margin-top:8px">+ New profile</button>
-</aside>
+<aside id="rsidebar"></aside>
 <div id="content">
 <main>
   <div id="editor" class="panel settings" style="display:none">
@@ -59,7 +51,7 @@
       <input placeholder="Custom request body (JSON)" disabled>
     </div>
     <button onclick="saveProf()">Save</button>
-    <button onclick="clearEd()" style="background:var(--border)">Clear</button>
+    <button class="sec" onclick="clearEd()">Clear</button>
   </div>
 
   <div id="injeditor" class="panel settings" style="display:none">
@@ -76,7 +68,7 @@
       <div class="row"><span class="lbl" title="If set, this block only injects when a keyword appears in recent chat.">Trigger keywords (block-level)</span><span class="hint">If set, memory/world blocks only inject when a keyword appeared in recent chat — on top of each memory's own triggers.</span><input placeholder="comma-separated triggers" disabled></div>
     </div>
     <button onclick="saveProf()">Save</button>
-    <button onclick="clearEd()" style="background:var(--border)">Clear</button>
+    <button class="sec" onclick="clearEd()">Clear</button>
   </div>
   <small>Generation uses the <b>active</b> connection profile and the <b>active</b> injection profile — they switch independently.</small>
 </main>

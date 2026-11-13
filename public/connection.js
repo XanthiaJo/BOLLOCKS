@@ -7,6 +7,11 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 // Two profile kinds share this page: 'api' = connection profiles (endpoint,
 // model, key), 'inj' = injection profiles (prompt assembly). The tab swaps
 // which list the sidebar shows and which editor opens.
+initSidebar({
+  tabs:[{id:'t_api',label:'Connection',on:true,onclick:"connTab('api')"},{id:'t_inj',label:'Injection',onclick:"connTab('inj')"}],
+  sections:[{title:'Profiles',id:'list'}],
+  buttons:[{label:'+ New profile',onclick:'newProf()'}],
+});
 let curTab=localStorage.mp_conntab||'api';
 let allProfs=[],injProfs=[],promptBlocks=[],orderKeys=[];
 function connTab(t){curTab=t;localStorage.mp_conntab=t;load();newProf()}
@@ -16,31 +21,20 @@ async function load(){
   $('t_inj').classList.toggle('on',curTab==='inj');
   if(curTab==='inj'){
     const r=await get('promptprofiles');injProfs=r?.profiles||[];promptBlocks=r?.promptBlocks||[];
-    $('list').innerHTML=injProfs.map(p=>`
-      <div class="prof${p.active?' on':''}" style="cursor:pointer" onclick="editInj(${p.prompt_profiles_id_pk})">
-        <div>
-          <div class="name">${esc(p.name)}${p.active?'<span class="badge">active</span>':''}</div>
-          <div class="meta">${p.prompt_order?'custom order':'built-in order'}</div>
-        </div>
-        <div class="btns" onclick="event.stopPropagation()">
-          ${p.active?'':`<button class="act" onclick="activate(${p.prompt_profiles_id_pk})">Make active</button>`}
-          <button class="del" onclick="del(${p.prompt_profiles_id_pk})">Delete</button>
-        </div>
-      </div>`).join('')||'<small>No injection profiles yet.</small>';
+    $('list').innerHTML=injProfs.map(p=>rprofRow({
+      name:`${esc(p.name)}${p.active?'<span class="badge">active</span>':''}`,
+      meta:p.prompt_order?'custom order':'built-in order',
+      onclick:`editInj(${p.prompt_profiles_id_pk})`,
+      btns:`${p.active?'':`<button class="act" onclick="activate(${p.prompt_profiles_id_pk})">Make active</button>`}<button class="del" onclick="del(${p.prompt_profiles_id_pk})">Delete</button>`,
+    })).join('')||'<small>No injection profiles yet.</small>';
   } else {
     const {profiles}=await get('profiles');allProfs=profiles||[];
-    $('list').innerHTML=allProfs.map(p=>`
-      <div class="prof${p.active?' on':''}" style="cursor:pointer" onclick="edit(${p.id})">
-        <div>
-          <div class="name">${esc(p.name)}${p.active?'<span class="badge">active</span>':''}</div>
-          <div class="url">${esc(p.api_url)}</div>
-          <div class="meta">${esc(p.model)} · ${p.has_key?'key set':'no key'}</div>
-        </div>
-        <div class="btns" onclick="event.stopPropagation()">
-          ${p.active?'':`<button class="act" onclick="activate(${p.id})">Make active</button>`}
-          <button class="del" onclick="del(${p.id})">Delete</button>
-        </div>
-      </div>`).join('')||'<small>No profiles yet.</small>';
+    $('list').innerHTML=allProfs.map(p=>rprofRow({
+      name:`${esc(p.name)}${p.active?'<span class="badge">active</span>':''}`,
+      meta:`${esc(p.api_url)} · ${esc(p.model)} · ${p.has_key?'key set':'no key'}`,
+      onclick:`edit(${p.id})`,
+      btns:`${p.active?'':`<button class="act" onclick="activate(${p.id})">Make active</button>`}<button class="del" onclick="del(${p.id})">Delete</button>`,
+    })).join('')||'<small>No profiles yet.</small>';
   }
 }
 

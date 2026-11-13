@@ -1,10 +1,17 @@
 // --- Memory settings page: profile list in the sidebar, editor in main ---
-/* global selProf, effRow, setSelProf, fillProf */
+/* global selProf, effRow, setSelProf, fillProf, BLANK_PROF */
+let booted=false;
 const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
 const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.status===401?location='/login.html':r.json());
 const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.status===401?location='/login.html':r.json());
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+initSidebar({
+  tabs:[{label:'Smart memory profiles',on:true,onclick:'newMP()'}],
+  sections:[{title:'Smart memory profiles',id:'plist'}],
+  buttons:[{label:'+ New profile',onclick:'newMP()'},{label:'Save current as profile…',cls:'sec',onclick:'saveAsProfile()'}],
+  footer:'Chats pick which smart-memory profile they follow in their chat settings or the <a href="/memories.html" style="color:var(--muted)">Memories</a> page\'s Smart tab. Select a profile to edit it.',
+});
 let ROOM=Number(localStorage.mp_room||1);
 let memProfiles=[];let defPrompt='';
 async function load(){
@@ -17,9 +24,13 @@ async function load(){
   const followed=(rm?.mem_profiles_id_fk)&&(memProfiles.find(x=>x.mem_profiles_id_pk===rm.mem_profiles_id_fk))||null;
   effRow=followed||memProfiles[0]||null;
   $('plist').innerHTML=(memProfiles||[]).map(p=>
-    `<div class="mprofrow${p.mem_profiles_id_pk===selProf?' sel':''}" style="cursor:pointer" onclick="selectProf(${p.mem_profiles_id_pk})"><span class="n">${esc(p.name)}${p.auto_mem?' <small>smart on</small>':''}</span><button onclick="event.stopPropagation();delMP(${p.mem_profiles_id_pk})" class="del">Delete</button></div>`).join('')||'<small>No profiles yet — create one.</small>';
-  if(selProf&&!memProfiles.some(x=>x.mem_profiles_id_pk===selProf))setSelProf(0); // stale saved id
-  const sp=selProf&&memProfiles.find(x=>x.mem_profiles_id_pk===selProf)||null;
-  $('profpanel').style.display=sp?'block':'none';
-  if(sp)fillProf(sp);
+    rprofRow({name:`${esc(p.name)}${p.mem_profiles_id_pk===followed?.mem_profiles_id_pk?' <span class="badge">followed</span>':''}${p.auto_mem?' <span class="badge">smart on</span>':''}`,
+      sel:p.mem_profiles_id_pk===selProf,
+      onclick:`selectProf(${p.mem_profiles_id_pk})`,
+      btns:`<button class="del" onclick="delMP(${p.mem_profiles_id_pk})">Delete</button>`})).join('')||'<small>No profiles yet — create one.</small>';
+  if(selProf>0&&!memProfiles.some(x=>x.mem_profiles_id_pk===selProf))setSelProf(0); // stale saved id
+  const sp=selProf>0&&memProfiles.find(x=>x.mem_profiles_id_pk===selProf)||null;
+  $('profpanel').style.display=(sp||selProf===-1)?'block':'none';
+  if(sp)fillProf(sp);else if(selProf===-1){fillProf(BLANK_PROF);$('pf_title').textContent='New profile';}
+  if(!booted){booted=true;if(!selProf)newMP();} // landing on the page opens the new form
 }

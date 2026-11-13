@@ -5,17 +5,14 @@
 <link rel="stylesheet" href="layout.css">
 </head>
 <body>
-<aside id="rsidebar">
-  <h3>Books</h3>
-  <div id="list"></div>
-</aside>
+<aside id="rsidebar"></aside>
 <div id="content">
 <main>
-  <div class="panel">
+  <div class="panel" id="editor" style="display:none">
     <h3>New book</h3>
     <input id="newname" placeholder="Book name">
     <button onclick="newBook()">Create</button>
-    <button onclick="document.getElementById('imp').click()" style="background:var(--violet)">Import ST book…</button>
+    <button class="imp" onclick="document.getElementById('imp').click()">Import ST book…</button>
     <input type="file" id="imp" accept=".json" style="display:none" onchange="importBook(this)">
   </div>
 </main>
@@ -29,6 +26,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const ROOM=Number(localStorage.mp_room||1);
 let me='';
+initSidebar({tabs:[{label:'Books',on:true,onclick:'newBookPanel()'}],sections:[{title:'Books',id:'list'}],buttons:[{label:'+ New book',onclick:'newBookPanel()'}]});
 
 async function load(){
   const [{books,rooms},who]=await Promise.all([get('world/books'),get('me')]);
@@ -37,16 +35,14 @@ async function load(){
   $('list').innerHTML=(books||[]).map(b=>{
     const usedIn=rooms.filter(r=>r.world_books_id_fk===b.id).map(r=>r.name);
     const mine=!b.owner||b.owner===me;
-    return `
-    <div class="rprof" onclick="location='/world-edit.html?id=${b.id}'">
-      <div class="n">${esc(b.name)}</div>
-      <div class="m">${b.cnt||0} entries · ${esc(b.owner||'shared')}${usedIn.length?' · in: '+esc(usedIn.join(', ')):''}
-        ${mine?` <a href="#" onclick="event.stopPropagation();delBook(${b.id});return false" style="color:var(--err)">✕</a>`:''}
-      </div>
-    </div>`;
+    return rprofRow({name:esc(b.name),
+      meta:`${b.cnt||0} entries · ${esc(b.owner||'shared')}${usedIn.length?' · in: '+esc(usedIn.join(', ')):''}` +
+        `${mine?` <a href="#" onclick="event.stopPropagation();delBook(${b.id});return false" style="color:var(--err)">✕</a>`:''}`,
+      onclick:`location='/world-edit.html?id=${b.id}'`});
   }).join('')||'<small>No books yet — create one above or import an ST export.</small>';
 }
 
+function newBookPanel(){mpOpenEditor('inline');$('newname').focus()}
 async function newBook(){
   const name=$('newname').value.trim();if(!name)return;
   $('newname').value='';
@@ -60,7 +56,7 @@ async function importBook(input){
   if(r.error)return alert(r.error);
   location='/world-edit.html?id='+r.id;
 }
-load();
+load().then(newBookPanel);
 </script>
 </body>
 </html>
