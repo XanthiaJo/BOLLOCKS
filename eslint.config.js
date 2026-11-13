@@ -34,6 +34,10 @@ export default [
       sourceType: "script",
       globals: {
         ...globals.browser,
+        // Defined in layout.js, used across page scripts.
+        mpFlashSaved: "readonly",
+        mpOpenEditor: "readonly",
+        mpCloseEditor: "readonly",
       },
     },
     rules: {

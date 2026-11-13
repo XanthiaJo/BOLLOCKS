@@ -1,8 +1,20 @@
 import { db, activeProfile, MSG_SQL } from './db.js';
+import { push } from './sse.js';
 
 // Latest prompt composition per room — exposed for the chat sidebar.
 export const genStats = {};
 const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
+
+// Built-in extraction prompt, used when a profile leaves its template
+// blank. The triggers suffix is appended only to the built-in prompt.
+export const MEM_EXTRACT_PROMPT = `You extract lasting memories from roleplay chat logs. All memories are shared with the whole chat.
+Output ONLY bullet points, one per line, "- " prefix. Each starts with a type tag: [fact] (true things), [event] (things that happened), [relationship] (how characters feel about each other) or [preference] (likes/dislikes). Write complete sentences that name the subject — no pronouns, no narration.
+Example input: "Blake: the Venice API review pile is killing me\\nCreamms: I'll take half of it tomorrow"
+Example output:
+- [fact] Blake has a pending review pile for the Venice API.
+- [event] Creamms offered to take half of Blake's review pile tomorrow.
+- [preference] Blake dislikes working through the review pile.`;
+const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords in parentheses, e.g. "- [fact] Blake has a pending review pile. (triggers: pending, review)"';
 
 // Fields a memory profile can override on a room's mem_* settings.
 const MEM_PROFILE_FIELDS = ['auto_mem', 'mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
@@ -254,6 +266,7 @@ export async function maybeSummarize(roomId) {
         MSG_SQL + ' WHERE m.rooms_id_fk=? AND m.messages_id_pk>? ORDER BY m.messages_id_pk LIMIT 30')
         .all(roomId, room.mem_last_messages_id);
     if (!excerpt.length) return;
+    if (mem.mem_activity) push(roomId, { type: 'mem', phase: 'start' });
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
@@ -261,7 +274,7 @@ export async function maybeSummarize(roomId) {
         body: JSON.stringify({
             model: conn.model || 'local',
             messages: [
-                { role: 'system', content: mem.mem_extraction_prompt?.trim() || `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Each bullet must be a complete, self-contained sentence that names its subject (e.g. "Blake has a pending review pile for API configurations including Venice API."). Start with a type tag [fact], [event], [relationship] or [preference]. Use [shared] only for room-wide facts, and include the subject in the sentence. No narration, no pronouns without a named subject.${mem.mem_triggers ? ' For each memory also append its trigger keywords in parentheses, e.g. "- [fact] Blake has a pending review pile. (triggers: pending, review)"' : ''}` },
+                { role: 'system', content: mem.mem_extraction_prompt?.trim() || (MEM_EXTRACT_PROMPT + (mem.mem_triggers ? MEM_TRIGGERS_SUFFIX : '')) },
                 { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
             ],
             temperature: 0.3, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
@@ -269,6 +282,7 @@ export async function maybeSummarize(roomId) {
     });
     if (!resp.ok) return;
     const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
+    let added = 0;
     const ins = db.prepare("INSERT INTO memories (content,type,origin,triggers) VALUES (?,?, 'smart', ?)");
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
     for (const line of text.split('\n')) {
@@ -280,12 +294,15 @@ export async function maybeSummarize(roomId) {
         let triggers = '';
         const tr = fact.match(/\(([^)]*)\)\s*$/);
         if (tr) { triggers = tr[1].split(',').map(s => s.trim().toLowerCase()).filter(Boolean).join(','); fact = fact.slice(0, tr.index).trim(); }
-        if (fact.length > 10) { const mid = ins.run(fact, type, triggers).lastInsertRowid; linkRoom.run(roomId, mid); }
+        if (fact.length > 10) { const mid = ins.run(fact, type, triggers).lastInsertRowid; linkRoom.run(roomId, mid); added++; }
     }
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
     db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
-    if (mem.mem_activity) console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
+    if (mem.mem_activity) {
+        console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
+        push(roomId, { type: 'mem', phase: 'done', count: added });
+    }
     // Cap stored smart memories per type — oldest entries of each type drop off.
     for (const [type, col] of [['fact','mem_max_fact'],['event','mem_max_event'],['relationship','mem_max_relationship'],['preference','mem_max_preference']]) {
         const cap = mem[col] || 0;

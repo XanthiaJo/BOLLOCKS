@@ -118,7 +118,13 @@ small{color:var(--dim)}
 .cap{display:block;font-size:.78em;color:var(--dim);margin:10px 0 2px;text-transform:uppercase;letter-spacing:.04em}
 .cap small{text-transform:none;color:var(--faint)}
 label.cb{display:flex;gap:8px;align-items:center;margin:8px 0;font-size:.9em;width:fit-content;cursor:pointer}
-label.cb input{width:auto!important;margin:0;cursor:pointer}
+label.cb input{margin:0;cursor:pointer}
+/* Checkboxes render as toggle switches app-wide. */
+input[type=checkbox]{appearance:none;-webkit-appearance:none;width:34px;height:18px;border-radius:9px;background:var(--input);border:1px solid var(--border);position:relative;cursor:pointer;margin:0;padding:0;flex:none;transition:background .15s,border-color .15s;vertical-align:middle}
+input[type=checkbox]::after{content:'';position:absolute;top:1px;left:1px;width:14px;height:14px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+input[type=checkbox]:checked::after{transform:translateX(16px);background:var(--white)}
+input[type=checkbox]:disabled{opacity:.5;cursor:default}
 .badge{display:inline-block;background:var(--ok);color:var(--white);font-size:.75em;padding:1px 7px;border-radius:8px;margin-left:6px;vertical-align:middle}
 main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 

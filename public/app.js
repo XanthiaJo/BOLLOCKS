@@ -85,6 +85,7 @@ async function loadRoom() {
             renderToks();
         }
         if (d.type === 'delete') document.querySelector(`li[data-mid="${d.id}"]`)?.remove();
+        if (d.type === 'mem') mpFlashSaved(d.phase === 'done' ? (d.count ? `${d.count} new memories` : 'Memories updated') : 'Extracting memories…');
     };
     renderRooms();
     renderWorld();
