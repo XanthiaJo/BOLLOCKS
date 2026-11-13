@@ -49,7 +49,8 @@ describe('generation (mock LLM)', () => {
     });
 
     test('generate with no AI member 404s; no connection surfaces a 500', async () => {
-        assert.equal((await s.post('generate', { room: 1 })).status, 404); // room 1 is all humans
+        const humansOnly = (await s.post('rooms', { name: 'Humans only' })).json.id; // new rooms seat only the owner persona
+        assert.equal((await s.post('generate', { room: humansOnly })).status, 404);
         await asKarima(async () => { // karima has no api profile
             const kroom = (await s.post('rooms', { name: 'K room' })).json.id;
             const kcard = (await s.post('cards', { name: 'Solo' })).json.id;

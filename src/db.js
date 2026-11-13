@@ -595,5 +595,71 @@ export function seed() {
     const mptest = db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get('mptest')?.id;
     if (mptest) db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)')
         .run(room, memberFor(mptest, 'mptest'));
+    seedExamples(room);
     console.log('[db] users + room ensured');
+}
+
+// First-run example content: a demo character in the shared room, a small
+// lorebook linked to it, a few memories in each scope, and a short welcome
+// exchange — so a fresh install isn't a blank page. One-shot via a `meta`
+// flag: pieces the user deletes are never resurrected. Skipped entirely on
+// installs that already hold user-created cards or lorebooks, so upgrading
+// an existing database doesn't get demo content injected.
+function seedExamples(room) {
+    db.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)');
+    if (db.prepare('SELECT 1 FROM meta WHERE key=?').get('examples_seeded')) return;
+    const flag = db.prepare('INSERT INTO meta (key,value) VALUES (?,?)');
+    if (db.prepare('SELECT 1 FROM cards WHERE IFNULL(is_persona,0)=0 LIMIT 1').get()
+        || db.prepare('SELECT 1 FROM world_books LIMIT 1').get()) {
+        flag.run('examples_seeded', '0');
+        return;
+    }
+    const uid = db.prepare('SELECT users_id_pk AS id FROM users ORDER BY users_id_pk LIMIT 1').get()?.id;
+    if (!uid) { flag.run('examples_seeded', '0'); return; }
+
+    const wren = db.prepare(`INSERT INTO cards (owner_users_id_fk,name,description,personality,scenario,first_message,mes_example,tags,creator)
+        VALUES (?,?,?,?,?,?,?,?,?)`).run(uid, 'Wren',
+        "Wren is the caretaker of The House — a quiet, attentive figure who keeps the place running. She appears when she's needed: refills the kettle, fixes the draughty window, leaves notes on the kitchen board. She speaks plainly, with dry warmth, and knows every creak in the floorboards.",
+        "Calm, observant, dry humour. Helpful without fussing. Notices the small things about people and remembers them.",
+        "The House is a shared living space where its residents come and go. Wren keeps it — nobody remembers hiring her, but the plants are always watered.",
+        "The kettle had just boiled when you walked in. Wren set down a second cup without being asked. \"You look like you've had a day. Sit — the armchair by the window's the good one.\"",
+        "<START>\n{{user}}: Do you ever sleep, Wren?\n{{char}}: \"The House sleeps. I keep it.\" She folds a tea towel with surgical precision. \"But if it makes you feel better, I'll close my eyes on Tuesdays.\"\n<START>\n{{user}}: What's behind the locked door upstairs?\n{{char}}: \"Storage.\" A pause that lands exactly one beat too long. \"And the previous caretaker's dignity.\"",
+        '["demo"]', 'seed').lastInsertRowid;
+    const wmid = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(wren).lastInsertRowid;
+    db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(room, wmid);
+
+    const book = db.prepare('INSERT INTO world_books (owner_users_id_fk,name) VALUES (?,?)')
+        .run(uid, 'The House — notes').lastInsertRowid;
+    const ins = db.prepare('INSERT INTO world_entries (comment,content,constant,enabled,ord) VALUES (?,?,?,?,?)');
+    const link = db.prepare('INSERT INTO book_entries (world_books_id_fk,world_entries_id_fk) VALUES (?,?)');
+    const ik = db.prepare('INSERT OR IGNORE INTO world_entry_keys (world_entries_id_fk,word,kind) VALUES (?,?,?)');
+    for (const e of [
+        { comment: 'Wren (always in context)', content: "Wren has been the caretaker of The House for as long as anyone can remember.", constant: 1, keys: [] },
+        { comment: 'About The House', content: "The House is a three-storey Edwardian terrace that somehow always has enough rooms. It creaks, it leaks heat, and it is loved.", keys: ['house'] },
+        { comment: 'The kitchen', content: "The kitchen is the heart of The House — a long wooden table, a kettle that never quite stops steaming, and a pinboard of notes and bills.", keys: ['kitchen', 'kettle', 'tea'] },
+        { comment: 'The garden', content: "Out back is a walled garden gone slightly feral — lavender, a leaning apple tree, and a greenhouse where Wren keeps seedlings.", keys: ['garden', 'greenhouse', 'apple'] },
+    ]) {
+        const eid = ins.run(e.comment, e.content, e.constant ? 1 : 0, 1, 0).lastInsertRowid;
+        for (const w of e.keys) ik.run(eid, w, 'primary');
+        link.run(book, eid);
+    }
+    db.prepare('INSERT INTO room_books (rooms_id_fk,world_books_id_fk) VALUES (?,?)').run(room, book);
+
+    const mem = (content, type, origin, triggers, cardId) => {
+        const id = db.prepare('INSERT INTO memories (content,type,origin,triggers) VALUES (?,?,?,?)')
+            .run(content, type, origin, triggers).lastInsertRowid;
+        db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(room, id);
+        if (cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, cardId);
+    };
+    mem('The House has a leaning apple tree in the back garden.', 'fact', 'user', 'garden, apple', 0);
+    mem('Residents take their tea strong — Wren keeps biscuits in the blue tin.', 'preference', 'user', 'tea, biscuits', 0);
+    mem('Wren once fixed the upstairs window during a storm without being asked.', 'event', 'user', 'window, storm', wren);
+    mem('Wren considers everyone under the roof hers to look after.', 'relationship', 'smart', 'wren, caretaker', 0);
+
+    const imsg = db.prepare('INSERT INTO messages (rooms_id_fk,cards_id_fk,text) VALUES (?,?,?)');
+    imsg.run(room, null, 'Welcome to BOLLOCKS — this is a seeded example chat. Set up an API connection on the Connection page, then say something and Wren will answer.');
+    imsg.run(room, wren, "The kettle had just boiled when you walked in. Wren set down a second cup without being asked. \"You look like you've had a day. Sit — the armchair by the window's the good one.\"");
+
+    flag.run('examples_seeded', '1');
+    console.log('[db] seeded example content (Wren, lorebook, memories)');
 }
