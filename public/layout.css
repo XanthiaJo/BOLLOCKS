@@ -35,9 +35,9 @@
     --ok:#4a7c3a;
     --ok-deep:#3a4a3e;     /* dark green tint */
     --ok-tint:rgba(74,124,58,.15);
-    --danger:#7c3a3a;
-    --err:#c66;            /* error text, delete links */
-    --err-hi:#e88;
+    --danger:#b32b3d;      /* delete buttons — deepened cherry */
+    --err:#dd2e44;         /* error text, delete links — cherry red */
+    --err-hi:#ff7285;
     --violet:#5a4a7c;      /* import buttons */
     /* roles */
     --ai:#7ac;             /* AI speaker names, lorebook keys */
