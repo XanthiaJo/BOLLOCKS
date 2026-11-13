@@ -94,6 +94,7 @@ Core tables:
 - `localStorage` keys: `mp_token` (session), `mp_room` (last room).
 - Images/SSE can't send headers — `/api/avatar`, `/api/roombg` authenticate via the `mp_token` cookie; `EventSource` uses `?token=`. Don't re-add public exemptions for them.
 - Element IDs like `$('msgs')`, `$('members')` come from each page's markup; the `$` helper is defined per-page.
+- **Sidebar anatomy** (every settings page's `#rsidebar`): `[.tabs switcher]` → `h3` section title → `#list` of `rprofRow()` items → `+ New X` button → optional secondary buttons → `<small>` footer caption. `rprofRow()` (layout.js) is the only place picker-row markup is built; `.rprof` (layout.css) is the only place it's styled — don't hand-write row HTML.
 - Logout: nav link → `GET /api/logout` (deletes session server-side + clears cookie + redirects); the click handler clears `localStorage.mp_token`.
 
 ## Tech stack and runtime

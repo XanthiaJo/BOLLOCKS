@@ -8,10 +8,11 @@
 <aside id="rsidebar">
   <h3>Books</h3>
   <div id="list"></div>
+  <button onclick="newBookPanel()">+ New book</button>
 </aside>
 <div id="content">
 <main>
-  <div class="panel">
+  <div class="panel" id="editor" style="display:none">
     <h3>New book</h3>
     <input id="newname" placeholder="Book name">
     <button onclick="newBook()">Create</button>
@@ -44,6 +45,7 @@ async function load(){
   }).join('')||'<small>No books yet — create one above or import an ST export.</small>';
 }
 
+function newBookPanel(){mpOpenEditor('inline');$('newname').focus()}
 async function newBook(){
   const name=$('newname').value.trim();if(!name)return;
   $('newname').value='';
