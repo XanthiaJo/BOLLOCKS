@@ -133,6 +133,9 @@ small{color:var(--dim)}
 .card .btns button{width:auto}
 /* in-place editing — a card that has become its edit form */
 .card.editing{display:block;border-color:var(--edge)}
+.card.off{opacity:.5}
+.card .comment{font-weight:700}
+.card .keys{color:var(--ai);font-size:.85em;font-weight:600;margin-top:2px}
 /* content header — page/scope title left, contextual actions right */
 .cvhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
 .cvhead h2{margin:0}

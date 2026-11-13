@@ -5,9 +5,6 @@
 <link rel="stylesheet" href="layout.css">
 <style>
 textarea{min-height:80px;font-family:inherit}
-.ent.off{opacity:.5}
-.ent .comment{font-weight:700}
-.ent .keys{color:var(--ai);font-size:.85em;font-weight:600;margin-top:2px}
 </style>
 </head>
 <body>
@@ -75,9 +72,9 @@ async function load(){
   $('bname').textContent=b?.name||('Book #'+selBook);
   const draft=$('ed_id')&&$('ed_id').closest('#elist')?draftFields(ED_FIELDS):null;
   $('elist').innerHTML=allEntries.map((e,i)=>{
-    if(e.id===selEntry)return `<div class="card ent editing">${entryForm()}</div>`;
+    if(e.id===selEntry)return `<div class="card editing">${entryForm()}</div>`;
     const keys=JSON.parse(e.keys||'[]'),sec=JSON.parse(e.keysecondary||'[]');
-    return `<div class="card ent${e.enabled?'':' off'}">
+    return `<div class="card${e.enabled?'':' off'}">
       <div>
         ${e.comment?`<div class="comment">${esc(e.comment)}</div>`:''}
         <div class="keys">${e.constant?'⚡ always':esc(keys.join(', ')||'(no keys)')}${sec.length?' + '+esc(sec.join(', ')):''}</div>
@@ -142,7 +139,7 @@ function fillEnt(e){
 }
 function newEntry(){selEntry=0;$('editor').innerHTML=entryForm();initEdHeads($('editor'));fillEnt(null);$('editor').style.display='block';$('editor').scrollIntoView({behavior:'smooth',block:'start'});load()}
 function editIdx(i){edit(allEntries[i])}
-async function edit(e){selEntry=e.id;$('editor').innerHTML='';$('editor').style.display='none';await load();document.querySelector('.ent.editing')?.scrollIntoView({behavior:'smooth',block:'start'})}
+async function edit(e){selEntry=e.id;$('editor').innerHTML='';$('editor').style.display='none';await load();document.querySelector('.card.editing')?.scrollIntoView({behavior:'smooth',block:'start'})}
 function cancelEd(){selEntry=0;$('editor').innerHTML='';$('editor').style.display='none';load()}
 async function saveEnt(){
   const id=$('ed_id').value;
