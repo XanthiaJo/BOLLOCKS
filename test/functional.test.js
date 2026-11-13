@@ -80,7 +80,15 @@ describe('first-run registration (unseeded DB)', () => {
         await f.login('founder', 'pw12345');
         assert.equal((await f.get('me')).json.handle, 'founder');
         assert.equal((await f.post('register', { handle: 'founder', password: 'x' })).status, 409);
+        assert.equal((await f.post('register', { handle: 'FOUNDER', password: 'x' })).status, 409); // NOCASE
         assert.equal((await f.post('register', { handle: 'second', password: 'pw' })).status, 200);
+    });
+
+    test('only the admin (first user) may register further accounts', async () => {
+        const creds = [f.token, f.cookie];
+        await f.login('second', 'pw');
+        assert.equal((await f.post('register', { handle: 'third', password: 'pw' })).status, 403);
+        f.useCreds(...creds);
     });
 });
 
@@ -114,6 +122,7 @@ describe('request gating', () => {
     test('login, logout, version stay public', async () => {
         assert.equal((await pub.get('version')).status, 200);
         assert.ok((await pub.get('version')).json.version);
+        assert.equal((await pub.post('login', {})).status, 400); // missing fields
         assert.equal((await pub.post('login', { handle: 'creamms', password: 'x' })).status, 401); // route reachable
         assert.equal((await pub.raw('GET', '/api/logout')).status, 302);
     });
@@ -218,16 +227,21 @@ describe('rooms and members', () => {
         assert.equal((await s.get('rooms')).json.rooms.find(r => r.id === room).name, 'Suite Room');
     });
 
-    test('membership rules: own cards seat freely, userId is owner-only', async () => {
+    test('membership rules: non-members cannot self-invite; userId is owner-only', async () => {
         await asKarima(async () => {
             assert.equal((await s.post('members', { room, cardId: myCard })).status, 403); // not hers
-            assert.equal((await s.post('members', { room, cardId: karimaCard })).status, 200); // hers
+            assert.equal((await s.post('members', { room, cardId: karimaCard })).status, 403); // not a member
             assert.equal((await s.post('members', { room, cardId: 99999 })).status, 404);
             assert.equal((await s.post('members', { room, userId: 99 })).status, 403); // owner only
         });
-        // Room owner may seat anyone — including another user's persona.
+        // Room owner invites a user — their persona is seated.
         const karima = (await s.get('users')).json.users.find(u => u.handle === 'karima');
         assert.equal((await s.post('members', { room, userId: karima.id })).status, 200);
+        // Now a member, karima may seat her own cards — but nobody else's.
+        await asKarima(async () => {
+            assert.equal((await s.post('members', { room, cardId: karimaCard })).status, 200);
+            assert.equal((await s.post('members', { room, cardId: myCard })).status, 403);
+        });
         const members = (await s.get(`room?id=${room}`)).json.members;
         assert.ok(members.some(m => m.card_name === 'Vex'));
         assert.ok(members.some(m => m.kind === 'human' && m.handle === 'karima'));
@@ -267,6 +281,75 @@ describe('rooms and members', () => {
         assert.match(bg.headers.get('content-type'), /image\/png/);
         assert.equal((await s.post('room/background/remove', { room })).status, 200);
         assert.equal((await s.get(`roombg?id=${room}`)).status, 404);
+    });
+});
+
+// ---------- cross-user access control ----------
+
+describe('access control', () => {
+    // A private room karima is NOT in, with data inside it.
+    let priv, privMem, privMsg, privBook, privEntry;
+    const asKarima = async fn => {
+        const creds = [s.token, s.cookie];
+        await s.login('karima');
+        try { return await fn(); } finally { s.useCreds(...creds); }
+    };
+
+    before(async () => {
+        priv = (await s.post('rooms', { name: 'Private' })).json.id;
+        privMsg = (await s.post('say', { room: priv, text: 'secret' })).json.id;
+        privMem = (await s.post('memories', { room: priv, content: 'secret lore' })).json.id;
+        privBook = (await s.post('world/books', { name: 'PrivateBook' })).json.id;
+        privEntry = (await s.post('world', { book: privBook, content: 'hidden' })).json.id;
+    });
+    after(async () => {
+        await s.post('rooms/delete', { id: priv });
+        await s.post('world/books/delete', { id: privBook });
+    });
+
+    test('non-members cannot read, post, or listen into another room', async () => {
+        await asKarima(async () => {
+            assert.equal((await s.get(`room?id=${priv}`)).status, 403);
+            assert.equal((await s.get(`lastmem?room=${priv}`)).status, 403);
+            assert.equal((await s.get(`genstats?room=${priv}`)).status, 403);
+            assert.equal((await s.get(`memories?card=-1&room=${priv}`)).status, 403);
+            assert.equal((await s.get(`stream?room=${priv}`)).status, 403);
+            assert.equal((await s.post('say', { room: priv, text: 'sneak' })).status, 403);
+            assert.equal((await s.post('generate', { room: priv })).status, 403);
+            assert.equal((await s.post('memories', { room: priv, content: 'x' })).status, 403);
+            assert.equal((await s.post('messages/delete', { id: privMsg })).status, 403);
+        });
+        assert.ok((await s.get(`room?id=${priv}`)).json.messages.some(m => m.id === privMsg));
+    });
+
+    test('non-members cannot edit memories in rooms they are not in', async () => {
+        await asKarima(async () => {
+            for (const [route, body] of [
+                ['memories/update', { id: privMem, content: 'hax' }],
+                ['memories/triggers', { id: privMem, triggers: 'x' }],
+                ['memories/move', { id: privMem, cardId: null }],
+                ['memories/delete', { id: privMem }],
+            ]) assert.equal((await s.post(route, body)).status, 403, route);
+        });
+        assert.equal((await s.get(`memories?card=-1&room=${priv}`)).json.memories[0].content, 'secret lore');
+    });
+
+    test('users cannot write into books they do not own', async () => {
+        await asKarima(async () => {
+            assert.equal((await s.post('world', { book: privBook, content: 'graffiti' })).status, 403);
+            assert.equal((await s.post('world/update', { id: privEntry, content: 'graffiti' })).status, 403);
+            assert.equal((await s.post('world/delete', { id: privEntry })).status, 403);
+        });
+        assert.equal((await s.get(`world?book=${privBook}`)).json.entries[0].content, 'hidden');
+    });
+
+    test('user administration is admin-only', async () => {
+        await asKarima(async () => {
+            const blake = (await s.get('users')).json.users.find(u => u.handle === 'blake');
+            assert.equal((await s.post('users/delete', { id: blake.id })).status, 403);
+            assert.equal((await s.post('register', { handle: 'sneaky', password: 'pw' })).status, 403);
+        });
+        assert.ok((await s.get('users')).json.users.some(u => u.handle === 'blake'));
     });
 });
 

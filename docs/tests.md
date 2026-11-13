@@ -26,7 +26,9 @@ no mocking of the app itself, only of the external LLM endpoint.
 - [x] All three token transports authenticate: Bearer header, cookie, `?token=` query param
 - [x] Invalid tokens (header, cookie, query) are rejected
 - [x] `/api/logout` deletes the session, clears the cookie, and redirects to `/login.html`
-- [x] First-run `POST /api/register` is open only while zero users exist; then gated; duplicate handles 409
+- [x] First-run `POST /api/register` is open only while zero users exist; then admin-only (first user)
+- [x] Duplicate handles 409 including case variants (NOCASE pre-check matches the NOCASE login lookup)
+- [x] `login` with missing fields → 400 rather than a 500 binding error
 
 **Request gating**
 
@@ -47,8 +49,10 @@ no mocking of the app itself, only of the external LLM endpoint.
 - [x] Room creation seats the owner's persona; `is_owner` flag correct in listings
 - [x] Room lists only show rooms the user sits in
 - [x] Owner-only routes 403 for non-owners: rename, delete, trigger, settings, memsettings, background, world link, seating users
-- [x] Membership: anyone may seat their own card; seating others' cards or users is owner-only; nonexistent card 404
+- [x] Membership: non-members cannot seat cards (no self-inviting); members seat their own cards; seating users is owner-only
 - [x] Removal: non-owners may only remove their own cards; owners remove anyone
+- [x] Non-members cannot read (`room`, `lastmem`, `genstats`), listen (`stream`), or act (`say`, `generate`, `memories`, `messages/delete`) in a room
+- [x] Memory mutations (`update`, `triggers`, `move`, `delete`) require membership in the memory's room; missing memory 404s
 - [x] Talkativeness: members set their own, owners set any, values clamped to 0–100
 - [x] Room background upload/serve/remove round-trips
 
@@ -95,19 +99,20 @@ no mocking of the app itself, only of the external LLM endpoint.
 **Users**
 
 - [x] `GET /api/users` lists seeded users; self-delete and unknown-handle delete refused (400)
+- [x] `users/delete` and authenticated `register` are admin-only (first registered user); non-admin → 403
+- [x] `world` entry create/update/delete requires owning the entry's book — users can't write into each other's lorebooks
 
 ## `test/pngcard.test.js` — card parser units
 
 - [x] `extractCardJson`: tEXt `chara`, zTXt (deflate) `chara`/`ccv3`; junk/missing/garbage chunks → `null`
 - [x] `normalizeCard`: v2 (`data`-wrapped) and v1 (flat) shapes; string→array tags; field defaults
 
-## Known gaps the tests surfaced (behavior, not test bugs)
+## Remaining soft spots (deliberate, documented)
 
-- [ ] `POST /api/register` is case-*sensitive* on `handle` (binary UNIQUE) while login is `COLLATE NOCASE` — a `FOUNDER` account can be created but never logged into. Needs a NOCASE constraint or pre-check.
-- [ ] `POST /api/login` with missing fields → 500 (SQLite bind error) rather than 400.
-- [ ] `GET /api/room`, `GET /api/memories`, `POST /api/memories/*`, `POST /api/messages/delete` have no room-membership or ownership checks — any logged-in user can read/edit other rooms' content.
-- [ ] `POST /api/users/delete` has no admin gate — any logged-in user can delete any other user.
-- [ ] `POST /api/register` while authenticated lets any user create accounts (no admin concept exists).
+- `GET /api/avatar` serves any card's avatar to any logged-in user (no room scoping — images aren't sensitive and `<img>` can't send headers).
+- `GET /api/users` lists all handles to any logged-in user — needed by the member-invite picker; handles aren't secret.
+- World books are readable by everyone (the list is a shared resource); only *writing* into a book is owner-scoped.
+- "Admin" is defined as the first registered user (`MIN(users_id_pk)`) — there is no `is_admin` column yet.
 
 ## Deliberately not covered
 

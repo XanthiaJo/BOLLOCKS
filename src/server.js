@@ -35,10 +35,25 @@ const auth = req =>
     userForToken(req.headers.authorization?.replace(/^Bearer /, '') || cookieToken(req) || new URL(req.url, 'http://x').searchParams.get('token'));
 const roomOwner = id => db.prepare('SELECT owner_users_id_fk AS o FROM rooms WHERE rooms_id_pk=?').get(id)?.o;
 const roomOwnerOnly = (roomId, u) => roomOwner(roomId) === u.users_id_pk;
+// u sits in the room (any of their cards is seated) or owns it.
+const roomMember = (roomId, u) => !!u && (roomOwnerOnly(roomId, u) ||
+    !!db.prepare(`SELECT 1 FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
+        JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE rm.rooms_id_fk=? AND c.owner_users_id_fk=?`)
+        .get(roomId, u.users_id_pk));
+// Memory lives in at least one room u sits in.
+const memoryShared = (id, u) => db.prepare('SELECT rooms_id_fk AS r FROM room_memories WHERE memories_id_fk=?')
+    .all(id).some(x => roomMember(x.r, u));
+// First registered user is the site admin (user admin lives on the Connection page).
+const isAdmin = u => !!u && u.users_id_pk === db.prepare('SELECT MIN(users_id_pk) m FROM users').get().m;
+// Entry is in a book u owns, or attached to no book at all.
+const worldEntryOk = (id, u) => !!u && (!db.prepare('SELECT 1 FROM book_entries WHERE world_entries_id_fk=?').get(id) ||
+    !!db.prepare(`SELECT 1 FROM book_entries be JOIN world_books wb ON wb.world_books_id_pk=be.world_books_id_fk
+        WHERE be.world_entries_id_fk=? AND wb.owner_users_id_fk=?`).get(id, u.users_id_pk));
 
 const router = {
     'POST /api/login': async (req, res) => {
         const b = await readBody(req);
+        if (!b.handle || !b.password) return send(res, 400, { error: 'handle+password required' });
         const s = login(b.handle, b.password);
         if (!s) return send(res, 401, { error: 'bad credentials' });
         res.setHeader('Set-Cookie', `mp_token=${s.token}; Path=/; HttpOnly; SameSite=Lax`);
@@ -50,14 +65,21 @@ const router = {
         res.writeHead(302, { Location: '/login.html', 'Set-Cookie': 'mp_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' });
         res.end();
     },
-    'POST /api/register': async (req, res) => {
+    'POST /api/register': async (req, res, u) => {
         const b = await readBody(req);
         if (!b.handle || !b.password) return send(res, 400, { error: 'handle+password required' });
+        // First user bootstraps the site; after that only the admin may add accounts.
+        if (db.prepare('SELECT 1 FROM users').get() && !isAdmin(u)) return send(res, 403, { error: 'admin only' });
+        // NOCASE pre-check — the UNIQUE constraint is binary, but login matches
+        // case-insensitively, so a case-variant handle would be unloginable.
+        if (db.prepare('SELECT 1 FROM users WHERE handle=? COLLATE NOCASE').get(b.handle))
+            return send(res, 409, { error: 'handle taken' });
         try { send(res, 200, { id: createUser(b.handle, b.password) }); }
         catch { send(res, 409, { error: 'handle taken' }); }
     },
     'GET /api/lastmem': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room')) || 1;
+        if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
         send(res, 200, db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId) || null);
     },
     'GET /api/me': async (req, res, u) => {
@@ -94,6 +116,7 @@ const router = {
         const q = new URL(req.url, 'http://x').searchParams;
         const card = Number(q.get('card') ?? -1);
         const room = Number(q.get('room') || 0);
+        if (!roomMember(room, u)) return send(res, 403, { error: 'not a room member' });
         const rows = db.prepare(`SELECT m.*, m.memories_id_pk AS id, c.name card_name, r.name room_name, mc.cards_id_fk AS cards_id_fk FROM memories m
             JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
             LEFT JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk
@@ -105,6 +128,7 @@ const router = {
     },
     'POST /api/memories': async (req, res, u) => {
         const b = await readBody(req);
+        if (!roomMember(b.room || 1, u)) return send(res, 403, { error: 'not a room member' });
         const id = db.prepare('INSERT INTO memories (content,type,origin,triggers) VALUES (?,?,?,?)')
             .run(b.content || '', b.type || 'fact', 'user', b.triggers || '').lastInsertRowid;
         db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(b.room || 1, id);
@@ -114,6 +138,8 @@ const router = {
     'POST /api/memories/update': async (req, res, u) => {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
+        if (!db.prepare('SELECT 1 FROM memories WHERE memories_id_pk=?').get(id)) return send(res, 404, { error: 'no memory' });
+        if (!memoryShared(id, u)) return send(res, 403, { error: 'not a room member' });
         const origin = b.origin === 'smart' || b.origin === 'user' ? b.origin : null;
         db.prepare('UPDATE memories SET content=COALESCE(?,content), type=COALESCE(?,type), triggers=COALESCE(?,triggers), origin=COALESCE(?,origin) WHERE memories_id_pk=?')
             .run(b.content ?? null, b.type ?? null, b.triggers ?? null, origin, id);
@@ -122,6 +148,7 @@ const router = {
     'POST /api/memories/delete': async (req, res, u) => {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
+        if (!memoryShared(id, u)) return send(res, 403, { error: 'not a room member' });
     db.prepare('DELETE FROM room_memories WHERE memories_id_fk=?').run(id);
     db.prepare('DELETE FROM memory_cards WHERE memories_id_fk=?').run(id);
     db.prepare('DELETE FROM memories WHERE memories_id_pk=?').run(id);
@@ -129,6 +156,7 @@ const router = {
     },
     'GET /api/genstats': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room') || 1);
+        if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
         send(res, 200, { stats: genStats[roomId] || null });
     },
     'GET /api/world/books': async (req, res, u) => {
@@ -202,6 +230,8 @@ const router = {
     },
     'POST /api/world': async (req, res, u) => {
         const b = await readBody(req);
+        if (b.book && db.prepare('SELECT owner_users_id_fk AS o FROM world_books WHERE world_books_id_pk=?').get(b.book)?.o !== u.users_id_pk)
+            return send(res, 403, { error: 'not your book' });
         const keys = typeof b.keys === 'string'
             ? b.keys.split(',').map(k => k.trim()).filter(Boolean) : (b.keys || []);
         const secondary = typeof b.keysecondary === 'string'
@@ -217,6 +247,7 @@ const router = {
     'POST /api/world/update': async (req, res, u) => {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
+        if (!worldEntryOk(id, u)) return send(res, 403, { error: 'not your entry' });
         const keys = typeof b.keys === 'string'
             ? b.keys.split(',').map(k => k.trim()).filter(Boolean) : b.keys;
         const secondary = typeof b.keysecondary === 'string'
@@ -238,6 +269,7 @@ const router = {
     'POST /api/world/delete': async (req, res, u) => {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
+        if (!worldEntryOk(id, u)) return send(res, 403, { error: 'not your entry' });
         db.prepare('DELETE FROM world_entry_keys WHERE world_entries_id_fk=?').run(id);
         db.prepare('DELETE FROM book_entries WHERE world_entries_id_fk=?').run(id);
         db.prepare('DELETE FROM world_entries WHERE world_entries_id_pk=?').run(id);
@@ -361,10 +393,13 @@ const router = {
             db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(rid, mid);
             return send(res, 200, { ok: true });
         }
-        // Anyone may seat a card they own; the room owner may seat any card.
+        // Members may seat a card they own; the room owner may seat any card.
         const card = db.prepare('SELECT owner_users_id_fk FROM cards WHERE cards_id_pk=?').get(b.cardId);
         if (!card) return send(res, 404, { error: 'card not found' });
-        if (card.owner_users_id_fk !== u.users_id_pk && !roomOwnerOnly(rid, u)) return send(res, 403, { error: 'not your character' });
+        if (!roomOwnerOnly(rid, u)) {
+            if (!roomMember(rid, u)) return send(res, 403, { error: 'not a room member' });
+            if (card.owner_users_id_fk !== u.users_id_pk) return send(res, 403, { error: 'not your character' });
+        }
         let mid2 = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(b.cardId)?.members_id_pk;
         if (!mid2) mid2 = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(b.cardId).lastInsertRowid;
         db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(rid, mid2);
@@ -388,6 +423,7 @@ const router = {
     },
     'POST /api/users/delete': async (req, res, u) => {
         const b = await readBody(req);
+        if (!isAdmin(u)) return send(res, 403, { error: 'admin only' });
         const target = b.handle
             ? db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=? COLLATE NOCASE').get(b.handle)?.id
             : (b.id || b.world_books_id_pk);
@@ -538,6 +574,7 @@ const router = {
     },
     'GET /api/room': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('id') || 1);
+        if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
         const msgs = db.prepare(MSG_SQL + ' WHERE m.rooms_id_fk=? ORDER BY m.messages_id_pk').all(roomId);
         const members = db.prepare(`SELECT m.*, c.name card_name, c.avatar card_avatar, u.handle, pc.name persona_name, pc.avatar persona_avatar, pc.cards_id_pk persona_id,
             CASE WHEN IFNULL(c.is_persona,0)=1 THEN 'human' ELSE 'ai' END kind,
@@ -552,6 +589,7 @@ const router = {
     'GET /api/version': async (req, res) => send(res, 200, { version: VERSION }),
     'GET /api/stream': (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room') || 1);
+        if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
         res.flushHeaders(); // writeHead alone buffers until the first write — flush so EventSource connects now
         if (!streams.has(roomId)) streams.set(roomId, new Set());
@@ -560,6 +598,7 @@ const router = {
     },
     'POST /api/say': async (req, res, u) => {
         const b = await readBody(req);
+        if (!roomMember(b.room || 1, u)) return send(res, 403, { error: 'not a room member' });
         const cardId = b.cardId ?? db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk)?.cards_id_pk ?? null;
         const r = db.prepare(`INSERT INTO messages (rooms_id_fk,cards_id_fk,text)
             VALUES (?,?,?)`).run(b.room || 1, cardId, b.text);
@@ -636,12 +675,14 @@ const router = {
     'POST /api/memories/triggers': async (req, res, u) => {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
+        if (!memoryShared(id, u)) return send(res, 403, { error: 'not a room member' });
     db.prepare('UPDATE memories SET triggers=? WHERE memories_id_pk=?').run(b.triggers || '', id);
         send(res, 200, { ok: true });
     },
     'POST /api/memories/move': async (req, res, u) => {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
+        if (!memoryShared(id, u)) return send(res, 403, { error: 'not a room member' });
     db.prepare('DELETE FROM memory_cards WHERE memories_id_fk=?').run(id);
     if (b.cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, b.cardId);
         send(res, 200, { ok: true });
@@ -650,6 +691,7 @@ const router = {
         const b = await readBody(req);
         const m = db.prepare('SELECT rooms_id_fk FROM messages WHERE messages_id_pk=?').get(b.id || b.world_books_id_pk);
         if (!m) return send(res, 404, { error: 'no message' });
+        if (!roomMember(m.rooms_id_fk, u)) return send(res, 403, { error: 'not a room member' });
         const id = b.id || b.world_books_id_pk;
         db.prepare('DELETE FROM messages WHERE messages_id_pk=?').run(id);
         push(m.rooms_id_fk, { type: 'delete', id });
@@ -677,6 +719,7 @@ const router = {
     'POST /api/generate': async (req, res, u) => {
         const b = await readBody(req);
         const roomId = b.room || 1;
+        if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
         const npc = db.prepare(`SELECT c.*, c.cards_id_pk AS id FROM members m JOIN room_members rm ON rm.members_id_fk=m.members_id_pk JOIN cards c ON c.cards_id_pk=m.cards_id_fk
             WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 ${b.card ? 'AND c.cards_id_pk=?' : ''} ORDER BY m.cards_id_fk`).all(roomId, ...(b.card ? [b.card] : []))[0];
         if (!npc) return send(res, 404, { error: 'no AI member' });

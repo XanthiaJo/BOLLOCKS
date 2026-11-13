@@ -50,7 +50,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 4. **Static gate:** no session → every file except `login.html` redirects (302) to `/login.html`. Files are confined to `PUB` via `file.startsWith(PUB + path.sep)`.
 5. SSE: `GET /api/stream?room=N` registers `res` in `streams`; `push()` fans `data:` events to a room. Event types: `{type:'message'}`, `{type:'delete'}`.
 
-Route-handler conventions: updates go through `/api/<thing>/update|delete` POST endpoints (no PUT/DELETE methods); permission checks use `roomOwnerOnly(rid, u)` or `card.owner_users_id_fk === u.users_id_pk`; the `u` arg may be undefined for public routes — don't dereference it unguarded.
+Route-handler conventions: updates go through `/api/<thing>/update|delete` POST endpoints (no PUT/DELETE methods). Permission helpers (all defined at the top of `server.js`): `roomOwnerOnly(rid, u)` for room-admin routes, `roomMember(rid, u)` for anything reading/posting room content, `memoryShared(id, u)` for memory mutations, `worldEntryOk(id, u)` for lorebook entries, `isAdmin(u)` for user admin (first registered user is the site admin). Object ownership uses `…_users_id_fk === u.users_id_pk`. The `u` arg may be undefined for public routes — don't dereference it unguarded.
 
 ## Data model
 
