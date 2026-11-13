@@ -1,5 +1,5 @@
 // --- Memory settings page: profile list in the sidebar, editor in main ---
-/* global selProf, effRow, setSelProf, fillProf, BLANK_PROF */
+/* global selProf, setSelProf, fillProf, BLANK_PROF, newMP, delMP, selectProf, effRow:writable */
 let booted=false;
 const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
 const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.status===401?location='/login.html':r.json());
