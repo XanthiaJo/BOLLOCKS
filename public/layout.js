@@ -130,19 +130,24 @@ function initSidebar({ tabs = [], sections = [], buttons = [], footer = '' } = {
     sb.innerHTML =
         `<div class="tabs">${tabs.map(t => `<button class="tab${t.on ? ' on' : ''}"${t.id ? ` id="${t.id}"` : ''}${t.onclick ? ` onclick="${t.onclick}"` : ''}>${t.label}</button>`).join('')}</div>` +
         sections.map(s => `${s.wrap ? `<div id="${s.wrap}">` : ''}${s.title ? `<h3>${s.title}</h3>` : ''}<div id="${s.id}"></div>${s.wrap ? '</div>' : ''}`).join('') +
-        buttons.map(b => `<button class="${b.cls || 'act'}" onclick="${b.onclick}">${b.label}</button>`).join('') +
+        buttons.map(b => `<button${b.id ? ` id="${b.id}"` : ''} class="${b.cls || 'act'}" onclick="${b.onclick}">${b.label}</button>`).join('') +
         (footer ? `<small>${footer}</small>` : '');
 }
 
 /* Editor form header — every editor's first child is
    <div class="edhead" data-save="fnName" data-cancel="fnName"><h3 id="…">…</h3></div>
    and this injects the shared [Cancel][Save] pair wired to those globals.
+   Call initEdHeads(root) again after adding form markup dynamically.
    Cancel convention: editing → reset fields to the loaded item; new → discard. */
-document.querySelectorAll('.edhead[data-save]').forEach(h => {
-    const bar = document.createElement('span'); bar.className = 'edbtns';
-    for (const [fn, label, cls] of [[h.dataset.cancel, 'Cancel', 'sec'], [h.dataset.save, 'Save', 'act']]) {
-        const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls;
-        b.onclick = () => window[fn]?.(); bar.appendChild(b);
-    }
-    h.appendChild(bar);
-});
+function initEdHeads(root = document) {
+    root.querySelectorAll('.edhead[data-save]:not([data-wired])').forEach(h => {
+        h.dataset.wired = '1';
+        const bar = document.createElement('span'); bar.className = 'edbtns';
+        for (const [fn, label, cls] of [[h.dataset.cancel, 'Cancel', 'sec'], [h.dataset.save, 'Save', 'act']]) {
+            const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls;
+            b.onclick = () => window[fn]?.(); bar.appendChild(b);
+        }
+        h.appendChild(bar);
+    });
+}
+initEdHeads();

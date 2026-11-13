@@ -39,6 +39,7 @@ export default [
         mpOpenEditor: "readonly",
         mpCloseEditor: "readonly",
         initSidebar: "readonly",
+        initEdHeads: "readonly",
         rprofRow: "readonly",
       },
     },

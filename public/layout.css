@@ -120,6 +120,7 @@ button.imp{background:var(--violet)}
 #rsidebar .tabs{margin-bottom:12px}
 #rsidebar .tab{flex:1;text-align:center}
 #rsidebar .tab:not([onclick]){cursor:default}
+#rsidebar .tab:disabled{opacity:.45;cursor:default}
 #rsidebar>small{display:block;margin-top:10px;color:var(--dim)}
 #cardssec{margin-top:14px}
 small{color:var(--dim)}

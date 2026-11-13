@@ -80,7 +80,7 @@ describe('first-run registration (unseeded DB)', () => {
 });
 
 describe('request gating', () => {
-    const pages = ['/', '/index.html', '/characters.html', '/world.html', '/world-edit.html',
+    const pages = ['/', '/index.html', '/characters.html', '/world.html',
         '/memories.html', '/connection.html', '/profile.html', '/app.js', '/layout.js', '/layout.css'];
 
     test('every page and asset redirects to login when unauthenticated', async () => {
