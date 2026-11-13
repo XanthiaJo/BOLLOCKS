@@ -106,7 +106,8 @@
     <div class="row"><span class="lbl">Max per type — preference</span><span class="hint">likes and dislikes</span><input type="number" id="set_max_pref" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
     <div>
       <div class="lbl" title="The instruction sent to the memory LLM when summarizing chat into memories. Leave blank for default.">Extraction prompt template</div>
-      <span class="hint">Custom instructions for the memory-writer (e.g. focus on plot, ignore OOC). Leave blank for the built-in prompt.</span>
+      <span class="hint">Custom instructions for the memory-writer (e.g. focus on plot, ignore OOC). Leave blank for the built-in prompt — <a href="#" onclick="toggleDefPrompt(this);return false" style="color:var(--muted)">show it</a>.</span>
+      <pre id="def_prompt" style="display:none;white-space:pre-wrap;font-size:.78em;color:var(--dim);background:var(--input);padding:8px;border-radius:4px;margin:2px 0 6px"></pre>
       <textarea id="set_prompt" placeholder="(default extraction prompt)" style="min-height:60px" onchange="saveProf()"></textarea>
       <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><span class="hint">Also run extraction early once the chat fills this % of the model's context — so nothing important is lost before old messages get trimmed. Default: 80.</span><input type="number" id="set_ctx" min="10" max="100" onchange="saveProf()" style="width:80px;display:inline-block"></div>
       <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><span class="hint">Fallback reply length — only used when the generation budget above is unset. Usually safe to leave alone. Default: 2000.</span><input type="number" id="set_resplen" min="256" max="8192" onchange="saveProf()" style="width:80px;display:inline-block"></div>
@@ -258,7 +259,8 @@ function renderList(){
   $('list').innerHTML=html||`<small>No ${curTab==='smart'?'smart':'permanent'} memories yet.</small>`;
 }
 
-let roomCards=[];let memProfiles=[];let editId=0;
+let roomCards=[];let memProfiles=[];let editId=0;let defPrompt='';
+function toggleDefPrompt(a){const p=$('def_prompt');const show=p.style.display==='none';p.style.display=show?'block':'none';if(show)p.textContent=defPrompt||'(built-in prompt unavailable)';a.textContent=show?'hide it':'show it';}
 function editMem(id){editId=editId===id?0:id;renderList()}
 function editForm(m){
   const types=['fact','event','relationship','preference'];
@@ -287,7 +289,7 @@ let roomName='';
 async function load(){
   const [{cards},{rooms},{profiles},mps]=await Promise.all([get('cards'),get('rooms'),get('profiles'),get('memprofiles')]);
   roomCards=cards||[];
-  memProfiles=mps?.profiles||[];
+  memProfiles=mps?.profiles||[];defPrompt=mps?.defaultPrompt||'';
   const profOpts='<option value="0">— none (extraction off) —</option>'+(profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   $('set_profile').innerHTML=profOpts;
   if ((rooms||[]).length && !(rooms||[]).some(r=>r.id===ROOM)) { ROOM=rooms[0].id; localStorage.mp_room=ROOM; }

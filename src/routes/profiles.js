@@ -1,6 +1,7 @@
 // Connection routes: API profiles, memory profiles, /models proxy.
 import { db } from '../db.js';
 import { send, readBody } from '../util.js';
+import { MEM_EXTRACT_PROMPT } from '../generate.js';
 
 export default {
     'POST /api/models': async (req, res, u) => {
@@ -59,7 +60,7 @@ export default {
     // Smart-memory profiles: named presets of the mem_* room settings.
     'GET /api/memprofiles': async (req, res, u) => {
         const profiles = db.prepare('SELECT * FROM mem_profiles WHERE users_id_fk=? ORDER BY mem_profiles_id_pk').all(u.users_id_pk);
-        send(res, 200, { profiles });
+        send(res, 200, { profiles, defaultPrompt: MEM_EXTRACT_PROMPT });
     },
     'POST /api/memprofiles': async (req, res, u) => {
         const b = await readBody(req);
