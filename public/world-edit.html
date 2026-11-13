@@ -5,10 +5,10 @@
 <link rel="stylesheet" href="layout.css">
 <style>
 .ent.off{opacity:.5}
-.ent .keys{color:#7ac;font-size:.85em;font-weight:600}
-.ent .comment{color:#dab;font-size:.85em;font-weight:600}
-.back{color:#9ab;text-decoration:none;font-size:.9em}
-.back:hover{color:#fff}
+.ent .keys{color:var(--ai);font-size:.85em;font-weight:600}
+.ent .comment{color:var(--comment);font-size:.85em;font-weight:600}
+.back{color:var(--muted);text-decoration:none;font-size:.9em}
+.back:hover{color:var(--white)}
 textarea{min-height:80px;font-family:inherit}
 </style>
 </head>
@@ -34,7 +34,7 @@ textarea{min-height:80px;font-family:inherit}
     <label class="cb"><input type="checkbox" id="ed_enabled" checked> Enabled</label>
     <input id="ed_ord" type="number" placeholder="Order (0 = first)" value="0">
     <button onclick="saveEnt()">Save</button>
-    <button onclick="closeEd()" style="background:#444">Close</button>
+    <button onclick="closeEd()" style="background:var(--border)">Close</button>
   </div>
 </main>
 </div>

@@ -102,9 +102,9 @@ async function renderRooms() {
     const { rooms } = await get('rooms');
     $('rooms').innerHTML = (rooms || [])
         .map(r => `<div class="room${r.id === room ? ' on' : ''}" onclick="pick(${r.id})"><span style="font-size:.85em">${(r.members||0)>2?'👥':'👤'}</span><span class="n">${r.name}</span>` +
-            `${(r.members||0)>2?`<span style="font-size:.72em;color:#789">${r.members}</span>`:''}` +
+            `${(r.members||0)>2?`<span style="font-size:.72em;color:var(--dim)">${r.members}</span>`:''}` +
             (r.is_owner ? `<span class="rbtns"><a href="#" title="Rename" onclick="event.stopPropagation();renameRoom(${r.id});return false">✎</a>` +
-            `<a href="#" title="Delete" onclick="event.stopPropagation();delRoom(${r.id});return false" style="color:#a55">✕</a></span>` : '') + `</div>`)
+            `<a href="#" title="Delete" onclick="event.stopPropagation();delRoom(${r.id});return false" style="color:var(--err)">✕</a></span>` : '') + `</div>`)
         .join('');
 }
 function applyOwnerUI() {
@@ -213,7 +213,7 @@ async function delMsg(id, btn) {
     await api('messages/delete', { id });
 }
 function renderLastMem(m) {
-    $('lastmem').innerHTML = m ? `<div style="font-size:.8em;color:#9ab;line-height:1.4">${m.text}</div>` : '<div style="font-size:.8em;color:#555">none yet</div>';
+    $('lastmem').innerHTML = m ? `<div style="font-size:.8em;color:var(--muted);line-height:1.4">${m.text}</div>` : '<div style="font-size:.8em;color:var(--neutral)">none yet</div>';
 }
 let lastStats = null;
 const PAGE_LINKS = { 'World Info': '/world.html', 'Memories': '/memories.html' };
@@ -225,9 +225,9 @@ function showJson(title, obj) {
         v.onclick = e => { if (e.target === v) v.remove(); };
         document.body.appendChild(v);
     }
-    v.innerHTML = `<div class="card" style="width:min(720px,94vw);max-height:82vh;overflow-y:auto;background:#191b24;padding:16px">
+    v.innerHTML = `<div class="card" style="width:min(720px,94vw);max-height:82vh;overflow-y:auto;background:var(--panel);padding:16px">
         <h3 style="margin:0 0 10px">${title}</h3>
-        <pre style="white-space:pre-wrap;font-size:.8em;color:#cde;margin:0 0 14px">${String(obj ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+        <pre style="white-space:pre-wrap;font-size:.8em;color:var(--pre);margin:0 0 14px">${String(obj ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
         <button onclick="document.getElementById('partview').remove()">Close</button></div>`;
 }
 function showRequest() { showJson('Request JSON', JSON.stringify(lastStats?.request, null, 2)); }
@@ -241,9 +241,9 @@ function showPart(k) {
         document.body.appendChild(v);
     }
     const esc = String(txt ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    v.innerHTML = `<div class="card" style="width:min(720px,94vw);max-height:82vh;overflow-y:auto;background:#191b24;padding:16px">
+    v.innerHTML = `<div class="card" style="width:min(720px,94vw);max-height:82vh;overflow-y:auto;background:var(--panel);padding:16px">
         <h3 style="margin:0 0 10px">${k}</h3>
-        <pre style="white-space:pre-wrap;font-size:.85em;color:#cde;margin:0 0 14px">${esc || '(empty)'}</pre>
+        <pre style="white-space:pre-wrap;font-size:.85em;color:var(--pre);margin:0 0 14px">${esc || '(empty)'}</pre>
         <button onclick="document.getElementById('partview').remove()">Close</button></div>`;
 }
 async function renderToks() {
@@ -257,20 +257,20 @@ async function renderToks() {
     const estSum = entries.filter(([k]) => !k.startsWith('(')).reduce((a, [, v]) => a + v, 0);
     const scale = stats.prompt_tokens && estSum ? stats.prompt_tokens / estSum : 1;
     $('toks').innerHTML =
-        `<small style="color:#789">${stats.card} · <a href="#" onclick="showRequest();return false" style="color:#9ab" title="View full request JSON">${stats.prompt_tokens ? 'actual' : 'estimated'}</a></small>` +
+        `<small style="color:var(--dim)">${stats.card} · <a href="#" onclick="showRequest();return false" style="color:var(--muted)" title="View full request JSON">${stats.prompt_tokens ? 'actual' : 'estimated'}</a></small>` +
         `<div style="display:flex;justify-content:space-between;font-weight:600;font-size:.85em"><span>Prompt tokens</span><span>${total}</span></div>` +
-        (stats.completion_tokens ? `<div style="display:flex;justify-content:space-between;font-size:.8em;color:#789"><span>Reply tokens</span><span>${stats.completion_tokens}</span></div>` : '') +
-        (scale !== 1 ? `<small style="color:#567">sections ≈ scaled to actual total</small>` : '') +
+        (stats.completion_tokens ? `<div style="display:flex;justify-content:space-between;font-size:.8em;color:var(--dim)"><span>Reply tokens</span><span>${stats.completion_tokens}</span></div>` : '') +
+        (scale !== 1 ? `<small style="color:var(--faint)">sections ≈ scaled to actual total</small>` : '') +
         entries.map(([k, v]) => {
             const shown = k.startsWith('(') ? v : Math.round(v * scale);
             const href = PAGE_LINKS[k];
             const hasText = k in (lastStats?.texts || {});
             const lbl = href
-                ? `<a href="${href}" style="color:#9ab">${k}</a>`
+                ? `<a href="${href}" style="color:var(--muted)">${k}</a>`
                 : hasText
-                    ? `<a href="#" onclick="showPart('${k}');return false" style="color:#9ab">${k}</a>`
+                    ? `<a href="#" onclick="showPart('${k}');return false" style="color:var(--muted)">${k}</a>`
                     : `<span>${k}</span>`;
-            return `<div style="display:flex;justify-content:space-between;font-size:.8em;color:#9ab" title="est ${v}"><span>${lbl}</span><span>${shown}</span></div>`;
+            return `<div style="display:flex;justify-content:space-between;font-size:.8em;color:var(--muted)" title="est ${v}"><span>${lbl}</span><span>${shown}</span></div>`;
         }).join('');
 }
 
