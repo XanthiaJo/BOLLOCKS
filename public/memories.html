@@ -27,6 +27,8 @@
 #profpanel .acc-h{background:var(--input);padding:7px 10px;cursor:pointer;font-size:.9em;font-weight:700;color:var(--muted);display:flex;justify-content:space-between;align-items:center;user-select:none}
 #profpanel .acc-h:hover{background:var(--input2)}
 #profpanel .acc-h .arrow{transition:transform .15s;font-size:.9em}
+#profpanel .acc-t{min-width:0}
+#profpanel .acc-h .hint{font-weight:400;margin:2px 0 0}
 #profpanel .acc-h.open .arrow{transform:rotate(90deg)}
 #profpanel .acc-b{padding:8px 10px;display:none}
 #profpanel .acc-b.open{display:block}
@@ -377,22 +379,28 @@ function setupAcc(){
     const wrap=document.createElement('div'); wrap.className='acc';
     const header=document.createElement('div'); header.className='acc-h';
     header.dataset.acc=h.textContent.trim();
-    header.innerHTML=esc(h.textContent)+' <span class="arrow">▸</span>';
+    const title=document.createElement('div'); title.className='acc-t';
+    title.innerHTML=esc(h.textContent);
+    const arrow=document.createElement('span'); arrow.className='arrow'; arrow.textContent='▸';
+    header.append(title,arrow);
     const body=document.createElement('div'); body.className='acc-b';
     let node=h.nextSibling; const toMove=[];
     while(node && !(node.nodeType===1 && node.tagName==='H4')){ toMove.push(node); node=node.nextSibling; }
     h.parentNode.insertBefore(wrap,h);
     wrap.appendChild(header); wrap.appendChild(body);
     for(const n of toMove) body.appendChild(n);
+    // An intro caption (a hint immediately after the h4) belongs on the
+    // header so it shows even while the section is collapsed.
+    if(body.firstElementChild?.classList.contains('hint')) title.append(body.firstElementChild);
+    // Sections where every control is disabled are placeholders — say so.
+    if(!title.querySelector('.hint') && !body.querySelector('input:not([disabled]),select:not([disabled]),textarea:not([disabled])')){
+      const note=document.createElement('span'); note.className='hint';
+      note.textContent='Not implemented yet — these are placeholders for planned features.';
+      title.append(note);
+    }
     h.remove();
     if(openSet.has(header.dataset.acc)){ header.classList.add('open'); body.classList.add('open'); }
     header.onclick=()=>{ header.classList.toggle('open'); body.classList.toggle('open'); saveAcc(); };
-    // Sections where every control is disabled are placeholders — say so.
-    if(!body.querySelector('input:not([disabled]),select:not([disabled]),textarea:not([disabled])')){
-      const note=document.createElement('span'); note.className='hint';
-      note.textContent='Not implemented yet — these are placeholders for planned features.';
-      body.prepend(note);
-    }
   }
 }
 setupAcc();
