@@ -48,6 +48,21 @@ describe('generation (mock LLM)', () => {
         assert.equal(stats.prompt_tokens, 42);
     });
 
+    test('profile prompt_order reorders the system prompt', async () => {
+        const mps = (await s.get('memprofiles')).json;
+        assert.equal(mps.promptBlocks.length, 9);
+        const prof = mps.profiles[0];
+        const rev = mps.promptBlocks.map(b => b.key).reverse();
+        await s.post('memprofiles/update', { id: prof.mem_profiles_id_pk, name: prof.name, order: rev });
+        llm.requests.length = 0;
+        await s.post('generate', { room, card });
+        const sys = JSON.parse(llm.requests.at(-1).body).messages[0].content;
+        // Reversed: instructions first, the main-prompt fallback last.
+        assert.match(sys, /^You are Kira and ONLY Kira/);
+        assert.ok(sys.indexOf('You are Kira and ONLY') < sys.indexOf('Description:\nKira is Kira'));
+        await s.post('memprofiles/update', { id: prof.mem_profiles_id_pk, name: prof.name, order: null });
+    });
+
     test('generate with no AI member 404s; no connection surfaces a 500', async () => {
         const humansOnly = (await s.post('rooms', { name: 'Humans only' })).json.id; // new rooms seat only the owner persona
         assert.equal((await s.post('generate', { room: humansOnly })).status, 404);

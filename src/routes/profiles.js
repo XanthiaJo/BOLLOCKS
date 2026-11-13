@@ -1,7 +1,7 @@
 // Connection routes: API profiles, memory profiles, /models proxy.
 import { db } from '../db.js';
 import { send, readBody } from '../util.js';
-import { MEM_EXTRACT_PROMPT } from '../generate.js';
+import { MEM_EXTRACT_PROMPT, PROMPT_BLOCKS } from '../generate.js';
 
 export default {
     'POST /api/models': async (req, res, u) => {
@@ -60,7 +60,7 @@ export default {
     // Smart-memory profiles: named presets of the mem_* room settings.
     'GET /api/memprofiles': async (req, res, u) => {
         const profiles = db.prepare('SELECT * FROM mem_profiles WHERE users_id_fk=? ORDER BY mem_profiles_id_pk').all(u.users_id_pk);
-        send(res, 200, { profiles, defaultPrompt: MEM_EXTRACT_PROMPT });
+        send(res, 200, { profiles, defaultPrompt: MEM_EXTRACT_PROMPT, promptBlocks: PROMPT_BLOCKS });
     },
     'POST /api/memprofiles': async (req, res, u) => {
         const b = await readBody(req);
@@ -69,12 +69,13 @@ export default {
             b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
             b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
             b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
-            b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0];
+            b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0,
+            b.order ? JSON.stringify(b.order) : null];
         const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,auto_mem,mem_every,mem_budget,mem_max,
             mem_max_fact,mem_max_event,mem_max_relationship,mem_max_preference,mem_extraction_prompt,
             mem_context_threshold,mem_response_length,mem_gen_budget,mem_unlimited,mem_unified,mem_triggers,
-            mem_autotune,mem_refresh,mem_activity,mem_extraction_profile_id)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+            mem_autotune,mem_refresh,mem_activity,mem_extraction_profile_id,mem_prompt_order)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
             .run(u.users_id_pk, b.name, ...vals).lastInsertRowid;
         send(res, 200, { id });
     },
@@ -84,13 +85,15 @@ export default {
             mem_max_fact=?, mem_max_event=?, mem_max_relationship=?, mem_max_preference=?,
             mem_extraction_prompt=?, mem_context_threshold=?, mem_response_length=?,
             mem_gen_budget=?, mem_unlimited=?, mem_unified=?, mem_triggers=?,
-            mem_autotune=?, mem_refresh=?, mem_activity=?, mem_extraction_profile_id=?
+            mem_autotune=?, mem_refresh=?, mem_activity=?, mem_extraction_profile_id=?,
+            mem_prompt_order=?
             WHERE mem_profiles_id_pk=? AND users_id_fk=?`)
             .run(String(b.name ?? '').trim(), b.auto ? 1 : 0, b.every ?? 10, b.budget ?? 800, b.max ?? 50,
                 b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
                 b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
                 b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
                 b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0,
+                b.order ? JSON.stringify(b.order) : null,
                 b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },

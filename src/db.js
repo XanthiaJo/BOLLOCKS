@@ -98,7 +98,8 @@ CREATE TABLE IF NOT EXISTS mem_profiles (
     mem_autotune INTEGER DEFAULT 0,
     mem_refresh INTEGER DEFAULT 1,
     mem_activity INTEGER DEFAULT 0,
-    mem_extraction_profile_id INTEGER DEFAULT 0
+    mem_extraction_profile_id INTEGER DEFAULT 0,
+    mem_prompt_order TEXT
 );
 `);
 
@@ -303,6 +304,8 @@ export function migrateSchema() {
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
     if (!mecols.includes('source')) db.exec("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'manual'");
+    const mpcols = db.prepare('PRAGMA table_info(mem_profiles)').all().map(c => c.name);
+    if (!mpcols.includes('mem_prompt_order')) db.exec('ALTER TABLE mem_profiles ADD COLUMN mem_prompt_order TEXT');
     // members = entity (card/user + talkativeness); room_members = junction.
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='room_members'").get()) {
         db.exec(`CREATE TABLE room_members (

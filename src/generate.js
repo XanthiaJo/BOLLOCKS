@@ -21,7 +21,22 @@ const MEM_PROFILE_FIELDS = ['auto_mem', 'mem_every', 'mem_budget', 'mem_max', 'm
     'mem_max_event', 'mem_max_relationship', 'mem_max_preference', 'mem_extraction_prompt',
     'mem_context_threshold', 'mem_response_length', 'mem_gen_budget', 'mem_unlimited',
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
-    'mem_extraction_profile_id'];
+    'mem_extraction_profile_id', 'mem_prompt_order'];
+
+// Named system-prompt sections in cache-optimal order (stable content first —
+// see the assembly comment in generateReply). A memory profile can reorder
+// them via mem_prompt_order (JSON array of keys); NULL means this order.
+export const PROMPT_BLOCKS = [
+    { key: 'main', label: 'Main prompt' },
+    { key: 'description', label: 'Card description' },
+    { key: 'personality', label: 'Card personality' },
+    { key: 'scenario', label: 'Scenario' },
+    { key: 'examples', label: 'Example dialogue' },
+    { key: 'roster', label: 'Other characters' },
+    { key: 'world', label: 'World info' },
+    { key: 'memories', label: 'Memories' },
+    { key: 'instructions', label: 'Instructions' },
+];
 
 /** Effective memory settings for a room: always the memory profile it follows
  *  (falling back to the first profile when none is assigned) — there is no
@@ -118,25 +133,32 @@ export async function generateReply(roomId, card) {
             ].filter(Boolean).join('\n\n'))
         : null;
 
-    // Ordered stable -> volatile for prefix caching: card sheet fields and
-    // the member roster rarely change; keyword-triggered world entries and
-    // freshly-extracted memories change often, so they go last. Anything
-    // after a changed block re-bills, so volatility decides position.
-    const system = [
-        card.system_prompt || `You are ${card.name}.`,
-        card.description && `Description:\n${card.description}`,
-        card.personality && `Personality:\n${card.personality}`,
-        card.scenario && `Scenario:\n${card.scenario}`,
-        card.mes_example && `Example dialogue:\n${card.mes_example}`,
-        others.length && `Also present in the scene:\n` +
+    // Prompt sections assemble in PROMPT_BLOCKS order — stable -> volatile for
+    // prefix caching: card sheet fields and the member roster rarely change;
+    // keyword-triggered world entries and freshly-extracted memories change
+    // often, so they go last. Anything after a changed block re-bills, so
+    // volatility decides position. A profile's mem_prompt_order overrides.
+    const blocks = {
+        main: card.system_prompt || `You are ${card.name}.`,
+        description: card.description && `Description:\n${card.description}`,
+        personality: card.personality && `Personality:\n${card.personality}`,
+        scenario: card.scenario && `Scenario:\n${card.scenario}`,
+        examples: card.mes_example && `Example dialogue:\n${card.mes_example}`,
+        roster: others.length && `Also present in the scene:\n` +
             others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
-        worldText,
-        memText,
-        `You are ${card.name} and ONLY ${card.name} — an NPC in a shared roleplay. ` +
+        world: worldText,
+        memories: memText,
+        instructions: `You are ${card.name} and ONLY ${card.name} — an NPC in a shared roleplay. ` +
             `The other characters listed are separate people speaking for themselves; ` +
             `do NOT speak for them or imitate them. Write ONLY ${card.name}'s next message.` +
             (card.post_history_instructions ? ` ${card.post_history_instructions}` : ''),
-    ].filter(Boolean).join('\n\n');
+    };
+    let order;
+    try { order = JSON.parse(mem?.mem_prompt_order || ''); } catch { order = null; }
+    if (!Array.isArray(order)) order = [];
+    order = order.filter(k => k in blocks);
+    for (const b of PROMPT_BLOCKS) if (!order.includes(b.key)) order.push(b.key);
+    const system = order.map(k => blocks[k]).filter(Boolean).join('\n\n');
 
     const parts = {
         'Main Prompt': tok(card.system_prompt || `You are ${card.name}.`),
