@@ -6,10 +6,11 @@
 </head>
 <body>
 <aside id="rsidebar">
-  <h3 style="margin-top:0">Chat</h3>
-  <div id="rchat"></div>
-  <h3 style="margin-top:14px">Characters</h3>
-  <div id="rcards"></div>
+  <h3 style="margin-top:0">Memory profiles</h3>
+  <div id="plist"></div>
+  <button onclick="newMP()" style="width:100%;margin-top:8px">+ New profile</button>
+  <button onclick="saveAsProfile()" style="width:100%;margin-top:4px;background:var(--border)">Save current as profile…</button>
+  <small style="color:var(--dim);display:block;margin-top:10px">Chats pick which profile they follow on the Smart tab. Select a profile to edit it.</small>
 </aside>
 <div id="content">
 <main>
@@ -18,7 +19,6 @@
     <div class="tabs">
       <button class="tab on" id="t_perm" onclick="tab('user')">Permanent</button>
       <button class="tab" id="t_auto" onclick="tab('smart')">Smart</button>
-      <button class="tab" id="t_set" onclick="tab('settings')">Settings</button>
     </div>
     <div id="addbox">
       <textarea id="newmem" placeholder="e.g. Fig hates the colour green" style="min-height:60px;width:100%"></textarea>
@@ -29,16 +29,10 @@
       <select id="smart_mprof" onchange="pickMProf(this.value)" style="width:240px"></select>
       <label class="cb" style="display:block;margin-top:6px"><input type="checkbox" id="smart_auto" onchange="toggleSmartAuto(this.checked)"> Enable Smart Memory</label>
       <span class="hint">When on, a second AI periodically reads new messages in this chat and stores lasting facts. Those memories are added to the prompt when relevant, so characters remember things between sessions.</span>
-      <small id="smart_mprof_hint" style="display:block;color:var(--dim);margin-top:4px">Heavier settings live under the profile — make/edit them on the Settings tab.</small>
+      <small id="smart_mprof_hint" style="display:block;color:var(--dim);margin-top:4px">Heavier settings live under the profile — select it in the sidebar to edit.</small>
     </div>
   </div>
   <div id="list"></div>
-  <div class="panel settings" id="setpanel">
-    <h3>Memory profiles</h3>
-    <div id="mprof_list"></div>
-    <div style="display:flex;gap:6px;margin-top:6px"><button onclick="newMP()">New profile</button><button onclick="saveAsProfile()">Save current as profile…</button></div>
-    <small style="color:var(--dim);display:block;margin-top:8px">Select a profile to make or edit it — its settings open in a new panel below. Chats pick which profile they follow on the Smart tab.</small>
-  </div>
   <div class="panel settings" id="profpanel" style="display:none">
     <h3 id="pf_title"></h3>
     <label class="lbl" style="display:block">Profile name</label><input id="pf_name" style="width:240px;margin:2px 0" onchange="saveProf()">

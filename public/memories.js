@@ -5,24 +5,20 @@ const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.status===401?location='/
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let ROOM=Number(localStorage.mp_room||1);
-let cardId=0,scopeName='',curTab=localStorage.mp_memtab||'user',allMems=[];
+let curTab=localStorage.mp_memtab||'user';if(!['user','smart'].includes(curTab))curTab='user';
+let allMems=[];
 const TYPE_ORDER=['fact','event','relationship','preference'];
-function tab(t){if(t==='smart' && cardId!==0) return; curTab=t; localStorage.mp_memtab=curTab;
+function tab(t){curTab=t; localStorage.mp_memtab=curTab;
   $('t_perm').classList.toggle('on',t==='user');
   $('t_auto').classList.toggle('on',t==='smart');
-  $('t_set').classList.toggle('on',t==='settings');
   renderList();
 }
 function renderList(){
   $('t_perm').classList.toggle('on',curTab==='user');
   $('t_auto').classList.toggle('on',curTab==='smart');
-  $('t_set').classList.toggle('on',curTab==='settings');
   const sb=$('smartbar'); if(sb) sb.style.display=curTab==='smart'?'block':'none';
-  if($('profpanel')) $('profpanel').style.display=(curTab==='settings'&&selProf)?'block':'none';
-  const mems = curTab==='settings'?[]:allMems.filter(m=>(m.origin||m.source||'user')===curTab);
+  const mems = allMems.filter(m=>(m.origin||m.source||'user')===curTab);
   $('addbox').style.display=curTab==='user'?'block':'none';
-  $('setpanel').style.display=curTab==='settings'?'block':'none';
-  if(curTab==='settings'){ $('list').innerHTML=''; return; }
   // Group by type.
   const groups={};
   for(const m of mems){ const t=m.type||'fact'; (groups[t]=groups[t]||[]).push(m); }
@@ -32,7 +28,7 @@ function renderList(){
     <div class="card">
       <div><div class="desc"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''} · ${esc(memScope(m.cards_id_fk))}</div>
       <input placeholder="trigger keywords — inject only when mentioned" value="${esc(m.triggers||'')}" style="font-size:.8em;margin-top:4px;width:70%" onchange="api('memories/triggers',{id:${m.id},triggers:this.value})"></div>
-      <div class="btns"><button onclick="editMem(${m.id})">Edit</button>${curTab==='smart'?`<button onclick="permPick(${m.id})">&rarr; perm</button>`:(cardId===0?`<button onclick="toSmart(${m.id})">&rarr; smart</button>`:'')}<button class="del" onclick="del(${m.id})">Delete</button></div>
+      <div class="btns"><button onclick="editMem(${m.id})">Edit</button>${curTab==='smart'?`<button onclick="permPick(${m.id})">&rarr; perm</button>`:`<button onclick="toSmart(${m.id})">&rarr; smart</button>`}<button class="del" onclick="del(${m.id})">Delete</button></div>
     </div>
     ${permPicker(m)}</div>`).join('')}`).join('');
   $('list').innerHTML=html||`<small>No ${curTab==='smart'?'smart':'permanent'} memories yet.</small>`;
@@ -62,7 +58,6 @@ async function saveEdit(id){
   editId=0;load();
 }
 const memScope=id=>id?(roomCards.find(c=>c.id===id)?.name||'#'+id):'shared';
-async function move(id,cardId){await api('memories/move',{id,cardId:Number(cardId)||null});load();}
 let roomName='';
 async function load(){
   const [{cards},{rooms},{profiles},mps]=await Promise.all([get('cards'),get('rooms'),get('profiles'),get('memprofiles')]);
@@ -81,34 +76,24 @@ async function load(){
   const mprofOpts=(memProfiles||[]).map(p=>`<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
   const mprofVal=String(followed?.mem_profiles_id_pk ?? memProfiles[0]?.mem_profiles_id_pk ?? '');
   $('smart_mprof').innerHTML=mprofOpts;$('smart_mprof').value=mprofVal;
-  $('smart_mprof_hint').textContent=followed?`This chat follows "${followed.name}" — edit it on the Settings tab.`:'No profiles yet — create one on the Settings tab.';
+  $('smart_mprof_hint').textContent=followed?`This chat follows "${followed.name}" — select it in the sidebar to edit.`:'No profiles yet — create one in the sidebar.';
   const smartP=followed||memProfiles[0]||null;
   $('smart_auto').checked=!!smartP?.auto_mem;$('smart_auto').disabled=!smartP||!rm?.is_owner;
   $('smart_mprof').disabled=!rm?.is_owner;
   if(!rm?.is_owner)$('smart_mprof_hint').textContent='Only the room owner can change the memory profile.';
-  // Settings tab: profiles list (panel 1); selected profile's settings (panel 2).
-  $('mprof_list').innerHTML=(memProfiles||[]).map(p=>
+  // Sidebar: profile list; selected profile's settings open in profpanel.
+  $('plist').innerHTML=(memProfiles||[]).map(p=>
     `<div class="mprofrow${p.mem_profiles_id_pk===selProf?' sel':''}" style="cursor:pointer" onclick="selectProf(${p.mem_profiles_id_pk})"><span class="n">${esc(p.name)}${p.auto_mem?' <small>smart on</small>':''}</span><button onclick="event.stopPropagation();delMP(${p.mem_profiles_id_pk})" class="del">Delete</button></div>`).join('')||'<small>No profiles yet — create one.</small>';
   if(selProf&&!memProfiles.some(x=>x.mem_profiles_id_pk===selProf))setSelProf(0); // stale saved id
   const sp=selProf&&memProfiles.find(x=>x.mem_profiles_id_pk===selProf)||null;
   $('profpanel').style.display=sp?'block':'none';
   if(sp)fillProf(sp);
-  $('rchat').innerHTML=
-    `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div>`;
-  $('rcards').innerHTML=(cards||[]).map(c=>
-      `<div class="rprof${c.id===cardId?' on':''}" onclick="pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')"><div class="n">${esc(c.name)}</div></div>`
-    ).join('')||'<small>None</small>';
-  if(cardId<0)cardId=0;
-  // Smart memories are room-scoped only — disable the Smart tab for character scopes.
-  const smartTab=$('t_auto');
-  if(smartTab){ smartTab.disabled=cardId!==0; smartTab.style.opacity=cardId!==0?'0.4':'1'; smartTab.style.cursor=cardId!==0?'not-allowed':'pointer'; }
-  const {memories}=await get(`memories?card=${cardId}&room=${ROOM}`);
+  const {memories}=await get(`memories?card=0&room=${ROOM}`);
   allMems=memories||[];
-  $('title').textContent=`${scopeName||roomName||'Memories'} — memories`;
+  $('title').textContent=`${roomName||'Memories'} — memories`;
   renderList();
 }
-function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') curTab='user';load()}
-async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t});load()}
+async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{room:ROOM,content:t});load()}
 async function toSmart(id){await api('memories/update',{id,origin:'smart'});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
 let permPickId=0;
