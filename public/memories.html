@@ -21,7 +21,12 @@
     <h3 id="title">Memories</h3>
     <div id="addbox">
       <textarea id="newmem" placeholder="e.g. Fig hates the colour green" style="min-height:60px;width:100%"></textarea>
-      <button onclick="add()">Add memory</button>
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <select id="newtype" style="width:auto">
+          <option>fact</option><option>event</option><option>relationship</option><option>preference</option>
+        </select>
+        <button onclick="add()">Add memory</button>
+      </div>
     </div>
     <div id="smartbar" style="display:none;margin:8px 0">
       <div><span class="lbl" style="margin-bottom:3px" title="Which memory profile (preset of smart-memory settings) this chat follows.">Memory profile for this chat</span></div>
