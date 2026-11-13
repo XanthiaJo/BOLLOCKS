@@ -72,7 +72,7 @@ async function load(){
   const mprofOpts=(memProfiles||[]).map(p=>`<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
   const mprofVal=String(followed?.mem_profiles_id_pk ?? memProfiles[0]?.mem_profiles_id_pk ?? '');
   $('smart_mprof').innerHTML=mprofOpts;$('smart_mprof').value=mprofVal;
-  $('smart_mprof_hint').textContent=followed?`This chat follows "${followed.name}" — edit it on the Memory settings page.`:'No profiles yet — create one on the Memory settings page.';
+  $('smart_mprof_hint').textContent=followed?`This chat follows "${followed.name}" — edit it on the Smart memory page.`:'No profiles yet — create one on the Smart memory page.';
   const smartP=followed||memProfiles[0]||null;
   $('smart_auto').checked=!!smartP?.auto_mem;$('smart_auto').disabled=!smartP||!rm?.is_owner;
   $('smart_mprof').disabled=!rm?.is_owner;

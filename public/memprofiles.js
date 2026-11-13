@@ -1,4 +1,4 @@
-// --- Memory profiles: Settings tab works on profiles; chats follow one ---
+// --- Smart-memory profile editor: shared by the settings page + memories page ---
 /* global $, esc, api, load, ROOM, memProfiles, defPrompt */
 let selProf=Number(localStorage.mp_memprof||0),effRow=null;
 function toggleDefPrompt(a){const p=$('def_prompt');const show=p.style.display==='none';p.style.display=show?'block':'none';if(show)p.textContent=defPrompt||'(built-in prompt unavailable)';a.textContent=show?'hide it':'show it';}
