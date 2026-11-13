@@ -49,7 +49,8 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 let books=[],rooms=[],allEntries=[],me='';
-let selBook=Number(new URLSearchParams(location.search).get('id')||0),selEntry=0;
+let selBook=Number(new URLSearchParams(location.search).get('id')||localStorage.mp_worldbook||0),selEntry=0;
+function setSelBook(id){selBook=id;localStorage.mp_worldbook=id}
 initSidebar({
   tabs:[{label:'Books',on:true,onclick:'newBookPanel()'}],
   sections:[{title:'Books',id:'rbooks'}],
@@ -60,7 +61,7 @@ initSidebar({
 async function load(){
   const [{books:bb,rooms:rr},who]=await Promise.all([get('world/books'),get('me')]);
   books=bb||[];rooms=rr||[];me=who.handle;
-  if(selBook&&!books.some(b=>b.id===selBook))selBook=0;
+  if(selBook&&!books.some(b=>b.id===selBook))setSelBook(0);
   const {entries}=selBook?await get('world?book='+selBook):{entries:[]};
   allEntries=entries||[];
   if(selEntry&&!allEntries.some(e=>e.id===selEntry))selEntry=0;
@@ -107,17 +108,17 @@ function fillBook(b){
   $('book_del').style.display=b?'':'none';
   $('book_impbtn').style.display=b?'none':'';
 }
-function pickBook(id){selBook=id;selEntry=0;$('editor').innerHTML='';$('editor').style.display='none';showPanel('view');load()}
+function pickBook(id){setSelBook(id);selEntry=0;$('editor').innerHTML='';$('editor').style.display='none';showPanel('view');load()}
 function renameBook(){fillBook(books.find(b=>b.id===selBook));showPanel('book')}
-function newBookPanel(){selBook=0;fillBook(null);showPanel('book');$('book_name').focus()}
+function newBookPanel(){setSelBook(0);fillBook(null);showPanel('book');$('book_name').focus()}
 function cancelBook(){fillBook(selBook?books.find(b=>b.id===selBook):null)}
 async function saveBook(){
   const name=$('book_name').value.trim();if(!name)return;
   if(selBook)await api('world/books/update',{id:selBook,name});
-  else{const r=await api('world/books',{name});if(r?.id)selBook=r.id;}
+  else{const r=await api('world/books',{name});if(r?.id)setSelBook(r.id);}
   await load();fillBook(books.find(b=>b.id===selBook));
 }
-async function delBook(id){if(confirm('Delete this book and all its entries?')){if(selBook===id){selBook=0;newBookPanel()}await api('world/books/delete',{id});load()}}
+async function delBook(id){if(confirm('Delete this book and all its entries?')){if(selBook===id)newBookPanel();await api('world/books/delete',{id});load()}}
 async function importBook(input){
   const f=input.files[0];input.value='';if(!f)return;
   const r=await api('world/import',{book:await f.text(),name:f.name.replace(/\.json$/,'')});
