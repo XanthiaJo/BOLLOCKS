@@ -77,8 +77,7 @@ flowchart TD
     SelectRoom --> Tabs{Tab}
 
     Tabs -->|Permanent| PermList["Show manual memories<br/>room-shared + card-scoped"]
-    Tabs -->|Smart| SmartList["Show auto memories<br/>room-scoped only"]
-    Tabs -->|Settings| Settings["Room memsettings<br/>auto_mem, mem_every, budget, max"]
+    Tabs -->|Smart| SmartList["Show auto memories + room profile picker<br/>room-scoped only"]
 
     %% Permanent creation
     PermList --> AddMem{Add memory}

@@ -28,10 +28,10 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 |---|---|
 | `login.html` | Login page — the ONLY file served without a session. Self-contained (inline CSS/JS); stores token in `localStorage.mp_token`, redirects to `/` |
 | `index.html` + `app.js` | Chat page: room list, messages, members sidebar, prompt-token inspector, SSE live updates |
-| `characters.html` + `characters.js` | Card list + editor, avatar upload with in-browser crop; per-card memory list inside the editor (card-scoped permanent memories for the current room) |
+| `characters.html` + `characters.js` | Card list + editor, avatar upload with in-browser crop |
 | `world.html` | Lorebook list (create/delete/link-to-room, ST JSON import) |
 | `world-edit.html` | Entry editor for one book (`?id=<book>`): keys, secondary keys, content, constant/enabled, order |
-| `memories.html` + `memories.js` + `memprofiles.js` | Room memory page: Permanent/Smart tabs (shared room scope only — card memories live on the Characters page), memory-profile list in the sidebar (click → profile editor panel). `memprofiles.js` loads last and calls `load()`. All styles live in `layout.css` — settings grids via `class="panel settings"` |
+| `memories.html` + `memories.js` | Memory browser: Permanent/Smart tabs, sidebar scope picker (room-shared or per-character; Smart stays room-scoped for now). `memsettings.html` + `memsettings.js` | Memory settings page: profile list in sidebar → editor panel (`class="panel settings"` accordions). `memprofiles.js` | Shared profile-editor code loaded by both pages — it ends by calling the page's own `load()`. All styles live in `layout.css` |
 | `connection.html` + `connection.js` | Profiles page, tabbed: Connection (API profiles — OpenAI-compatible url/model/key/headers/context) and Injection (prompt_profiles — prompt-assembly presets incl. prompt order) |
 | `layout.js` | Shared shell injected into every page: top nav + sidebar toggles + version badge. Also `mpOpenEditor`/`mpCloseEditor`/`mpFlashSaved` and `activateProf` helpers |
 | `layout.css` | Shared styles for the shell and pages |

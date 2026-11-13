@@ -51,7 +51,7 @@ function edit(c){
   document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=!mine);
   $('edtitle').textContent=(mine?'Edit ':'')+c.name+(mine?'':` (${c.owner})`);
   $('ed_av').src=c.avatar?'/api/avatar?id='+c.id+'&t='+Date.now():'';
-  if(!mine){$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');mpOpenEditor('inline');loadMems(c.id);return;}$('edtitle').textContent='Edit '+c.name;$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');$('ed_creator').value=c.creator||'';$('ed_profile').value=c.api_profiles_id_fk||'';mpOpenEditor('inline');loadMems(c.id)}
+  if(!mine){$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');mpOpenEditor('inline');return;}$('edtitle').textContent='Edit '+c.name;$('ed_id').value=c.id;$('ed_name').value=c.name;$('ed_desc').value=c.description;$('ed_personality').value=c.personality||'';$('ed_scenario').value=c.scenario||'';$('ed_first').value=c.first_message||'';$('ed_mesex').value=c.mes_example||'';$('ed_sysp').value=c.system_prompt||'';$('ed_phi').value=c.post_history_instructions||'';$('ed_tags').value=JSON.parse(c.tags||'[]').join(', ');$('ed_creator').value=c.creator||'';$('ed_profile').value=c.api_profiles_id_fk||'';mpOpenEditor('inline')}
 let cropImg=null,cropX=0,cropY=0,cropSize=0,cropScale=1;
 function pickAvatar(inp){
   const f=inp.files[0];inp.value='';if(!f)return;
@@ -84,7 +84,7 @@ function cropConfirm(){
     if(r.error)alert(r.error);else $('ed_av').src='/api/avatar?id='+id+'&t='+Date.now();});
   else{$('ed_av').src=url;$('ed_av').dataset.pending=b64;}
 }
-function clearEd(){loadMems(0);$('edtitle').textContent='New character';['ed_id','ed_name','ed_desc','ed_personality','ed_scenario','ed_first','ed_mesex','ed_sysp','ed_phi','ed_tags','ed_creator'].forEach(i=>$(i).value='');$('ed_profile').value='';$('ed_av').src='';$('ed_av').dataset.pending=''}
+function clearEd(){$('edtitle').textContent='New character';['ed_id','ed_name','ed_desc','ed_personality','ed_scenario','ed_first','ed_mesex','ed_sysp','ed_phi','ed_tags','ed_creator'].forEach(i=>$(i).value='');$('ed_profile').value='';$('ed_av').src='';$('ed_av').dataset.pending=''}
 function newCard(){clearEd();document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=false);mpOpenEditor('inline')}
 
 async function saveCard(){
@@ -114,37 +114,3 @@ async function importCard(input){
 }
 Promise.all([load(),loadProfs()]).then(newCard);
 
-// --- Card memories: permanent memories scoped to this card in the current chat ---
-let memCardId=0,memList=[],memEditId=0;
-async function loadMems(id){
-  memCardId=id;memEditId=0;
-  $('memsec').style.display=id?'block':'none';
-  if(!id){$('memlist').innerHTML='';return}
-  const ROOM=Number(localStorage.mp_room||1);
-  const {memories}=await get(`memories?card=${id}&room=${ROOM}`);
-  memList=(memories||[]).filter(m=>(m.origin||'user')==='user');
-  renderMems();
-}
-function renderMems(){
-  $('memlist').innerHTML=memList.map(m=>memEditId===m.id?memEditForm(m):`
-    <div class="card" style="grid-template-columns:1fr auto;padding:8px 10px;margin-bottom:6px">
-      <div><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> <span style="font-size:.9em">${esc(m.content)}</span>
-      <input placeholder="trigger keywords — inject only when mentioned" value="${esc(m.triggers||'')}" style="font-size:.8em;margin-top:4px;width:100%" onchange="api('memories/triggers',{id:${m.id},triggers:this.value})"></div>
-      <div class="btns"><button onclick="memEdit(${m.id})">Edit</button><button class="del" onclick="delMem(${m.id})">Del</button></div>
-    </div>`).join('')||'<small>No memories in this chat yet.</small>';
-}
-function memEdit(id){memEditId=memEditId===id?0:id;renderMems()}
-function memEditForm(m){
-  const types=['fact','event','relationship','preference'];
-  return `<div class="card" style="grid-template-columns:1fr;border-color:var(--accent);padding:8px 10px;margin-bottom:6px">
-    <textarea id="cm_content_${m.id}" style="min-height:50px">${esc(m.content)}</textarea>
-    <div style="display:flex;gap:6px;margin-top:6px">
-      <select id="cm_type_${m.id}" style="width:auto">${types.map(t=>`<option${t===(m.type||'fact')?' selected':''}>${t}</option>`).join('')}</select>
-      <button onclick="saveMemEdit(${m.id})">Save</button>
-      <button onclick="memEdit(${m.id})" style="background:var(--border)">Cancel</button>
-    </div></div>`;
-}
-async function saveMemEdit(id){await api('memories/update',{id,content:$('cm_content_'+id).value,type:$('cm_type_'+id).value});memEditId=0;loadMems(memCardId)}
-async function addMem(){const t=$('memnew').value.trim();if(!t)return;$('memnew').value='';
-  await api('memories',{cardId:memCardId,room:Number(localStorage.mp_room||1),content:t});loadMems(memCardId)}
-async function delMem(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});loadMems(memCardId)}}
