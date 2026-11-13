@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, seed, login, userForToken, createUser, migrateProfiles, migrateSchema, MSG_SQL, DATA_DIR } from './db.js';
+import { db, seed, login, userForToken, createUser, migrateProfiles, migrateSchema, MSG_SQL, DATA_DIR, hash, verify } from './db.js';
 import { generateReply, genStats, maybeSummarize } from './generate.js';
 import { extractCardJson, normalizeCard } from './pngcard.js';
 
@@ -62,7 +62,27 @@ const router = {
     },
     'GET /api/me': async (req, res, u) => {
         const persona = db.prepare('SELECT cards_id_pk AS id,name FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk);
-        send(res, 200, { handle: u.handle, persona: persona || null });
+        send(res, 200, { handle: u.handle, email: u.email || '', persona: persona || null });
+    },
+    'POST /api/me/update': async (req, res, u) => {
+        const b = await readBody(req);
+        if (b.handle !== undefined) {
+            const h = String(b.handle).trim();
+            if (!h) return send(res, 400, { error: 'handle required' });
+            if (db.prepare('SELECT 1 FROM users WHERE handle=? COLLATE NOCASE AND users_id_pk<>?').get(h, u.users_id_pk))
+                return send(res, 409, { error: 'handle taken' });
+            db.prepare('UPDATE users SET handle=? WHERE users_id_pk=?').run(h, u.users_id_pk);
+        }
+        if (b.email !== undefined) db.prepare('UPDATE users SET email=? WHERE users_id_pk=?').run(String(b.email).trim(), u.users_id_pk);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/me/password': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!b.current || !b.password) return send(res, 400, { error: 'current+new password required' });
+        if (!verify(b.current, u.salt, u.password_hash)) return send(res, 403, { error: 'wrong current password' });
+        const { salt, hash: h } = hash(b.password);
+        db.prepare('UPDATE users SET password_hash=?, salt=? WHERE users_id_pk=?').run(h, salt, u.users_id_pk);
+        send(res, 200, { ok: true });
     },
     'POST /api/persona': async (req, res, u) => {
         const b = await readBody(req);

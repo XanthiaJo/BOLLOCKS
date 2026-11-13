@@ -213,6 +213,8 @@ export function migrateSchema() {
     };
     for (const [col, def] of Object.entries(v2))
         if (!cols.includes(col)) db.exec(`ALTER TABLE cards ADD COLUMN ${col} ${def}`);
+    const ucols = db.prepare('PRAGMA table_info(users)').all().map(c => c.name);
+    if (!ucols.includes('email')) db.exec("ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''");
     // World lorebook model: books own entries; rooms link to one book.
     const wcols = db.prepare('PRAGMA table_info(world_entries)').all().map(c => c.name);
     if (!wcols.includes('world_books_id_fk')) db.exec('ALTER TABLE world_entries ADD COLUMN world_books_id_fk INTEGER REFERENCES world_books(world_books_id_pk)');
