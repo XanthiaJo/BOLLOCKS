@@ -50,9 +50,10 @@ describe('generation (mock LLM)', () => {
 
     test('profile prompt_order reorders the system prompt', async () => {
         const mps = (await s.get('memprofiles')).json;
-        assert.equal(mps.promptBlocks.length, 9);
+        assert.equal(mps.promptBlocks.length, 10);
         const prof = mps.profiles[0];
-        const rev = mps.promptBlocks.map(b => b.key).reverse();
+        // 'history' stays last so the reversed sections still land in system.
+        const rev = mps.promptBlocks.map(b => b.key).filter(k => k !== 'history').reverse().concat('history');
         await s.post('memprofiles/update', { id: prof.mem_profiles_id_pk, name: prof.name, order: rev });
         llm.requests.length = 0;
         await s.post('generate', { room, card });
@@ -60,6 +61,22 @@ describe('generation (mock LLM)', () => {
         // Reversed: instructions first, the main-prompt fallback last.
         assert.match(sys, /^You are Kira and ONLY Kira/);
         assert.ok(sys.indexOf('You are Kira and ONLY') < sys.indexOf('Description:\nKira is Kira'));
+        await s.post('memprofiles/update', { id: prof.mem_profiles_id_pk, name: prof.name, order: null });
+    });
+
+    test("prompt_order injects sections below 'history' after the chat", async () => {
+        const mps = (await s.get('memprofiles')).json;
+        const prof = mps.profiles[0];
+        const keys = mps.promptBlocks.map(b => b.key);
+        const order = keys.filter(k => k !== 'instructions' && k !== 'history').concat('history', 'instructions');
+        await s.post('memprofiles/update', { id: prof.mem_profiles_id_pk, name: prof.name, order });
+        llm.requests.length = 0;
+        await s.post('generate', { room, card });
+        const msgs = JSON.parse(llm.requests.at(-1).body).messages;
+        assert.doesNotMatch(msgs[0].content, /ONLY Kira/); // instructions left the system prompt
+        assert.equal(msgs.at(-2).role, 'system');          // appended after history…
+        assert.match(msgs.at(-2).content, /You are Kira and ONLY Kira/);
+        assert.equal(msgs.at(-1).content, 'Kira:');        // …and before the nudge
         await s.post('memprofiles/update', { id: prof.mem_profiles_id_pk, name: prof.name, order: null });
     });
 

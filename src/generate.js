@@ -36,6 +36,7 @@ export const PROMPT_BLOCKS = [
     { key: 'world', label: 'World info' },
     { key: 'memories', label: 'Memories' },
     { key: 'instructions', label: 'Instructions' },
+    { key: 'history', label: 'Chat history' },
 ];
 
 /** Effective memory settings for a room: always the memory profile it follows
@@ -156,9 +157,15 @@ export async function generateReply(roomId, card) {
     let order;
     try { order = JSON.parse(mem?.mem_prompt_order || ''); } catch { order = null; }
     if (!Array.isArray(order)) order = [];
-    order = order.filter(k => k in blocks);
+    const known = new Set(PROMPT_BLOCKS.map(b => b.key));
+    order = order.filter(k => known.has(k));
     for (const b of PROMPT_BLOCKS) if (!order.includes(b.key)) order.push(b.key);
-    const system = order.map(k => blocks[k]).filter(Boolean).join('\n\n');
+    // 'history' is a position marker, not a text block: everything above it
+    // joins the system prompt; everything below is appended as a second
+    // system message after the chat history, right before the reply nudge.
+    const hi = order.indexOf('history');
+    const system = order.slice(0, hi < 0 ? order.length : hi).map(k => blocks[k]).filter(Boolean).join('\n\n');
+    const postSys = hi < 0 ? '' : order.slice(hi + 1).map(k => blocks[k]).filter(Boolean).join('\n\n');
 
     const parts = {
         'Main Prompt': tok(card.system_prompt || `You are ${card.name}.`),
@@ -215,12 +222,15 @@ export async function generateReply(roomId, card) {
     const reqBody = {
         model: conn.model || 'local',
         messages: [
-            { role: 'system', content: system },
+            ...(system ? [{ role: 'system', content: system }] : []),
             // The card's own past lines are its voice (assistant);
             // everyone else's lines are tagged context (user).
             ...history.map(m => m.cards_id_fk === card.id
                 ? { role: 'assistant', content: m.text }
                 : { role: 'user', content: `${m.name}: ${m.text}` }),
+            // Blocks ordered below 'history' land here — recent context the
+            // model reads right before replying.
+            ...(postSys ? [{ role: 'system', content: postSys }] : []),
             // Final nudge — primes the model to continue as this character.
             { role: 'user', content: `${card.name}:` },
         ],
