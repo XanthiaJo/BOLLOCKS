@@ -44,7 +44,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | `docs/memories.md` | Design doc for the memory system (kinds, ownership rules, extraction flow) |
 | `docs/tests.md` | Checklist of exactly what the test suite covers + known gaps it has surfaced |
 | `test/` | `node:test` suites run by `npm test`: `api-contract.test.js` (static frontend↔route checks), `upgrade.test.js` (migration/upgrade), one file per API domain (`auth`, `profile`, `rooms`, `access`, `cards`, `messages`, `world`, `memories`, `profiles`, `generate`, `users`), `pngcard.test.js` (card parser units), `helpers.js` (shared `boot()`/`mockLLM()`/`pub`/`asUser` harness) |
-| `.github/workflows/` | `pr-autofill.yml` (commit-list above PR body), `pr-checks.yml` (lint + `npm test`), `beta.yml`/`release.yml` (manual releases via `Box-of-Dragons/StructuredChaos`) |
+| `.github/workflows/` | `pr-autofill.yml` (commit-list above PR body), `pr-checks.yml` (lint + `npm test`), `beta.yml`/`release.yml` (manual releases; planner vendored at `scripts/release.mjs`) |
 
 ## Request lifecycle (server.js)
 
@@ -130,7 +130,7 @@ Seeded dev users (fresh DB, `seed()`): `admin`, `alice`, `bob`, `carol` — all 
 ## Commits, branches, and PRs
 
 - Use **Conventional Commits** where practical (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`, `test:`, `perf:`, `style:`; `!`/`BREAKING` for breaking changes). CI/release automation relies on commit conventions.
-- **Never push directly to `dev`, `beta`, or `master`.** All changes go on a feature branch and land via PR — even docs or one-line fixes. Branch flow and release automation are coordinated with `StructuredChaos` workflows (`dev` → beta/release processes; see workflow files). Do not change release/beta workflow behavior without understanding that integration.
+- **Never push directly to `dev`, `beta`, or `master`.** All changes go on a feature branch and land via PR — even docs or one-line fixes. Release automation is fully local: `beta.yml`/`release.yml` drive `scripts/release.mjs` (`dev` → beta/release processes; see workflow files).
 - PRs: `pr-autofill.yml` refreshes an autofilled commit list above any manual PR description (without changing the PR title); `pr-checks.yml` runs lint and `npm test` on PR updates. Ensure both pass before opening/updating a PR.
 
 ## Validation
