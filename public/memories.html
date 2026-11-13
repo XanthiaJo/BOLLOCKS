@@ -15,10 +15,13 @@
 #smartbar{margin:8px 0}
 #smartbar .lbl{display:block;margin-bottom:3px}
 #profpanel .lbl,#setpanel .lbl,#smartbar .lbl,#profpanel label.cb{font-size:.9em;color:var(--text)}
-#profpanel .row,#setpanel .row{display:grid;grid-template-columns:1fr;justify-items:start;gap:2px;margin:12px 0 4px}
+#profpanel .row,#setpanel .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:0 12px;margin:12px 0 4px}
+#profpanel .row .lbl,#setpanel .row .lbl{grid-column:1;margin-top:0}
+#profpanel .row .hint{grid-column:1;margin:0}
+#profpanel .row>:last-child{grid-column:2;grid-row:1/3;justify-self:end}
+#profpanel .row input[type=checkbox]{width:auto!important;margin:0}
+#profpanel label.cbrow{cursor:pointer}
 #profpanel .lbl,#setpanel .lbl{display:block;margin-top:12px}
-#profpanel .row .lbl,#setpanel .row .lbl{margin-top:0}
-#profpanel label.cb{margin:10px 0 2px}
 #profpanel .row input[type=number],#setpanel .row input[type=number]{width:80px}
 #profpanel .row input:not([type=number]):not([type=checkbox]),#setpanel .row input:not([type=number]):not([type=checkbox]){width:200px}
 #profpanel .ph,#setpanel .ph{opacity:.45;pointer-events:none;margin-top:4px}
@@ -87,16 +90,11 @@
     <select id="set_profile" onchange="saveProf()" style="width:220px"></select>
     <div>
       <div class="row"><span class="lbl" title="Max tokens the memory LLM may use per extraction call. Unlimited (-1) warns it may be slow/costly.">Generation budget (tokens)</span><span class="hint">How much the memory-writer may write per run. ~4 characters ≈ 1 token. Default: 2000.</span><input type="number" id="set_genbudget" min="256" max="32768" value="2000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
-      <label class="cb"><input type="checkbox" id="set_unlimited" onchange="saveProf()"> Unlimited (-1)</label>
-      <span class="hint">No cap on the writer's reply. Overrides the budget above — can be slow or expensive on paid APIs.</span>
-      <label class="cb"><input type="checkbox" id="set_activity" onchange="saveProf()"> Show activity indicator</label>
-      <span class="hint">Log a line on the server each time extraction runs — handy to confirm it's working.</span>
-      <label class="cb"><input type="checkbox" id="set_unified" onchange="saveProf()"> Unified injection</label>
-      <span class="hint">On: memories reach the AI as one "Memories:" block. Off: split into "what happened here" (shared) and "what this character remembers" (personal).</span>
-      <label class="cb"><input type="checkbox" id="set_triggers" onchange="saveProf()"> Generate contextual triggers</label>
-      <span class="hint">The writer tags each memory with keywords; a memory is only added to the prompt when a keyword appeared in the last few messages. Cheaper prompts, occasionally misses context.</span>
-      <label class="cb"><input type="checkbox" id="set_autotune" onchange="saveProf()"> Auto-tune budgets</label>
-      <span class="hint">Automatically raise the injection token budget (below) if stored memories keep getting cut off.</span>
+      <label class="row cbrow"><span class="lbl">Unlimited (-1)</span><span class="hint">No cap on the writer's reply. Overrides the budget above — can be slow or expensive on paid APIs.</span><input type="checkbox" id="set_unlimited" onchange="saveProf()"></label>
+      <label class="row cbrow"><span class="lbl">Show activity indicator</span><span class="hint">Log a line on the server each time extraction runs — handy to confirm it's working.</span><input type="checkbox" id="set_activity" onchange="saveProf()"></label>
+      <label class="row cbrow"><span class="lbl">Unified injection</span><span class="hint">On: memories reach the AI as one "Memories:" block. Off: split into "what happened here" (shared) and "what this character remembers" (personal).</span><input type="checkbox" id="set_unified" onchange="saveProf()"></label>
+      <label class="row cbrow"><span class="lbl">Generate contextual triggers</span><span class="hint">The writer tags each memory with keywords; a memory is only added to the prompt when a keyword appeared in the last few messages. Cheaper prompts, occasionally misses context.</span><input type="checkbox" id="set_triggers" onchange="saveProf()"></label>
+      <label class="row cbrow"><span class="lbl">Auto-tune budgets</span><span class="hint">Automatically raise the injection token budget (below) if stored memories keep getting cut off.</span><input type="checkbox" id="set_autotune" onchange="saveProf()"></label>
       <div class="row"><span class="lbl" title="How often the injected memory block is rebuilt. 1 = every generation.">Injection refresh every N AI messages</span><span class="hint">Only add memories to the prompt every Nth reply — saves tokens on the replies in between. 1 = every reply (default).</span><input type="number" id="set_refresh" min="1" max="50" value="1" onchange="saveProf()" style="width:80px;display:inline-block"></div>
     </div>
 
