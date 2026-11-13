@@ -1,4 +1,5 @@
 import { db, activeProfile, MSG_SQL } from './db.js';
+import { push } from './sse.js';
 
 // Latest prompt composition per room — exposed for the chat sidebar.
 export const genStats = {};
@@ -254,6 +255,7 @@ export async function maybeSummarize(roomId) {
         MSG_SQL + ' WHERE m.rooms_id_fk=? AND m.messages_id_pk>? ORDER BY m.messages_id_pk LIMIT 30')
         .all(roomId, room.mem_last_messages_id);
     if (!excerpt.length) return;
+    if (mem.mem_activity) push(roomId, { type: 'mem', phase: 'start' });
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
@@ -269,6 +271,7 @@ export async function maybeSummarize(roomId) {
     });
     if (!resp.ok) return;
     const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
+    let added = 0;
     const ins = db.prepare("INSERT INTO memories (content,type,origin,triggers) VALUES (?,?, 'smart', ?)");
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
     for (const line of text.split('\n')) {
@@ -280,12 +283,15 @@ export async function maybeSummarize(roomId) {
         let triggers = '';
         const tr = fact.match(/\(([^)]*)\)\s*$/);
         if (tr) { triggers = tr[1].split(',').map(s => s.trim().toLowerCase()).filter(Boolean).join(','); fact = fact.slice(0, tr.index).trim(); }
-        if (fact.length > 10) { const mid = ins.run(fact, type, triggers).lastInsertRowid; linkRoom.run(roomId, mid); }
+        if (fact.length > 10) { const mid = ins.run(fact, type, triggers).lastInsertRowid; linkRoom.run(roomId, mid); added++; }
     }
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
     db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
-    if (mem.mem_activity) console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
+    if (mem.mem_activity) {
+        console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
+        push(roomId, { type: 'mem', phase: 'done', count: added });
+    }
     // Cap stored smart memories per type — oldest entries of each type drop off.
     for (const [type, col] of [['fact','mem_max_fact'],['event','mem_max_event'],['relationship','mem_max_relationship'],['preference','mem_max_preference']]) {
         const cap = mem[col] || 0;
