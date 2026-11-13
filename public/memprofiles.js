@@ -1,7 +1,6 @@
 // --- Memory profiles: Settings tab works on profiles; chats follow one ---
-/* global $, esc, api, load, ROOM, memProfiles, defPrompt, promptBlocks */
+/* global $, esc, api, load, ROOM, memProfiles, defPrompt */
 let selProf=Number(localStorage.mp_memprof||0),effRow=null;
-let orderKeys=[];
 function toggleDefPrompt(a){const p=$('def_prompt');const show=p.style.display==='none';p.style.display=show?'block':'none';if(show)p.textContent=defPrompt||'(built-in prompt unavailable)';a.textContent=show?'hide it':'show it';}
 function setSelProf(id){selProf=id;localStorage.mp_memprof=id;}
 function fillProf(p){
@@ -12,35 +11,16 @@ function fillProf(p){
   $('set_genbudget').value=p.mem_unlimited?-1:(p.mem_gen_budget||2000);$('set_unified').checked=!!p.mem_unified;$('set_triggers').checked=!!p.mem_triggers;$('set_autotune').checked=!!p.mem_autotune;$('set_refresh').value=p.mem_refresh||1;
   $('set_activity').checked=!!p.mem_activity;
   $('set_profile').value=p.mem_extraction_profile_id||0;
-  orderKeys=orderFrom(p.mem_prompt_order);renderOrder();
 }
-// Prompt-order list: stored order wins; unknown keys dropped, missing keys
-// appended so new blocks can't silently vanish from the prompt.
-function orderFrom(raw){const keys=promptBlocks.map(b=>b.key);let a=null;try{a=JSON.parse(raw)}catch{}
-  if(!Array.isArray(a))return keys;
-  a=a.filter(k=>keys.includes(k));
-  return [...a,...keys.filter(k=>!a.includes(k))];}
-const openBlocks=new Set();
-function toggleBlock(k){openBlocks.has(k)?openBlocks.delete(k):openBlocks.add(k);renderOrder()}
-function renderOrder(){const el=$('order_list');if(!el)return;
-  el.innerHTML=orderKeys.map((k,i)=>{const b=promptBlocks.find(x=>x.key===k);const open=openBlocks.has(k);
-    return `<li style="padding:2px 4px 2px 8px;background:var(--input);border-radius:4px;margin-bottom:3px"><div style="display:flex;align-items:center;gap:6px">`+
-      `<span style="flex:1;font-size:.9em;cursor:pointer" onclick="toggleBlock('${k}')">${open?'▾':'▸'} ${b?b.label:k}</span>`+
-      `<button onclick="moveOrder(${i},-1)"${i?'':' disabled'}>&uarr;</button>`+
-      `<button onclick="moveOrder(${i},1)"${i<orderKeys.length-1?'':' disabled'}>&darr;</button></div>`+
-      (open?`<pre style="margin:4px 0 2px;padding-left:6px;border-left:2px solid var(--line2);font-size:.78em;color:var(--dim);white-space:pre-wrap">${esc(b?.example||'(no example)')}</pre>`:'')+
-      `</li>`}).join('')}
-async function moveOrder(i,d){const j=i+d;if(j<0||j>=orderKeys.length)return;
-  [orderKeys[i],orderKeys[j]]=[orderKeys[j],orderKeys[i]];renderOrder();await saveProf()}
 function selectProf(id){setSelProf(id);load()}
 function deselectProf(){setSelProf(0);load()}
-function rowToProf(p){return {id:p.mem_profiles_id_pk,name:p.name,auto:!!p.auto_mem,every:p.mem_every||10,budget:p.mem_budget||800,max:p.mem_max||50,maxFact:p.mem_max_fact||15,maxEvent:p.mem_max_event||15,maxRel:p.mem_max_relationship||15,maxPref:p.mem_max_preference||15,extractionPrompt:p.mem_extraction_prompt||'',contextThreshold:p.mem_context_threshold||80,responseLength:p.mem_response_length||2000,profileId:p.mem_extraction_profile_id||0,genBudget:p.mem_gen_budget||2000,unlimited:!!p.mem_unlimited,unified:(p.mem_unified??1)?1:0,triggers:!!p.mem_triggers,autotune:!!p.mem_autotune,refresh:p.mem_refresh||1,activity:!!p.mem_activity,order:orderFrom(p.mem_prompt_order)}}
-function collectProf(){const p=memProfiles.find(x=>x.mem_profiles_id_pk===selProf);const base=p?rowToProf(p):{name:'Profile'};const gb=Number($('set_genbudget').value)||0,unl=gb<=-1;return {...base,id:selProf,name:$('pf_name').value.trim()||base.name,extractionPrompt:$('set_prompt').value,contextThreshold:Number($('set_ctx').value)||80,responseLength:Number($('set_resplen').value)||2000,profileId:$('set_profile').value?Number($('set_profile').value):0,genBudget:unl?-1:(gb||2000),unlimited:unl?1:0,unified:$('set_unified').checked?1:0,triggers:$('set_triggers').checked?1:0,autotune:$('set_autotune').checked?1:0,refresh:Number($('set_refresh').value)||1,activity:$('set_activity').checked?1:0,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||800,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0,order:orderKeys}}
+function rowToProf(p){return {id:p.mem_profiles_id_pk,name:p.name,auto:!!p.auto_mem,every:p.mem_every||10,budget:p.mem_budget||800,max:p.mem_max||50,maxFact:p.mem_max_fact||15,maxEvent:p.mem_max_event||15,maxRel:p.mem_max_relationship||15,maxPref:p.mem_max_preference||15,extractionPrompt:p.mem_extraction_prompt||'',contextThreshold:p.mem_context_threshold||80,responseLength:p.mem_response_length||2000,profileId:p.mem_extraction_profile_id||0,genBudget:p.mem_gen_budget||2000,unlimited:!!p.mem_unlimited,unified:(p.mem_unified??1)?1:0,triggers:!!p.mem_triggers,autotune:!!p.mem_autotune,refresh:p.mem_refresh||1,activity:!!p.mem_activity}}
+function collectProf(){const p=memProfiles.find(x=>x.mem_profiles_id_pk===selProf);const base=p?rowToProf(p):{name:'Profile'};const gb=Number($('set_genbudget').value)||0,unl=gb<=-1;return {...base,id:selProf,name:$('pf_name').value.trim()||base.name,extractionPrompt:$('set_prompt').value,contextThreshold:Number($('set_ctx').value)||80,responseLength:Number($('set_resplen').value)||2000,profileId:$('set_profile').value?Number($('set_profile').value):0,genBudget:unl?-1:(gb||2000),unlimited:unl?1:0,unified:$('set_unified').checked?1:0,triggers:$('set_triggers').checked?1:0,autotune:$('set_autotune').checked?1:0,refresh:Number($('set_refresh').value)||1,activity:$('set_activity').checked?1:0,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||800,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0}}
 async function toggleSmartAuto(on){const id=Number($('smart_mprof').value)||memProfiles[0]?.mem_profiles_id_pk;if(!id)return;const p=memProfiles.find(x=>x.mem_profiles_id_pk===id);if(!p)return;await api('memprofiles/update',{...rowToProf(p),auto:on?1:0});load()}
 async function saveProf(){if(!selProf)return;await api('memprofiles/update',collectProf());load()}
 async function pickMProf(v){await api('room/memsettings',{room:ROOM,memProfile:Number(v)||0});load()}
 async function newMP(){const name=prompt('Name for the new memory profile:');if(!name)return;
-  const r=await api('memprofiles',{name,auto:0,every:10,budget:800,max:50,maxFact:15,maxEvent:15,maxRel:15,maxPref:15,extractionPrompt:'',contextThreshold:80,responseLength:2000,genBudget:2000,unlimited:0,unified:1,triggers:1,autotune:0,refresh:1,activity:0,profileId:0,order:null});
+  const r=await api('memprofiles',{name,auto:0,every:10,budget:800,max:50,maxFact:15,maxEvent:15,maxRel:15,maxPref:15,extractionPrompt:'',contextThreshold:80,responseLength:2000,genBudget:2000,unlimited:0,unified:1,triggers:1,autotune:0,refresh:1,activity:0,profileId:0});
   if(r?.id)setSelProf(r.id);load()}
 async function saveAsProfile(){const name=prompt('Name this memory profile:');if(!name)return;const r=effRow||{};
   const {id,...rest}=rowToProf(r);await api('memprofiles',{name,...rest});load()}

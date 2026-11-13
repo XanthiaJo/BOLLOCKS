@@ -60,7 +60,7 @@ export default {
     // Smart-memory profiles: named presets of the mem_* room settings.
     'GET /api/memprofiles': async (req, res, u) => {
         const profiles = db.prepare('SELECT * FROM mem_profiles WHERE users_id_fk=? ORDER BY mem_profiles_id_pk').all(u.users_id_pk);
-        send(res, 200, { profiles, defaultPrompt: MEM_EXTRACT_PROMPT, promptBlocks: PROMPT_BLOCKS });
+        send(res, 200, { profiles, defaultPrompt: MEM_EXTRACT_PROMPT });
     },
     'POST /api/memprofiles': async (req, res, u) => {
         const b = await readBody(req);
@@ -69,13 +69,12 @@ export default {
             b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
             b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
             b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
-            b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0,
-            b.order ? JSON.stringify(b.order) : null];
+            b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0];
         const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,auto_mem,mem_every,mem_budget,mem_max,
             mem_max_fact,mem_max_event,mem_max_relationship,mem_max_preference,mem_extraction_prompt,
             mem_context_threshold,mem_response_length,mem_gen_budget,mem_unlimited,mem_unified,mem_triggers,
-            mem_autotune,mem_refresh,mem_activity,mem_extraction_profile_id,mem_prompt_order)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+            mem_autotune,mem_refresh,mem_activity,mem_extraction_profile_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
             .run(u.users_id_pk, b.name, ...vals).lastInsertRowid;
         send(res, 200, { id });
     },
@@ -85,15 +84,13 @@ export default {
             mem_max_fact=?, mem_max_event=?, mem_max_relationship=?, mem_max_preference=?,
             mem_extraction_prompt=?, mem_context_threshold=?, mem_response_length=?,
             mem_gen_budget=?, mem_unlimited=?, mem_unified=?, mem_triggers=?,
-            mem_autotune=?, mem_refresh=?, mem_activity=?, mem_extraction_profile_id=?,
-            mem_prompt_order=?
+            mem_autotune=?, mem_refresh=?, mem_activity=?, mem_extraction_profile_id=?
             WHERE mem_profiles_id_pk=? AND users_id_fk=?`)
             .run(String(b.name ?? '').trim(), b.auto ? 1 : 0, b.every ?? 10, b.budget ?? 800, b.max ?? 50,
                 b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
                 b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
                 b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
                 b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0,
-                b.order ? JSON.stringify(b.order) : null,
                 b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
@@ -103,6 +100,43 @@ export default {
         // (0 = feature-less room columns only when NO profiles remain).
         db.prepare(`UPDATE rooms SET mem_profiles_id_fk=COALESCE((SELECT mem_profiles_id_pk FROM mem_profiles WHERE mem_profiles_id_pk<>? ORDER BY mem_profiles_id_pk LIMIT 1),0) WHERE mem_profiles_id_fk=?`).run(b.id, b.id);
         db.prepare('DELETE FROM mem_profiles WHERE mem_profiles_id_pk=? AND users_id_fk=?').run(b.id, u.users_id_pk);
+        send(res, 200, { ok: true });
+    },
+    // Injection profiles: named prompt-assembly presets (section order today,
+    // templates/block triggers later). The user's `active` one applies to all
+    // their generations — layout survives swapping API connections.
+    'GET /api/promptprofiles': async (req, res, u) => {
+        const profiles = db.prepare('SELECT * FROM prompt_profiles WHERE users_id_fk=? ORDER BY prompt_profiles_id_pk').all(u.users_id_pk);
+        send(res, 200, { profiles, promptBlocks: PROMPT_BLOCKS });
+    },
+    'POST /api/promptprofiles': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!b.name) return send(res, 400, { error: 'name required' });
+        const first = !db.prepare('SELECT 1 FROM prompt_profiles WHERE users_id_fk=?').get(u.users_id_pk);
+        const id = db.prepare('INSERT INTO prompt_profiles (users_id_fk,name,prompt_order,active) VALUES (?,?,?,?)')
+            .run(u.users_id_pk, b.name, b.order ? JSON.stringify(b.order) : null, first ? 1 : 0).lastInsertRowid;
+        send(res, 200, { id });
+    },
+    'POST /api/promptprofiles/update': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare(`UPDATE prompt_profiles SET name=COALESCE(NULLIF(?,''),name), prompt_order=?
+            WHERE prompt_profiles_id_pk=? AND users_id_fk=?`)
+            .run(String(b.name ?? '').trim(), b.order ? JSON.stringify(b.order) : null, b.id, u.users_id_pk);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/promptprofiles/activate': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('UPDATE prompt_profiles SET active=0 WHERE users_id_fk=?').run(u.users_id_pk);
+        db.prepare('UPDATE prompt_profiles SET active=1 WHERE prompt_profiles_id_pk=? AND users_id_fk=?').run(b.id, u.users_id_pk);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/promptprofiles/delete': async (req, res, u) => {
+        const b = await readBody(req);
+        // Deleting the active profile falls back to the next one, so a
+        // generation never silently loses its assigned layout.
+        const wasActive = db.prepare('SELECT active FROM prompt_profiles WHERE prompt_profiles_id_pk=? AND users_id_fk=?').get(b.id, u.users_id_pk)?.active;
+        db.prepare('DELETE FROM prompt_profiles WHERE prompt_profiles_id_pk=? AND users_id_fk=?').run(b.id, u.users_id_pk);
+        if (wasActive) db.prepare('UPDATE prompt_profiles SET active=1 WHERE users_id_fk=? ORDER BY prompt_profiles_id_pk LIMIT 1').run(u.users_id_pk);
         send(res, 200, { ok: true });
     },
 };

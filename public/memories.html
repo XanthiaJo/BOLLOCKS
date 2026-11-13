@@ -77,15 +77,7 @@
     <h4>Injection</h4>
     <span class="hint">How stored memories get put back into the AI's prompt.</span>
     <div class="row"><span class="lbl" title="Max tokens of memory content injected into each generation prompt." title="Max tokens of memory content injected into each generation prompt.">Token budget</span><span class="hint">Max memory text added to each reply's prompt — beyond this, newer memories are left out (oldest are kept). Default: 800.</span><input type="number" id="set_budget" min="50" max="4000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
-    <div class="ph">
-      <div class="lbl" title="Wrapper format for injected memory text.">Injection template</div>
-      <span class="hint">Wrapper around the injected memory text (e.g. "Memories:\n{content}"). Leave blank for the built-in layout.</span>
-      <textarea placeholder="(default template)" disabled style="min-height:60px"></textarea>
-      <div class="row"><span class="lbl" title="If set, this block only injects when a keyword appears in recent chat." title="If set, this block only injects when a keyword appears in recent chat.">Trigger keywords (block-level)</span><span class="hint">If set, the entire memory block only injects when a keyword appeared in recent chat — on top of each memory's own triggers.</span><input placeholder="comma-separated triggers" disabled></div>
-    </div>
-    <div class="lbl" title="Order the prompt sections are assembled in — earlier sections are more likely to stay in the provider's prompt cache.">Prompt order</div>
-    <span class="hint">Where each section lands in the AI's prompt. The default order is cache-friendly: stable card text first, sections that change often last. Move a section below Chat history to inject it after the conversation — right before the AI's reply. Click a name to see what it injects. Use ↑↓ to reorder — saves automatically.</span>
-    <ol id="order_list" style="list-style:none;margin:4px 0 10px;padding:0"></ol>
+    <span class="hint">Prompt order, templates and block-level triggers live in the injection profiles on the Connection page — they shape the whole prompt, not just memories.</span>
 
     <h4>Session Memory</h4>
     <div class="ph">

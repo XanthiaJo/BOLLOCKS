@@ -98,8 +98,7 @@ CREATE TABLE IF NOT EXISTS mem_profiles (
     mem_autotune INTEGER DEFAULT 0,
     mem_refresh INTEGER DEFAULT 1,
     mem_activity INTEGER DEFAULT 0,
-    mem_extraction_profile_id INTEGER DEFAULT 0,
-    mem_prompt_order TEXT
+    mem_extraction_profile_id INTEGER DEFAULT 0
 );
 `);
 
@@ -110,8 +109,10 @@ export const verify = (pw, salt, h) =>
 
 export function createUser(handle, password) {
     const { salt, hash: h } = hash(password);
-    return db.prepare('INSERT INTO users (handle,password_hash,salt) VALUES (?,?,?)')
+    const id = db.prepare('INSERT INTO users (handle,password_hash,salt) VALUES (?,?,?)')
         .run(handle, h, salt).lastInsertRowid;
+    db.prepare("INSERT INTO prompt_profiles (users_id_fk,name,active) VALUES (?,'Default',1)").run(id);
+    return id;
 }
 export function login(handle, password) {
     const u = db.prepare('SELECT *, users_id_pk AS id FROM users WHERE handle = ? COLLATE NOCASE').get(handle);
@@ -304,8 +305,27 @@ export function migrateSchema() {
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
     if (!mecols.includes('source')) db.exec("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'manual'");
+    // prompt_profiles: injection/prompt-assembly presets. prompt order moved
+    // off mem_profiles — it positions card/world blocks too, so it was never
+    // memory-scoped. The user's active profile applies to all their
+    // generations regardless of which API connection is used.
     const mpcols = db.prepare('PRAGMA table_info(mem_profiles)').all().map(c => c.name);
-    if (!mpcols.includes('mem_prompt_order')) db.exec('ALTER TABLE mem_profiles ADD COLUMN mem_prompt_order TEXT');
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='prompt_profiles'").get()) {
+        db.exec(`CREATE TABLE prompt_profiles (
+            prompt_profiles_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+            users_id_fk INTEGER NOT NULL REFERENCES users(users_id_pk),
+            name TEXT NOT NULL,
+            prompt_order TEXT,
+            active INTEGER DEFAULT 0)`);
+        for (const u of db.prepare('SELECT users_id_pk FROM users').all()) {
+            const old = mpcols.includes('mem_prompt_order')
+                ? db.prepare('SELECT mem_prompt_order FROM mem_profiles WHERE users_id_fk=? AND mem_prompt_order IS NOT NULL ORDER BY mem_profiles_id_pk LIMIT 1').get(u.users_id_pk)
+                : null;
+            db.prepare("INSERT INTO prompt_profiles (users_id_fk,name,prompt_order,active) VALUES (?,'Default',?,1)")
+                .run(u.users_id_pk, old?.mem_prompt_order || null);
+        }
+    }
+    if (mpcols.includes('mem_prompt_order')) db.exec('ALTER TABLE mem_profiles DROP COLUMN mem_prompt_order');
     // members = entity (card/user + talkativeness); room_members = junction.
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='room_members'").get()) {
         db.exec(`CREATE TABLE room_members (

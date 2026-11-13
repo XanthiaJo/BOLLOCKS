@@ -38,7 +38,7 @@ function renderList(){
   $('list').innerHTML=html||`<small>No ${curTab==='smart'?'smart':'permanent'} memories yet.</small>`;
 }
 
-let roomCards=[];let memProfiles=[];let editId=0;let defPrompt='';let promptBlocks=[];
+let roomCards=[];let memProfiles=[];let editId=0;let defPrompt='';
 function editMem(id){editId=editId===id?0:id;renderList()}
 function editForm(m){
   const types=['fact','event','relationship','preference'];
@@ -67,7 +67,7 @@ let roomName='';
 async function load(){
   const [{cards},{rooms},{profiles},mps]=await Promise.all([get('cards'),get('rooms'),get('profiles'),get('memprofiles')]);
   roomCards=cards||[];
-  memProfiles=mps?.profiles||[];defPrompt=mps?.defaultPrompt||'';promptBlocks=mps?.promptBlocks||[];
+  memProfiles=mps?.profiles||[];defPrompt=mps?.defaultPrompt||'';
   const profOpts='<option value="0">— none (extraction off) —</option>'+(profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   $('set_profile').innerHTML=profOpts;
   if ((rooms||[]).length && !(rooms||[]).some(r=>r.id===ROOM)) { ROOM=rooms[0].id; localStorage.mp_room=ROOM; }

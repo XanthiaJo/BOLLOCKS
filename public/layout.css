@@ -159,6 +159,18 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 .mprofrow .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mprofrow small{color:var(--faint)}
 
+/* profile list cards — sidebar pickers (connection page, etc.) */
+.prof{display:grid;grid-template-columns:1fr auto;gap:10px;padding:12px;border:1px solid var(--line);border-radius:6px;margin-bottom:10px;background:var(--surface)}
+.prof.on{border-color:var(--ok)}
+.prof.sel{border-color:var(--accent)}
+.prof .name{font-weight:700}
+.prof .url{color:var(--desc);font-size:.9em}
+.prof .meta{color:var(--faint);font-size:.8em;margin-top:4px}
+.prof .btns{display:flex;flex-direction:column;gap:6px}
+.prof button{width:auto}
+button.del{background:var(--danger)}
+button.act{background:var(--ok)}
+
 /* settings panels — add class="settings" to a .panel for the
    label/caption-left, control-right grid rows */
 .settings h4{color:var(--dim);margin:16px 0 4px;font-size:.85em;text-transform:uppercase;letter-spacing:.04em}

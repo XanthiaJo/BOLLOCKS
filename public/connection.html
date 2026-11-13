@@ -5,49 +5,33 @@
 <link rel="stylesheet" href="layout.css">
 <style>
 #content{padding:0}
-main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto}
-.prof{display:grid;grid-template-columns:1fr auto;gap:10px;padding:12px;border:1px solid var(--line);border-radius:6px;margin-bottom:10px;background:var(--surface)}
-.prof.on{border-color:var(--ok)}
-.prof.sel{border-color:var(--edge)}
-.prof .name{font-weight:700}
-.prof .url{color:var(--desc);font-size:.9em}
-.prof .meta{color:var(--faint);font-size:.8em;margin-top:4px}
-.prof .btns{display:flex;flex-direction:column;gap:6px}
-.prof button{width:auto}
-button.del{background:var(--danger)}
-button.act{background:var(--ok)}
-.badge{display:inline-block;background:var(--ok);color:var(--white);font-size:.75em;padding:1px 7px;border-radius:8px;margin-left:6px;vertical-align:middle}
-#editor{display:none;border:1px solid var(--edge);border-radius:6px;padding:14px;background:var(--panel);margin-bottom:14px}
-#editor h3{margin-top:0}
-#editor input:not([type=checkbox]){width:100%}
+
 </style>
 </head>
 <body>
 <aside id="rsidebar">
-  <h3>Profiles</h3>
+  <h3 style="margin-top:0">Profiles</h3>
+  <div class="tabs">
+    <button class="tab on" id="t_api" onclick="connTab('api')">Connection</button>
+    <button class="tab" id="t_inj" onclick="connTab('inj')">Injection</button>
+  </div>
   <div id="list"></div>
   <button onclick="newProf()" style="width:100%;margin-top:8px">+ New profile</button>
 </aside>
 <div id="content">
 <main>
-  <div id="editor">
+  <div id="editor" class="panel settings" style="display:none">
     <h3 id="edtitle">New profile</h3>
     <input type="hidden" id="ed_id">
-    <input id="ed_name" placeholder="Profile name e.g. OpenRouter free">
-    <input id="ed_url" placeholder="API URL e.g. https://openrouter.ai/api/v1">
-    <div style="display:flex;gap:6px">
-      <input id="ed_model" list="modelist" placeholder="Model e.g. openrouter/free" style="flex:1">
-      <datalist id="modelist"></datalist>
-      <button onclick="fetchModels()" style="white-space:nowrap">Models ▾</button>
-    </div>
-    <input id="ed_key" type="password" placeholder="API key (blank keeps existing)">
-    <input id="ed_headers" placeholder='Extra headers — JSON or "name: value" lines' title="Merged into every request (e.g. OpenRouter HTTP-Referer)">
-    <h4 style="margin:14px 0 4px;color:var(--dim)">Chat Completion</h4>
-    <label class="cap">Context Size <small>— prompt token cap, 0 = unlimited</small></label>
-    <input id="ed_ctx" type="number" min="0" step="512">
-    <label class="cap">Max Response Length <small>— tokens</small></label>
-    <input id="ed_maxr" type="number" min="128" step="128">
-    <div style="opacity:.45;pointer-events:none">
+    <div class="row"><span class="lbl">Profile name</span><span class="hint">A label for this connection.</span><input id="ed_name" placeholder="OpenRouter free" style="width:320px"></div>
+    <div class="row"><span class="lbl">API URL</span><span class="hint">OpenAI-compatible endpoint — the /v1 base.</span><input id="ed_url" placeholder="https://openrouter.ai/api/v1" style="width:320px"></div>
+    <div class="row"><span class="lbl">Model</span><span class="hint">Model id to request. Click Models to list what the endpoint offers.</span><span style="display:flex;gap:6px;justify-self:end"><input id="ed_model" list="modelist" placeholder="openrouter/free" style="width:240px"><datalist id="modelist"></datalist><button onclick="fetchModels()" style="white-space:nowrap">Models ▾</button></span></div>
+    <div class="row"><span class="lbl">API key</span><span class="hint">Stored server-side, never reaches other clients. Leave blank to keep the existing key.</span><input id="ed_key" type="password" placeholder="sk-…" style="width:320px"></div>
+    <div class="row"><span class="lbl">Extra headers</span><span class="hint">JSON or "name: value" lines — merged into every request (e.g. OpenRouter HTTP-Referer).</span><input id="ed_headers" placeholder='{"HTTP-Referer": "https://…"}' style="width:320px"></div>
+    <h4>Chat Completion</h4>
+    <div class="row"><span class="lbl">Context size</span><span class="hint">Prompt token cap for this model — 0 = unlimited.</span><input id="ed_ctx" type="number" min="0" step="512"></div>
+    <div class="row"><span class="lbl">Max response length</span><span class="hint">Max tokens the model may write per reply.</span><input id="ed_maxr" type="number" min="128" step="128"></div>
+    <div class="ph">
       <input placeholder="Multiple swipes per generation" disabled>
       <label class="cb"><input type="checkbox" disabled> Streaming</label>
       <input placeholder="Temperature" disabled>
@@ -77,68 +61,27 @@ button.act{background:var(--ok)}
     <button onclick="saveProf()">Save</button>
     <button onclick="clearEd()" style="background:var(--border)">Clear</button>
   </div>
-  <small>Generation uses the <b>active</b> profile. Keys are stored server-side and never reach other clients.</small>
+
+  <div id="injeditor" class="panel settings" style="display:none">
+    <h3 id="injtitle">New injection profile</h3>
+    <input type="hidden" id="inj_id">
+    <div class="row"><span class="lbl">Profile name</span><span class="hint">A label for this prompt-layout preset.</span><input id="inj_name" placeholder="e.g. Cache-friendly" style="width:320px"></div>
+    <div class="lbl" title="Order the prompt sections are assembled in — earlier sections are more likely to stay in the provider's prompt cache.">Prompt order</div>
+    <span class="hint">Where each section lands in the AI's prompt. The default order is cache-friendly: stable card text first, sections that change often last. Move a section below Chat history to inject it after the conversation — right before the AI's reply. Click a name to see what it injects.</span>
+    <ol id="order_list" style="list-style:none;margin:4px 0 10px;padding:0"></ol>
+    <div class="ph">
+      <div class="lbl" title="Wrapper format for injected memory text.">Injection template</div>
+      <span class="hint">Wrapper around injected blocks (e.g. "Memories:\n{content}"). Leave blank for the built-in layout.</span>
+      <textarea placeholder="(default template)" disabled style="min-height:60px"></textarea>
+      <div class="row"><span class="lbl" title="If set, this block only injects when a keyword appears in recent chat.">Trigger keywords (block-level)</span><span class="hint">If set, memory/world blocks only inject when a keyword appeared in recent chat — on top of each memory's own triggers.</span><input placeholder="comma-separated triggers" disabled></div>
+    </div>
+    <button onclick="saveProf()">Save</button>
+    <button onclick="clearEd()" style="background:var(--border)">Clear</button>
+  </div>
+  <small>Generation uses the <b>active</b> connection profile and the <b>active</b> injection profile — they switch independently.</small>
 </main>
 </div>
 <script src="layout.js"></script>
-<script>
-const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
-const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.status===401?location='/login.html':r.json());
-const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.status===401?location='/login.html':r.json());
-const $=id=>document.getElementById(id);
-const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-
-let allProfs=[];
-async function load(){
-  const {profiles}=await get('profiles');allProfs=profiles||[];
-  $('list').innerHTML=allProfs.map((p,i)=>`
-    <div class="prof${p.active?' on':''}" style="cursor:pointer" onclick="editIdx(${i})">
-      <div>
-        <div class="name">${esc(p.name)}${p.active?'<span class="badge">active</span>':''}</div>
-        <div class="url">${esc(p.api_url)}</div>
-        <div class="meta">${esc(p.model)} · ${p.has_key?'key set':'no key'}</div>
-      </div>
-      <div class="btns" onclick="event.stopPropagation()">
-        ${p.active?'':`<button class="act" onclick="activate(${p.id})">Make active</button>`}
-        <button class="del" onclick="del(${p.id})">Delete</button>
-      </div>
-    </div>`).join('')||'<small>No profiles yet.</small>';
-}
-
-function editIdx(i){edit(allProfs[i])}
-function edit(p){document.querySelectorAll('.prof').forEach(el=>el.classList.remove('sel'));event?.target?.closest?.('.prof')?.classList.add('sel');
-  $('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';$('ed_headers').value=p.headers&&p.headers!=='{}'?p.headers:'';$('ed_ctx').value=p.context_size||0;$('ed_maxr').value=p.max_response||2048;mpOpenEditor('inline')}
-async function fetchModels(){
-  const r=await api('models',{profileId:$('ed_id').value?Number($('ed_id').value):null,
-    apiUrl:$('ed_url').value.trim(),key:$('ed_key').value.trim(),headers:$('ed_headers').value.trim()||'{}'});
-  if(r.error)return alert(r.error);
-  $('modelist').innerHTML=(r.models||[]).map(m=>`<option value="${m}">`).join('');
-  $('ed_model').focus();
-}
-function clearEd(){$('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value='';$('ed_headers').value='';$('ed_ctx').value='';$('ed_maxr').value=''}
-function newProf(){clearEd();mpOpenEditor('inline');$('ed_name').focus()}
-
-async function saveProf(){
-  const id=$('ed_id').value;
-  const b={name:$('ed_name').value.trim(),apiUrl:$('ed_url').value.trim(),model:$('ed_model').value.trim(),key:$('ed_key').value.trim(),headers:$('ed_headers').value.trim()||'{}',contextSize:Number($('ed_ctx').value)||0,maxResponse:Number($('ed_maxr').value)||2048};
-  if(b.headers!=='{}'){
-    try{JSON.parse(b.headers)}
-    catch{
-      // Accept "name: value" lines and convert to JSON
-      const h={};
-      for(const line of b.headers.split(/[\n,]+/)){const i=line.indexOf(':');if(i<1)return alert('Headers must be JSON or "name: value" lines');h[line.slice(0,i).trim()]=line.slice(i+1).trim();}
-      b.headers=JSON.stringify(h);
-    }
-  }
-  if(!b.name)return alert('needs a name');
-  if(id)await api('profiles/update',{id:Number(id),...b});
-  else await api('profiles',b);
-  if(!id)clearEd();
-  mpFlashSaved();load();
-}
-async function activate(id){await api('profiles/activate',{id});load()}
-async function del(id){if(confirm('Delete this profile?')){await api('profiles/delete',{id});load()}}
-load().then(newProf);
-</script>
+<script src="connection.js"></script>
 </body>
 </html>

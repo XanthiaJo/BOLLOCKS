@@ -31,8 +31,8 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | `characters.html` | Card list + editor, avatar upload with in-browser crop |
 | `world.html` | Lorebook list (create/delete/link-to-room, ST JSON import) |
 | `world-edit.html` | Entry editor for one book (`?id=<book>`): keys, secondary keys, content, constant/enabled, order |
-| `memories.html` + `memories.js` + `memprofiles.js` | Memory page: markup + browser script (tabs, filter by card/room, triggers, move between card↔room scope) + profile-editor script (settings panel, accordions, prompt order). `memprofiles.js` loads last and calls `load()`. All styles live in `layout.css` — settings grids via `class="panel settings"` |
-| `connection.html` | API profiles (OpenAI-compatible endpoints: url/model/key/headers/context), memory profiles, user admin |
+| `memories.html` + `memories.js` + `memprofiles.js` | Memory page: markup + browser script (tabs, filter by card/room, triggers, move between card↔room scope) + profile-editor script (settings panel, accordions). `memprofiles.js` loads last and calls `load()`. All styles live in `layout.css` — settings grids via `class="panel settings"` |
+| `connection.html` + `connection.js` | Profiles page, tabbed: Connection (API profiles — OpenAI-compatible url/model/key/headers/context) and Injection (prompt_profiles — prompt-assembly presets incl. prompt order) |
 | `layout.js` | Shared shell injected into every page: top nav + sidebar toggles + version badge. Also `mpOpenEditor`/`mpCloseEditor`/`mpFlashSaved` and `activateProf` helpers |
 | `layout.css` | Shared styles for the shell and pages |
 
@@ -72,6 +72,7 @@ Core tables:
 - `memories` (+`room_memories`, +`memory_cards`) — `origin='user'` permanent vs `origin='smart'` auto-extracted; `triggers` keyword-gate injection; `type` ∈ fact/event/relationship/preference.
 - `api_profiles` — per-user OpenAI-compatible connections (`active` flag, `headers` JSON, `context_size`, `max_response`, `strip_prefix`, `key`).
 - `mem_profiles` — named memory-setting presets a room follows (`mem_*` columns; see `MEM_PROFILE_FIELDS` in `generate.js`).
+- `prompt_profiles` — per-user injection/prompt-assembly presets (`active` flag applies to all of the user's generations; `prompt_order` JSON array of `PROMPT_BLOCKS` keys, NULL = built-in cache-optimal order).
 
 **Schema changes** go in `migrateSchema()` in `db.js`: additive `ALTER TABLE ... ADD COLUMN` guarded by `PRAGMA table_info` checks, or table rebuilds for FK changes; one-time data fixes are gated by `PRAGMA user_version` bumps. Never edit the top `CREATE TABLE` block alone — migrations must bring existing DBs along.
 

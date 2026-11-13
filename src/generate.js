@@ -21,11 +21,12 @@ const MEM_PROFILE_FIELDS = ['auto_mem', 'mem_every', 'mem_budget', 'mem_max', 'm
     'mem_max_event', 'mem_max_relationship', 'mem_max_preference', 'mem_extraction_prompt',
     'mem_context_threshold', 'mem_response_length', 'mem_gen_budget', 'mem_unlimited',
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
-    'mem_extraction_profile_id', 'mem_prompt_order'];
+    'mem_extraction_profile_id'];
 
 // Named system-prompt sections in cache-optimal order (stable content first —
-// see the assembly comment in generateReply). A memory profile can reorder
-// them via mem_prompt_order (JSON array of keys); NULL means this order.
+// see the assembly comment in generateReply). The user's active
+// prompt_profiles row can reorder them via prompt_order (JSON array of
+// keys); NULL means this order. 'history' is a position marker, not text.
 export const PROMPT_BLOCKS = [
     { key: 'main', label: 'Main prompt',
         example: 'You are Aria.' },
@@ -164,8 +165,12 @@ export async function generateReply(roomId, card) {
             `do NOT speak for them or imitate them. Write ONLY ${card.name}'s next message.` +
             (card.post_history_instructions ? ` ${card.post_history_instructions}` : ''),
     };
+    // The card owner's active injection profile decides section order —
+    // prompt layout follows the user, not whichever API profile generated.
+    const inj = db.prepare('SELECT * FROM prompt_profiles WHERE users_id_fk=? AND active=1').get(card.owner_users_id_fk)
+        || db.prepare('SELECT * FROM prompt_profiles WHERE users_id_fk=? ORDER BY prompt_profiles_id_pk LIMIT 1').get(card.owner_users_id_fk);
     let order;
-    try { order = JSON.parse(mem?.mem_prompt_order || ''); } catch { order = null; }
+    try { order = JSON.parse(inj?.prompt_order || ''); } catch { order = null; }
     if (!Array.isArray(order)) order = [];
     const known = new Set(PROMPT_BLOCKS.map(b => b.key));
     order = order.filter(k => known.has(k));
