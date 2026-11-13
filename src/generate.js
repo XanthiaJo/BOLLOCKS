@@ -118,16 +118,20 @@ export async function generateReply(roomId, card) {
             ].filter(Boolean).join('\n\n'))
         : null;
 
+    // Ordered stable -> volatile for prefix caching: card sheet fields and
+    // the member roster rarely change; keyword-triggered world entries and
+    // freshly-extracted memories change often, so they go last. Anything
+    // after a changed block re-bills, so volatility decides position.
     const system = [
         card.system_prompt || `You are ${card.name}.`,
-        worldText,
-        memText,
         card.description && `Description:\n${card.description}`,
         card.personality && `Personality:\n${card.personality}`,
         card.scenario && `Scenario:\n${card.scenario}`,
         card.mes_example && `Example dialogue:\n${card.mes_example}`,
         others.length && `Also present in the scene:\n` +
             others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
+        worldText,
+        memText,
         `You are ${card.name} and ONLY ${card.name} — an NPC in a shared roleplay. ` +
             `The other characters listed are separate people speaking for themselves; ` +
             `do NOT speak for them or imitate them. Write ONLY ${card.name}'s next message.` +
