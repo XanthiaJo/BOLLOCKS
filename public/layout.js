@@ -19,7 +19,12 @@
         NAV.map(([label, href]) =>
             `<a href="${href}"${href === here ? ' class="on"' : ''}>${label}</a>`).join('') +
         '<span style="flex:1"></span>' +
-        `<a href="/api/logout" onclick="localStorage.removeItem('mp_token')" style="color:#789" title="Log out">⏻</a>`;
+        '<span class="usermenu">' +
+        '<a id="mpuserbtn" class="navtoggle" title="Account">👤</a>' +
+        '<div class="userdrop" id="mpuserdrop">' +
+        '<a href="/profile.html">Profile Settings</a><hr>' +
+        `<a href="/api/logout" onclick="localStorage.removeItem('mp_token')">Logout</a>` +
+        '</div></span>';
 
     const side = document.getElementById('sidebar');
     const rside = document.getElementById('rsidebar');
@@ -42,6 +47,10 @@
     shell.appendChild(content);
     if (rside) shell.appendChild(rside);
     document.body.prepend(nav, shell);
+    const ubtn = document.getElementById('mpuserbtn');
+    const udrop = document.getElementById('mpuserdrop');
+    ubtn.onclick = e => { e.stopPropagation(); udrop.classList.toggle('open'); };
+    document.addEventListener('click', e => { if (!e.target.closest('.usermenu')) udrop.classList.remove('open'); });
     fetch('/api/version').then(r => r.json()).then(d => {
         const el = document.getElementById('mpver');
         if (el && d.version) el.textContent = 'v' + d.version;
