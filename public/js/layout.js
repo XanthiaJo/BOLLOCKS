@@ -54,7 +54,14 @@
     document.addEventListener('click', e => { if (!e.target.closest('.usermenu')) udrop.classList.remove('open'); });
     fetch('/api/version').then(r => r.json()).then(d => {
         const el = document.getElementById('mpver');
-        if (el && d.version) el.textContent = 'v' + d.version;
+        if (!el || !d.version) return;
+        el.textContent = 'v' + d.version;
+        if (d.sha) {
+            const s = document.createElement('span');
+            s.textContent = d.sha;
+            s.style.cssText = 'display:block;font-size:.85em';
+            el.appendChild(s);
+        }
     }).catch(() => {});
 })();
 
