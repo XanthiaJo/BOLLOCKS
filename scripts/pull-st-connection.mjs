@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const HANDLE = process.argv[2] || 'creamms';
+const HANDLE = process.argv[2] || 'admin';
 const stRead = f =>
     execFileSync('ssh', ['-o', 'BatchMode=yes', 'elitedesk-stctl', `read data/${HANDLE}/${f}`],
         { encoding: 'utf8' });

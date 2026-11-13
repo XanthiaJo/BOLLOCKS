@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import { boot, tmp, asUser, pngCardBuffer } from './helpers.js';
 
 let s;
-const asKarima = fn => asUser(s, 'karima')(fn);
-before(async () => { s = await boot(tmp('data')); await s.login('creamms'); });
+const asKarima = fn => asUser(s, 'alice')(fn);
+before(async () => { s = await boot(tmp('data')); await s.login('admin'); });
 after(() => s.stop());
 
 describe('cards and avatars', () => {

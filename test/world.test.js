@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import { boot, tmp, asUser } from './helpers.js';
 
 let s;
-const asKarima = fn => asUser(s, 'karima')(fn);
-before(async () => { s = await boot(tmp('data')); await s.login('creamms'); });
+const asAlice = fn => asUser(s, 'alice')(fn);
+before(async () => { s = await boot(tmp('data')); await s.login('admin'); });
 after(() => s.stop());
 
 describe('world books', () => {
@@ -35,7 +35,7 @@ describe('world books', () => {
         assert.equal((await s.post('world/books/update', { id: bid, name: 'After' })).status, 200);
         assert.equal((await s.get('world/books')).json.books.find(b => b.id === bid).name, 'After');
         assert.equal((await s.post('world/books/update', { id: bid })).status, 400); // name required
-        await asKarima(async () => {
+        await asAlice(async () => {
             assert.equal((await s.post('world/books/update', { id: bid, name: 'Hijack' })).status, 403);
         });
         assert.equal((await s.get('world/books')).json.books.find(b => b.id === bid).name, 'After');

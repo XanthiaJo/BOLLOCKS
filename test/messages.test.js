@@ -5,14 +5,14 @@ import assert from 'node:assert/strict';
 import { boot, tmp, pub } from './helpers.js';
 
 let s;
-before(async () => { s = await boot(tmp('data')); await s.login('creamms'); });
+before(async () => { s = await boot(tmp('data')); await s.login('admin'); });
 after(() => s.stop());
 
 describe('messages and SSE', () => {
     test('say posts as the user persona; delete removes and broadcasts', async () => {
         const msg = await s.post('say', { room: 1, text: 'hello suite' });
         assert.equal(msg.json.kind, 'say');
-        assert.equal(msg.json.name, 'creamms');
+        assert.equal(msg.json.name, 'admin');
         const msgs = (await s.get('room?id=1')).json.messages;
         assert.ok(msgs.some(m => m.id === msg.json.id && m.text === 'hello suite'));
         assert.equal((await s.post('messages/delete', { id: msg.json.id })).status, 200);

@@ -7,12 +7,12 @@ import { boot, tmp, asUser, mockLLM, until } from './helpers.js';
 
 let s;
 let llm;
-const asKarima = fn => asUser(s, 'karima')(fn);
+const asKarima = fn => asUser(s, 'alice')(fn);
 before(async () => {
     s = await boot(tmp('data'));
     llm = await mockLLM('Kira: Mock reply!');
-    await s.login('creamms');
-    // Point creamms' active profile at the mock.
+    await s.login('admin');
+    // Point admin' active profile at the mock.
     await s.post('profiles', { name: 'Mock', apiUrl: `${llm.url}/v1`, model: 'mock-7b', key: 'secret' });
 });
 after(async () => { await s.stop(); await llm.close(); });
@@ -83,7 +83,7 @@ describe('generation (mock LLM)', () => {
     test('generate with no AI member 404s; no connection surfaces a 500', async () => {
         const humansOnly = (await s.post('rooms', { name: 'Humans only' })).json.id; // new rooms seat only the owner persona
         assert.equal((await s.post('generate', { room: humansOnly })).status, 404);
-        await asKarima(async () => { // karima has no api profile
+        await asKarima(async () => { // alice has no api profile
             const kroom = (await s.post('rooms', { name: 'K room' })).json.id;
             const kcard = (await s.post('cards', { name: 'Solo' })).json.id;
             await s.post('members', { room: kroom, cardId: kcard });

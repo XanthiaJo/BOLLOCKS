@@ -1,6 +1,6 @@
 // Auth + request-gating tests: sessions, token transports, first-run
 // registration, and the static/API gates that keep logged-out users out.
-// Seeded users: creamms/karima/blake/entropy75, all password 'changeme',
+// Seeded users: admin/alice/bob/carol, all password 'changeme',
 // all in room 1 ("The House").
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,13 +12,13 @@ after(() => s.stop());
 
 describe('authentication', () => {
     test('bad credentials are rejected', async () => {
-        const r = await pub(s).post('login', { handle: 'creamms', password: 'nope' });
+        const r = await pub(s).post('login', { handle: 'admin', password: 'nope' });
         assert.equal(r.status, 401);
         assert.equal(r.json.error, 'bad credentials');
     });
 
     test('login returns a token and sets the mp_token cookie', async () => {
-        const r = await s.login('creamms');
+        const r = await s.login('admin');
         assert.ok(r.json.token.length > 10);
         const sc = r.headers.getSetCookie()[0];
         assert.match(sc, /^mp_token=/);
@@ -45,7 +45,7 @@ describe('authentication', () => {
         assert.equal(out.headers.get('location'), '/login.html');
         assert.match(out.headers.getSetCookie()[0], /Max-Age=0/);
         assert.equal((await s.get('me')).status, 401); // dead for bearer AND cookie
-        await s.login('creamms'); // restore for the rest of the suite
+        await s.login('admin'); // restore for the rest of the suite
     });
 });
 
@@ -108,7 +108,7 @@ describe('request gating', () => {
         assert.equal((await pub(s).get('version')).status, 200);
         assert.ok((await pub(s).get('version')).json.version);
         assert.equal((await pub(s).post('login', {})).status, 400); // missing fields
-        assert.equal((await pub(s).post('login', { handle: 'creamms', password: 'x' })).status, 401); // route reachable
+        assert.equal((await pub(s).post('login', { handle: 'admin', password: 'x' })).status, 401); // route reachable
         assert.equal((await pub(s).raw('GET', '/api/logout')).status, 302);
     });
 

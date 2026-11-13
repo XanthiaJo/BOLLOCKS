@@ -1,22 +1,22 @@
 // Room lifecycle and the membership permission matrix: owner-only routes,
 // who may seat/remove whom, and talkativeness. Room 1 ("The House") holds
-// the four seeded personas; Suite Room is owned by creamms.
+// the four seeded personas; Suite Room is owned by admin.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { boot, tmp, asUser, pngCardBuffer } from './helpers.js';
 
 let s;
-const asKarima = fn => asUser(s, 'karima')(fn);
-before(async () => { s = await boot(tmp('data')); await s.login('creamms'); });
+const asKarima = fn => asUser(s, 'alice')(fn);
+before(async () => { s = await boot(tmp('data')); await s.login('admin'); });
 after(() => s.stop());
 
 describe('rooms and members', () => {
-    let room, myCard, karimaCard;
+    let room, myCard, aliceCard;
 
     before(async () => {
         room = (await s.post('rooms', { name: 'Suite Room' })).json.id;
         myCard = (await s.post('cards', { name: 'Kira', description: 'A test NPC.', tags: 'bot, test' })).json.id;
-        karimaCard = await asKarima(async () =>
+        aliceCard = await asKarima(async () =>
             (await s.post('cards', { name: 'Vex' })).json.id);
         await s.post('members', { room, cardId: myCard });
     });
@@ -59,37 +59,37 @@ describe('rooms and members', () => {
     test('membership rules: non-members cannot self-invite; userId is owner-only', async () => {
         await asKarima(async () => {
             assert.equal((await s.post('members', { room, cardId: myCard })).status, 403); // not hers
-            assert.equal((await s.post('members', { room, cardId: karimaCard })).status, 403); // not a member
+            assert.equal((await s.post('members', { room, cardId: aliceCard })).status, 403); // not a member
             assert.equal((await s.post('members', { room, cardId: 99999 })).status, 404);
             assert.equal((await s.post('members', { room, userId: 99 })).status, 403); // owner only
         });
         // Room owner invites a user — their persona is seated.
-        const karima = (await s.get('users')).json.users.find(u => u.handle === 'karima');
-        assert.equal((await s.post('members', { room, userId: karima.id })).status, 200);
-        // Now a member, karima may seat her own cards — but nobody else's.
+        const alice = (await s.get('users')).json.users.find(u => u.handle === 'alice');
+        assert.equal((await s.post('members', { room, userId: alice.id })).status, 200);
+        // Now a member, alice may seat her own cards — but nobody else's.
         await asKarima(async () => {
-            assert.equal((await s.post('members', { room, cardId: karimaCard })).status, 200);
+            assert.equal((await s.post('members', { room, cardId: aliceCard })).status, 200);
             assert.equal((await s.post('members', { room, cardId: myCard })).status, 403);
         });
         const members = (await s.get(`room?id=${room}`)).json.members;
         assert.ok(members.some(m => m.card_name === 'Vex'));
-        assert.ok(members.some(m => m.kind === 'human' && m.handle === 'karima'));
+        assert.ok(members.some(m => m.kind === 'human' && m.handle === 'alice'));
     });
 
     test('removal: non-owners remove only their own', async () => {
         await asKarima(async () => {
             assert.equal((await s.post('members/remove', { room, cardId: myCard })).status, 403);
-            assert.equal((await s.post('members/remove', { room, cardId: karimaCard })).status, 200);
+            assert.equal((await s.post('members/remove', { room, cardId: aliceCard })).status, 200);
         });
         const members = (await s.get(`room?id=${room}`)).json.members;
         assert.ok(!members.some(m => m.card_name === 'Vex'));
     });
 
     test('talkativeness: member sets own, owner sets any, others are refused', async () => {
-        await s.post('members', { room, cardId: karimaCard }); // owner re-seats it
+        await s.post('members', { room, cardId: aliceCard }); // owner re-seats it
         await asKarima(async () => {
             assert.equal((await s.post('members/talkativeness', { room, cardId: myCard, value: 10 })).status, 403);
-            assert.equal((await s.post('members/talkativeness', { room, cardId: karimaCard, value: 150 })).status, 200);
+            assert.equal((await s.post('members/talkativeness', { room, cardId: aliceCard, value: 150 })).status, 200);
         });
         const m = (await s.get(`room?id=${room}`)).json.members.find(m => m.card_name === 'Vex');
         assert.equal(m.talkativeness, 100); // clamped
