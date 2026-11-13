@@ -84,6 +84,28 @@ jobs:
           git merge "origin/beta" -m "chore(release): merge beta back into $HEAD_BRANCH"
           git push origin "$HEAD_BRANCH"
 
+      # Stamp the beta version into package.json on beta only, so /api/version
+      # shows e.g. 0.2.0-beta.1. Dev picks it up on the next back-merge (dev is
+      # the next beta anyway); the stable bump-package overwrites it at release.
+      - name: Stamp beta version into package.json on beta
+        env:
+          BASE: ${{ needs.plan.outputs.release_tag }}
+          SUFFIX: ${{ needs.beta-num.outputs.suffix }}
+        run: |
+          git fetch origin beta
+          git checkout -B beta "origin/beta"
+          V="${BASE#v}${SUFFIX}"
+          node -e "const fs=require('fs');const p='package.json';const m=JSON.parse(fs.readFileSync(p,'utf8'));m.version='$V';fs.writeFileSync(p,JSON.stringify(m,null,4)+'\n')"
+          if git diff --quiet -- package.json; then
+            echo "beta package.json already at $V"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore(package): bump version to $V"
+          git push origin beta
+
   # Tag the new beta tip as a pre-release of the planned stable version.
   tag-beta:
     name: Tag beta pre-release
