@@ -1,5 +1,5 @@
 // --- Memory settings page: profile list in the sidebar, editor in main ---
-/* global selProf, setSelProf, fillProf, BLANK_PROF, newMP, delMP, selectProf, effRow:writable */
+/* global selProf, setSelProf, fillProf, BLANK_PROF, newMP, delMP, selectProf */
 let booted=false;
 const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
 const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.status===401?location='/login.html':r.json());
@@ -9,7 +9,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 initSidebar({
   tabs:[{label:'Smart memory profiles',on:true,onclick:'newMP()'}],
   sections:[{title:'Smart memory profiles',id:'plist'}],
-  buttons:[{label:'+ New profile',onclick:'newMP()'},{label:'Save current as profile…',cls:'sec',onclick:'saveAsProfile()'}],
+  buttons:[{label:'+ New profile',onclick:'newMP()'}],
   footer:'Chats pick which smart-memory profile they follow in their chat settings or the <a href="/memories.html" style="color:var(--muted)">Memories</a> page\'s Smart tab. Select a profile to edit it.',
 });
 let ROOM=Number(localStorage.mp_room||1);
@@ -22,7 +22,6 @@ async function load(){
   // What "current" means for Save-current-as-profile: the profile this chat follows.
   const rm=(rooms||[]).find(r=>r.id===ROOM);
   const followed=(rm?.mem_profiles_id_fk)&&(memProfiles.find(x=>x.mem_profiles_id_pk===rm.mem_profiles_id_fk))||null;
-  effRow=followed||memProfiles[0]||null;
   $('plist').innerHTML=(memProfiles||[]).map(p=>
     rprofRow({name:`${esc(p.name)}${p.mem_profiles_id_pk===followed?.mem_profiles_id_pk?' <span class="badge">followed</span>':''}${p.auto_mem?' <span class="badge">smart on</span>':''}`,
       sel:p.mem_profiles_id_pk===selProf,

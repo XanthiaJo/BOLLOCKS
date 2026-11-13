@@ -1,6 +1,6 @@
 // --- Smart-memory profile editor: shared by the settings page + memories page ---
 /* global $, esc, api, load, ROOM, memProfiles, defPrompt */
-let selProf=Number(localStorage.mp_memprof||0),effRow=null;
+let selProf=Number(localStorage.mp_memprof||0);
 // selProf===-1 = unsaved "new profile" draft — panel opens blank, Save creates.
 const BLANK_PROF={name:'',auto_mem:0,mem_every:10,mem_budget:800,mem_max:50,mem_max_fact:15,mem_max_event:15,mem_max_relationship:15,mem_max_preference:15,mem_extraction_prompt:'',mem_context_threshold:80,mem_response_length:2000,mem_gen_budget:2000,mem_unlimited:0,mem_unified:1,mem_triggers:0,mem_autotune:0,mem_refresh:1,mem_activity:0,mem_extraction_profile_id:0};
 function toggleDefPrompt(a){const p=$('def_prompt');const show=p.style.display==='none';p.style.display=show?'block':'none';if(show)p.textContent=defPrompt||'(built-in prompt unavailable)';a.textContent=show?'hide it':'show it';}
@@ -22,8 +22,6 @@ async function saveProf(){
   if(selProf===-1){const {id:_id,...body}=collectProf();const r=await api('memprofiles',body);setSelProf(r?.id||0);load();return;}
   if(!selProf)return;await api('memprofiles/update',collectProf());load()}
 function newMP(){setSelProf(-1);load()}
-async function saveAsProfile(){const name=prompt('Name this memory profile:');if(!name)return;const r=effRow||{};
-  const {id,...rest}=rowToProf(r);await api('memprofiles',{name,...rest});load()}
 async function delMP(id){if(id<=0){setSelProf(0);load();return}if(confirm('Delete this memory profile? Chats following it switch to another profile.')){if(selProf===id)setSelProf(0);await api('memprofiles/delete',{id});load()}}
 function setupAcc(){
   const panel=document.getElementById('profpanel');

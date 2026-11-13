@@ -35,10 +35,10 @@ async function load(){
     const usedIn=rooms.filter(r=>r.world_books_id_fk===b.id).map(r=>r.name);
     const mine=!b.owner||b.owner===me;
     return rprofRow({name:esc(b.name),
-      meta:`${b.cnt||0} entries · ${esc(b.owner||'shared')}${usedIn.length?' · in: '+esc(usedIn.join(', ')):''}` +
-        `${mine?` <a href="#" onclick="event.stopPropagation();delBook(${b.id});return false" style="color:var(--err)">✕</a>`:''}`,
-      onclick:`location='/world-edit.html?id=${b.id}'`});
-  }).join('')||'<small>No books yet — create one above or import an ST export.</small>';
+      meta:`${b.cnt||0} entries · ${esc(b.owner||'shared')}${usedIn.length?' · in: '+esc(usedIn.join(', ')):''}`,
+      onclick:`location='/world-edit.html?id=${b.id}'`,
+      btns:mine?`<button class="del" onclick="delBook(${b.id})">Delete</button>`:''});
+  }).join('')||'<small>No books yet — create one with "+ New book" or import an ST export.</small>';
 }
 
 function newBookPanel(){mpOpenEditor('inline');$('newname').focus()}
