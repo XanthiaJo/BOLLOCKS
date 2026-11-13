@@ -6,20 +6,19 @@
 </head>
 <body>
 <aside id="rsidebar">
-  <h3 style="margin-top:0">Chat</h3>
+  <div class="tabs" style="margin-bottom:10px">
+    <button class="tab on" id="t_perm" onclick="tab('user')">Permanent</button>
+    <button class="tab" id="t_auto" onclick="tab('smart')">Smart</button>
+  </div>
   <div id="rchat"></div>
-  <h3 style="margin-top:14px">Characters</h3>
-  <div id="rcards"></div>
+  <div id="cardssec"><h3 style="margin-top:14px">Characters</h3>
+  <div id="rcards"></div></div>
   <small style="color:var(--dim);display:block;margin-top:10px">Smart-memory profiles live on the <a href="/memsettings.html" style="color:var(--muted)">Memory settings</a> page.</small>
 </aside>
 <div id="content">
 <main>
   <div class="panel">
     <h3 id="title">Memories</h3>
-    <div class="tabs">
-      <button class="tab on" id="t_perm" onclick="tab('user')">Permanent</button>
-      <button class="tab" id="t_auto" onclick="tab('smart')">Smart</button>
-    </div>
     <div id="addbox">
       <textarea id="newmem" placeholder="e.g. Fig hates the colour green" style="min-height:60px;width:100%"></textarea>
       <button onclick="add()">Add memory</button>

@@ -8,14 +8,15 @@ let ROOM=Number(localStorage.mp_room||1);
 let cardId=0,scopeName='',curTab=localStorage.mp_memtab||'user';if(!['user','smart'].includes(curTab))curTab='user';
 let allMems=[];
 const TYPE_ORDER=['fact','event','relationship','preference'];
-function tab(t){if(t==='smart' && cardId!==0) return; curTab=t; localStorage.mp_memtab=curTab;
+function tab(t){if(t==='smart' && cardId!==0){cardId=0;scopeName='';} curTab=t; localStorage.mp_memtab=curTab;
   $('t_perm').classList.toggle('on',t==='user');
   $('t_auto').classList.toggle('on',t==='smart');
-  renderList();
+  load();
 }
 function renderList(){
   $('t_perm').classList.toggle('on',curTab==='user');
   $('t_auto').classList.toggle('on',curTab==='smart');
+  if($('cardssec')) $('cardssec').style.display=curTab==='smart'?'none':'block';
   const sb=$('smartbar'); if(sb) sb.style.display=curTab==='smart'?'block':'none';
   const mems = allMems.filter(m=>(m.origin||m.source||'user')===curTab);
   $('addbox').style.display=curTab==='user'?'block':'none';
@@ -82,9 +83,6 @@ async function load(){
       `<div class="rprof${c.id===cardId?' on':''}" onclick="pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')"><div class="n">${esc(c.name)}</div></div>`
     ).join('')||'<small>None</small>';
   if(cardId<0)cardId=0;
-  // Smart memories are room-scoped only (for now) — disable the tab on card scopes.
-  const smartTab=$('t_auto');
-  if(smartTab){ smartTab.disabled=cardId!==0; smartTab.style.opacity=cardId!==0?'0.4':'1'; smartTab.style.cursor=cardId!==0?'not-allowed':'pointer'; }
   const {memories}=await get(`memories?card=${cardId}&room=${ROOM}`);
   allMems=memories||[];
   $('title').textContent=`${scopeName||roomName||'Memories'} — memories`;
