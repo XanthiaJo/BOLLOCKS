@@ -38,6 +38,9 @@ export default {
         if (!db.prepare('SELECT 1 FROM memories WHERE memories_id_pk=?').get(id)) return send(res, 404, { error: 'no memory' });
         if (!memoryShared(id, u)) return send(res, 403, { error: 'not a room member' });
         const origin = b.origin === 'smart' || b.origin === 'user' ? b.origin : null;
+        // Card-scoped smart memories are not supported yet.
+        if (origin === 'smart' && db.prepare('SELECT 1 FROM memory_cards WHERE memories_id_fk=?').get(id))
+            return send(res, 400, { error: 'character smart memories not supported yet' });
         db.prepare('UPDATE memories SET content=COALESCE(?,content), type=COALESCE(?,type), triggers=COALESCE(?,triggers), origin=COALESCE(?,origin) WHERE memories_id_pk=?')
             .run(b.content ?? null, b.type ?? null, b.triggers ?? null, origin, id);
         send(res, 200, { ok: true });
@@ -62,6 +65,9 @@ export default {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
         if (!memoryShared(id, u)) return send(res, 403, { error: 'not a room member' });
+        // Card-scoped smart memories are not supported yet.
+        if (b.cardId && db.prepare("SELECT 1 FROM memories WHERE memories_id_pk=? AND origin='smart'").get(id))
+            return send(res, 400, { error: 'character smart memories not supported yet' });
     db.prepare('DELETE FROM memory_cards WHERE memories_id_fk=?').run(id);
     if (b.cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, b.cardId);
         send(res, 200, { ok: true });
