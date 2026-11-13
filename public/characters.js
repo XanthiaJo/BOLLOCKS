@@ -79,7 +79,7 @@ function cropConfirm(){
   else{$('ed_av').src=url;$('ed_av').dataset.pending=b64;}
 }
 function clearEd(){$('edtitle').textContent='New character';['ed_id','ed_name','ed_desc','ed_personality','ed_scenario','ed_first','ed_mesex','ed_sysp','ed_phi','ed_tags','ed_creator'].forEach(i=>$(i).value='');$('ed_profile').value='';$('ed_av').src='';$('ed_av').dataset.pending=''}
-function cancelEd(){const id=Number($('ed_id').value)||0;const c=id?allCards.find(c=>c.id===id):null;c?edit(c):clearEd()}
+function cancelEd(){const id=Number($('ed_id').value)||0;const c=id?allCards.find(c=>c.id===id):null;if(c){edit(c);return}clearEd();$('editor').style.display='none'}
 function newCard(){clearEd();document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=false);mpOpenEditor('inline')}
 
 async function saveCard(){
