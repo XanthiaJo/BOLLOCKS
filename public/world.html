@@ -15,7 +15,7 @@
     <h3>New book</h3>
     <input id="newname" placeholder="Book name">
     <button onclick="newBook()">Create</button>
-    <button onclick="document.getElementById('imp').click()" style="background:var(--violet)">Import ST book…</button>
+    <button class="imp" onclick="document.getElementById('imp').click()">Import ST book…</button>
     <input type="file" id="imp" accept=".json" style="display:none" onchange="importBook(this)">
   </div>
 </main>

@@ -105,6 +105,13 @@ select option{background:var(--input);color:var(--text)}
 button{background:var(--accent);cursor:pointer;border:none}
 button.del{background:var(--danger)}
 button.act{background:var(--ok)}
+button.sec{background:var(--neutral)}
+button.imp{background:var(--violet)}
+#rsidebar>button{width:100%;margin-top:8px}
+#rsidebar>h3{margin-top:0}
+#rsidebar .tabs{margin-bottom:10px}
+#rsidebar>small{display:block;margin-top:10px;color:var(--dim)}
+#cardssec{margin-top:14px}
 small{color:var(--dim)}
 /* shared card theme — item lists + editor panels */
 .card{display:grid;grid-template-columns:1fr auto;gap:10px;padding:12px;border:1px solid var(--line);border-radius:6px;margin-bottom:10px;background:var(--surface)}
@@ -168,8 +175,6 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 .prof .meta{color:var(--faint);font-size:.8em;margin-top:4px}
 .prof .btns{display:flex;flex-direction:column;gap:6px}
 .prof button{width:auto}
-button.del{background:var(--danger)}
-button.act{background:var(--ok)}
 
 /* settings panels — add class="settings" to a .panel for the
    label/caption-left, control-right grid rows */
