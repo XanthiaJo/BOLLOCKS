@@ -2,7 +2,7 @@
 import { userForToken } from '../db.js';
 
 export const readBody = req => new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { r(JSON.parse(b)); } catch { r({}); } }); });
-export const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+export const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
 // Session token may arrive as a Bearer header, the mp_token cookie (set at
 // login so plain page loads are authenticated), or the ?token= SSE param.
 export const cookieToken = req =>
