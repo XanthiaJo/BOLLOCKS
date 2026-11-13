@@ -34,7 +34,7 @@ npm install
 npm start          # http://localhost:8100
 ```
 
-First run seeds a demo: four users (`creamms`, `karima`, `blake`, `entropy75`, all password `changeme`), a chat called **The House** with the character **Wren** seated in it, a linked lorebook, and some example memories — so there's something to click through straight away. Skip it with `BOLLOCKS_SEED=0` and register your own account instead.
+First run seeds a demo: four demo users (`admin` — the site admin — plus `alice`, `bob`, `carol`, all password `changeme`), a chat called **The House** with the character **Wren** seated in it, a linked lorebook, and some example memories — so there's something to click through straight away. Skip it with `BOLLOCKS_SEED=0` and register your own account instead.
 
 To actually generate replies, sign in and set up an API connection on the **Connection** page (any OpenAI-compatible endpoint works).
 
