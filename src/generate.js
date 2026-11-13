@@ -3,6 +3,15 @@ import { push } from './lib/sse.js';
 
 // Latest prompt composition per room — exposed for the chat sidebar.
 export const genStats = {};
+
+// Persist each LLM call for later inspection — genStats only keeps the last
+// request in memory, and prod has no DB access. Newest 50 rows per room.
+function logPrompt(roomId, cardId, kind, reqBody, text, usage) {
+    db.prepare('INSERT INTO prompt_logs (rooms_id_fk,cards_id_fk,kind,request,response,prompt_tokens,completion_tokens) VALUES (?,?,?,?,?,?,?)')
+        .run(roomId, cardId, kind, JSON.stringify(reqBody), text || '', usage?.prompt_tokens ?? null, usage?.completion_tokens ?? null);
+    db.prepare('DELETE FROM prompt_logs WHERE rooms_id_fk=? AND prompt_logs_id_pk NOT IN (SELECT prompt_logs_id_pk FROM prompt_logs WHERE rooms_id_fk=? ORDER BY prompt_logs_id_pk DESC LIMIT 50)')
+        .run(roomId, roomId);
+}
 const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
 
 // Built-in extraction prompt, used when a profile leaves its template
@@ -275,6 +284,7 @@ export async function generateReply(roomId, card) {
         texts,
         request: reqBody,
     };
+    logPrompt(roomId, card.id, 'reply', reqBody, text, data?.usage);
     // Always drop a leading "Name:" / "**Name:**" / "[Name]" speaker tag —
     // the UI already labels messages; the tag only exists for steering.
     {
@@ -319,21 +329,24 @@ export async function maybeSummarize(roomId) {
         .all(roomId, room.mem_last_messages_id);
     if (!excerpt.length) return;
     if (mem.mem_activity) push(roomId, { type: 'mem', phase: 'start' });
+    const reqBody = {
+        model: conn.model || 'local',
+        messages: [
+            { role: 'system', content: mem.mem_extraction_prompt?.trim() || (MEM_EXTRACT_PROMPT + (mem.mem_triggers ? MEM_TRIGGERS_SUFFIX : '')) },
+            { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
+        ],
+        temperature: 0.3, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
+    };
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
             ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })() },
-        body: JSON.stringify({
-            model: conn.model || 'local',
-            messages: [
-                { role: 'system', content: mem.mem_extraction_prompt?.trim() || (MEM_EXTRACT_PROMPT + (mem.mem_triggers ? MEM_TRIGGERS_SUFFIX : '')) },
-                { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
-            ],
-            temperature: 0.3, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
-        }),
+        body: JSON.stringify(reqBody),
     });
     if (!resp.ok) return;
-    const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
+    const data = await resp.json();
+    const text = data?.choices?.[0]?.message?.content?.trim() || '';
+    logPrompt(roomId, null, 'extract', reqBody, text, data?.usage);
     let added = 0;
     const ins = db.prepare("INSERT INTO memories (content,type,origin,triggers) VALUES (?,?, 'smart', ?)");
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');

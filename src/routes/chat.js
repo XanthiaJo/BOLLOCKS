@@ -11,6 +11,14 @@ export default {
         if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
         send(res, 200, { stats: genStats[roomId] || null });
     },
+    'GET /api/promptlog': async (req, res, u) => {
+        const q = new URL(req.url, 'http://x').searchParams;
+        const roomId = Number(q.get('room') || 1);
+        if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
+        const limit = Math.min(Math.max(Number(q.get('n') || 25), 1), 100);
+        const rows = db.prepare('SELECT * FROM prompt_logs WHERE rooms_id_fk=? ORDER BY prompt_logs_id_pk DESC LIMIT ?').all(roomId, limit);
+        send(res, 200, { logs: rows.map(r => ({ ...r, request: JSON.parse(r.request) })) });
+    },
     'GET /api/stream': (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room') || 1);
         if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
