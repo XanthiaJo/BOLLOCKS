@@ -27,6 +27,65 @@
 - **Context caps** — per-chat and per-profile token limits; history middle-trims to fit
 - **Live updates** — messages, deletions and memory extraction stream to all clients
 
+# Getting started
+
+```bash
+npm install
+npm start          # http://localhost:8100
+```
+
+First run seeds a demo: four demo users (`admin` — the site admin — plus `alice`, `bob`, `carol`, all password `changeme`), a chat called **The House** with the character **Wren** seated in it, a linked lorebook, and some example memories — so there's something to click through straight away. Skip it with `BOLLOCKS_SEED=0` and register your own account instead.
+
+To actually generate replies, sign in and set up an API connection on the **Connection** page (any OpenAI-compatible endpoint works).
+
+# The tour
+
+## Sign in
+
+Everything behind the login page is gated — no session, no app.
+
+![Login](docs/screenshots/login.png)
+
+## Chat
+
+The room you're in, who's in it, and who's listening. The right sidebar holds the AI trigger mode, chat settings (linked world book, memory profile, context cap, background), the last memory the AI saved, and prompt-token use. `NPC ▸` asks an AI member to reply.
+
+![Chat](docs/screenshots/chat.png)
+
+## Characters
+
+Your card collection — SillyTavern V1/V2/V3 PNGs and JSON import straight in. Each card carries its own personality fields and can pin an API profile, or fall back to your default.
+
+![Characters](docs/screenshots/characters.png)
+
+## World
+
+Lorebooks. Pick a book in the sidebar and its entries show as full cards — title, trigger keywords, content, order — with edit-in-place. Entries reach the AI when their keywords come up in a chat the book is linked to.
+
+![World](docs/screenshots/world.png)
+
+## Memories
+
+Two kinds: **Permanent** memories you write yourself (shared with the room, or scoped to one character), and **Smart** memories the AI extracts from the conversation on its own. Type tags and trigger keywords show on each card; smart memories can be promoted to permanent.
+
+![Memories](docs/screenshots/memories.png)
+
+## Smart memory
+
+The dials for the extraction side: which connection profile does the reading, how often it runs, caps per memory type, injection budget. Saved as named profiles a room can follow.
+
+![Smart memory](docs/screenshots/memsettings.png)
+
+## Connection
+
+Two tabs. **Connection** is the OpenAI-compatible endpoint — URL, model, key (kept server-side), extra headers, context and response caps. **Injection** is prompt assembly: which blocks go into the system prompt and in what order.
+
+![Connection](docs/screenshots/connection.png)
+
+# Where it's going
+
+User management, a proper room settings view, smarter memory organization and more — see [docs/roadmap.md](docs/roadmap.md).
+
 # Nerdy Details
 
 ## Tech Stack
