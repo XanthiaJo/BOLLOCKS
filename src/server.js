@@ -53,11 +53,19 @@ http.createServer(async (req, res) => {
     const file = path.join(PUB, url.pathname === '/' ? 'index.html' : url.pathname);
     if (fs.existsSync(file) && file.startsWith(PUB + path.sep)) {
         if (!user && path.basename(file) !== 'login.html') {
-            res.writeHead(302, { Location: '/login.html' });
+            res.writeHead(302, { Location: '/login.html', 'Cache-Control': 'no-store' });
             return res.end();
         }
         const ext = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }[path.extname(file)] || 'text/plain';
-        res.writeHead(200, { 'Content-Type': ext });
+        // no-cache: browsers and CDN edges must revalidate every load, so
+        // deploys are picked up immediately; Last-Modified keeps the
+        // revalidation cheap via 304s.
+        const mtime = Math.floor(fs.statSync(file).mtimeMs / 1000) * 1000;
+        if (Date.parse(req.headers['if-modified-since'] || '') >= mtime) {
+            res.writeHead(304, { 'Cache-Control': 'no-cache' });
+            return res.end();
+        }
+        res.writeHead(200, { 'Content-Type': ext, 'Cache-Control': 'no-cache', 'Last-Modified': new Date(mtime).toUTCString() });
         return fs.createReadStream(file).pipe(res);
     }
     send(res, 404, { error: 'not found' });
