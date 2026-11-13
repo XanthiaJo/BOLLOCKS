@@ -1,6 +1,6 @@
 // Connection routes: API profiles, memory profiles, /models proxy.
 import { db } from '../db.js';
-import { send, readBody } from '../util.js';
+import { send, readBody } from '../lib/util.js';
 import { MEM_EXTRACT_PROMPT, PROMPT_BLOCKS } from '../generate.js';
 
 export default {

@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8"><title>BOLLOCKS · World</title>
-<link rel="stylesheet" href="layout.css">
+<link rel="stylesheet" href="css/layout.css">
 <style>
 textarea{min-height:80px;font-family:inherit}
 </style>
@@ -34,7 +34,7 @@ textarea{min-height:80px;font-family:inherit}
   </div>
 </main>
 </div>
-<script src="layout.js"></script>
+<script src="js/layout.js"></script>
 <script>
 const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
 const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.status===401?location='/login.html':r.json());

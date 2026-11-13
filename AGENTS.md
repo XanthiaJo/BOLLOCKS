@@ -14,26 +14,26 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 |---|---|---|
 | `server.js` | Thin HTTP shell: merges route tables, request gates, static file serving | `router` merge of `src/routes/*`; unauthenticated-API 401 gate; static-file gate |
 | `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona/user admin), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats) | |
-| `util.js` | Request/response helpers | `send`, `readBody`, `cookieToken`, `auth(req)` |
-| `access.js` | Permission helpers for route handlers | `roomOwnerOnly`, `roomMember`, `memoryShared`, `isAdmin`, `worldEntryOk` |
-| `sse.js` | Server-Sent Events fan-out | `streams` map; `push(roomId, evt)` |
-| `files.js` | Filesystem locations | `PUB`, `CARDS_DIR`, `BG_DIR` (created on import) |
+| `lib/util.js` | Request/response helpers | `send`, `readBody`, `cookieToken`, `auth(req)` |
+| `lib/access.js` | Permission helpers for route handlers | `roomOwnerOnly`, `roomMember`, `memoryShared`, `isAdmin`, `worldEntryOk` |
+| `lib/sse.js` | Server-Sent Events fan-out | `streams` map; `push(roomId, evt)` |
+| `lib/files.js` | Filesystem locations | `PUB`, `CARDS_DIR`, `BG_DIR` (created on import) |
 | `db.js` | SQLite (`node:sqlite` `DatabaseSync`) at `data/app.db`: schema, migrations, auth/session helpers, seed data | `db` (shared handle); `hash`/`verify` (scrypt); `createUser`/`login`/`userForToken`; `activeProfile(userId)`; `MSG_SQL` (canonical messages SELECT); `migrateSchema()`; `migrateProfiles()`; `seed()` |
 | `generate.js` | LLM integration + prompt assembly (server-side only; API keys never reach clients) | `generateReply(roomId, card)` — builds system prompt (card fields + world entries + memories + history), calls `{apiUrl}/chat/completions`; `maybeSummarize(roomId)` — smart-memory extraction; `memProfileFor(room)`; `genStats` (per-room last-request stats for the prompt inspector) |
-| `pngcard.js` | SillyTavern character-card import | `extractCardJson(pngBuf)` (tEXt `chara` chunk); `normalizeCard(raw)` (ST v1/v2 → our columns) |
+| `lib/pngcard.js` | SillyTavern character-card import | `extractCardJson(pngBuf)` (tEXt `chara` chunk); `normalizeCard(raw)` (ST v1/v2 → our columns) |
 
 ### `public/` — frontend, static files served by `server.js` (no bundler)
 
 | File | Purpose |
 |---|---|
 | `login.html` | Login page — the ONLY file served without a session. Self-contained (inline CSS/JS); stores token in `localStorage.mp_token`, redirects to `/` |
-| `index.html` + `app.js` | Chat page: room list, messages, members sidebar, prompt-token inspector, SSE live updates |
-| `characters.html` + `characters.js` | Card list + editor, avatar upload with in-browser crop |
+| `index.html` + `js/app.js` | Chat page: room list, messages, members sidebar, prompt-token inspector, SSE live updates |
+| `characters.html` + `js/characters.js` | Card list + editor, avatar upload with in-browser crop |
 | `world.html` | Lorebooks — single page: sidebar picks a book then its entries (`?id=<book>` deep-links a book); main edits the selected thing (book rename/create/ST import, or entry keys/secondary/content/constant/enabled/order). Link a book to a room in chat settings |
-| `memories.html` + `memories.js` | Memory browser: Permanent/Smart tabs, sidebar scope picker (room-shared or per-character; Smart stays room-scoped for now). `memsettings.html` + `memsettings.js` | Smart memory page (nav: "Smart memory"): profile list in sidebar → editor panel (`class="panel settings"` accordions). `memprofiles.js` | Shared profile-editor code loaded by both pages — it ends by calling the page's own `load()`. All styles live in `layout.css` |
-| `connection.html` + `connection.js` | Profiles page, tabbed: Connection (API profiles — OpenAI-compatible url/model/key/headers/context) and Injection (prompt_profiles — prompt-assembly presets incl. prompt order) |
-| `layout.js` | Shared shell injected into every page: top nav + sidebar toggles + version badge. Helpers: `mpOpenEditor`/`mpCloseEditor`/`mpFlashSaved`, `activateProf`, and `rprofRow()` — the single builder for sidebar picker rows (`.rprof` in layout.css is its style) |
-| `layout.css` | Shared styles for the shell and pages |
+| `memories.html` + `js/memories.js` | Memory browser: Permanent/Smart tabs, sidebar scope picker (room-shared or per-character; Smart stays room-scoped for now). `memsettings.html` + `js/memsettings.js` | Smart memory page (nav: "Smart memory"): profile list in sidebar → editor panel (`class="panel settings"` accordions). `js/memprofiles.js` | Shared profile-editor code loaded by both pages — it ends by calling the page's own `load()`. All styles live in `css/layout.css` |
+| `connection.html` + `js/connection.js` | Profiles page, tabbed: Connection (API profiles — OpenAI-compatible url/model/key/headers/context) and Injection (prompt_profiles — prompt-assembly presets incl. prompt order) |
+| `js/layout.js` | Shared shell injected into every page: top nav + sidebar toggles + version badge. Helpers: `mpOpenEditor`/`mpCloseEditor`/`mpFlashSaved`, `activateProf`, and `rprofRow()` — the single builder for sidebar picker rows (`.rprof` in layout.css is its style) |
+| `css/layout.css` | Shared styles for the shell and pages |
 
 ### Everything else
 

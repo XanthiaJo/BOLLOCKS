@@ -1,8 +1,8 @@
 // Live chat routes: SSE stream, say, generate, delete, genstats.
 import { db, MSG_SQL } from '../db.js';
-import { send, readBody } from '../util.js';
-import { roomMember } from '../access.js';
-import { streams, push } from '../sse.js';
+import { send, readBody } from '../lib/util.js';
+import { roomMember } from '../lib/access.js';
+import { streams, push } from '../lib/sse.js';
 import { generateReply, genStats, maybeSummarize } from '../generate.js';
 
 export default {

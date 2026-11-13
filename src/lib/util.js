@@ -1,5 +1,5 @@
 // HTTP request/response helpers shared by every route file.
-import { userForToken } from './db.js';
+import { userForToken } from '../db.js';
 
 export const readBody = req => new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { r(JSON.parse(b)); } catch { r({}); } }); });
 export const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };

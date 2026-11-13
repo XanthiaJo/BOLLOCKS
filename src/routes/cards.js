@@ -2,9 +2,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { db, DATA_DIR } from '../db.js';
-import { send, readBody } from '../util.js';
-import { extractCardJson, normalizeCard } from '../pngcard.js';
-import { CARDS_DIR } from '../files.js';
+import { send, readBody } from '../lib/util.js';
+import { extractCardJson, normalizeCard } from '../lib/pngcard.js';
+import { CARDS_DIR } from '../lib/files.js';
 
 export default {
     'POST /api/cards/avatar': async (req, res, u) => {

@@ -1,7 +1,7 @@
 // Session + account routes: login/logout/register.
 import { db, login, createUser } from '../db.js';
-import { send, readBody, cookieToken } from '../util.js';
-import { isAdmin } from '../access.js';
+import { send, readBody, cookieToken } from '../lib/util.js';
+import { isAdmin } from '../lib/access.js';
 
 export default {
     'POST /api/login': async (req, res) => {

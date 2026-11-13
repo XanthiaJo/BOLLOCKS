@@ -1,7 +1,7 @@
 // Account profile + user admin routes.
 import { db, hash, verify } from '../db.js';
-import { send, readBody } from '../util.js';
-import { isAdmin } from '../access.js';
+import { send, readBody } from '../lib/util.js';
+import { isAdmin } from '../lib/access.js';
 
 export default {
     'GET /api/me': async (req, res, u) => {

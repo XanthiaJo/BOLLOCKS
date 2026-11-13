@@ -54,7 +54,7 @@ export default [
   },
   {
     // layout.js defines the shared globals — allowed to declare them itself.
-    files: ["public/layout.js"],
+    files: ["public/js/layout.js"],
     rules: {
       "no-redeclare": "off",
     },
