@@ -7,7 +7,7 @@ const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
 
 // Built-in extraction prompt, used when a profile leaves its template
 // blank. The triggers suffix is appended only to the built-in prompt.
-export const MEM_EXTRACT_PROMPT = `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Each bullet must be a complete, self-contained sentence that names its subject (e.g. "Blake has a pending review pile for API configurations including Venice API."). Start with a type tag [fact], [event], [relationship] or [preference]. Use [shared] only for room-wide facts, and include the subject in the sentence. No narration, no pronouns without a named subject.`;
+export const MEM_EXTRACT_PROMPT = `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Every memory is shared with the whole chat — do not try to assign memories to specific characters. Each bullet must be a complete, self-contained sentence that names its subject (e.g. "Blake has a pending review pile for API configurations including Venice API."). Start with a type tag [fact], [event], [relationship] or [preference]. No narration, no pronouns without a named subject.`;
 const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords in parentheses, e.g. "- [fact] Blake has a pending review pile. (triggers: pending, review)"';
 
 // Fields a memory profile can override on a room's mem_* settings.
