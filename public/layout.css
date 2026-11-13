@@ -169,7 +169,7 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 /* tab switcher */
 .tabs{display:flex;gap:6px;margin:8px 0}
 .tab{background:var(--input);border:1px solid var(--line2);color:var(--muted);padding:5px 14px;border-radius:4px;cursor:pointer;width:auto;font-size:.85em}
-.tab.on{background:var(--ok);color:var(--white);border-color:var(--ok)}
+.tab.on{background:var(--accent);color:var(--white);border-color:var(--accent)}
 
 /* small type tag chips (memory types etc.) */
 .mtag{display:inline-block;font-size:.7em;font-weight:700;padding:1px 6px;border-radius:3px;background:var(--mtag);color:var(--muted);margin-right:4px}

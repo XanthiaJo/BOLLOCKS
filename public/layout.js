@@ -130,7 +130,7 @@ function initSidebar({ tabs = [], sections = [], buttons = [], footer = '' } = {
     sb.innerHTML =
         `<div class="tabs">${tabs.map(t => `<button class="tab${t.on ? ' on' : ''}"${t.id ? ` id="${t.id}"` : ''}${t.onclick ? ` onclick="${t.onclick}"` : ''}>${t.label}</button>`).join('')}</div>` +
         sections.map(s => `${s.wrap ? `<div id="${s.wrap}">` : ''}${s.title ? `<h3>${s.title}</h3>` : ''}<div id="${s.id}"></div>${s.wrap ? '</div>' : ''}`).join('') +
-        buttons.map(b => `<button${b.cls ? ` class="${b.cls}"` : ''} onclick="${b.onclick}">${b.label}</button>`).join('') +
+        buttons.map(b => `<button class="${b.cls || 'act'}" onclick="${b.onclick}">${b.label}</button>`).join('') +
         (footer ? `<small>${footer}</small>` : '');
 }
 
@@ -140,7 +140,7 @@ function initSidebar({ tabs = [], sections = [], buttons = [], footer = '' } = {
    Cancel convention: editing → reset fields to the loaded item; new → discard. */
 document.querySelectorAll('.edhead[data-save]').forEach(h => {
     const bar = document.createElement('span'); bar.className = 'edbtns';
-    for (const [fn, label, cls] of [[h.dataset.cancel, 'Cancel', 'sec'], [h.dataset.save, 'Save', '']]) {
+    for (const [fn, label, cls] of [[h.dataset.cancel, 'Cancel', 'sec'], [h.dataset.save, 'Save', 'act']]) {
         const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls;
         b.onclick = () => window[fn]?.(); bar.appendChild(b);
     }
