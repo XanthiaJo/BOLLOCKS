@@ -91,6 +91,7 @@ button.gen{background:var(--ok)}
 
 <div id="content">
   <div id="chat">
+    <div class="cvhead"><h2 id="chatname">Chat</h2></div>
     <ul id="msgs"></ul>
     <div id="composer">
       <textarea id="in" placeholder="Type a message" autofocus rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();say()}" style="resize:none;overflow:hidden;padding:10px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;flex:1;font:inherit" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>

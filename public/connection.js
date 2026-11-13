@@ -19,6 +19,7 @@ function connTab(t){curTab=t;localStorage.mp_conntab=t;load();newProf()}
 async function load(){
   $('t_api').classList.toggle('on',curTab==='api');
   $('t_inj').classList.toggle('on',curTab==='inj');
+  $('cvtitle').textContent=curTab==='inj'?'Injection':'Connection';
   if(curTab==='inj'){
     const r=await get('promptprofiles');injProfs=r?.profiles||[];promptBlocks=r?.promptBlocks||[];
     $('list').innerHTML=injProfs.map(p=>rprofRow({
@@ -38,7 +39,7 @@ async function load(){
   }
 }
 
-function showEd(id){$('editor').style.display=id==='editor'?'block':'none';$('injeditor').style.display=id==='injeditor'?'block':'none';$(id).scrollIntoView({behavior:'smooth',block:'start'})}
+function showEd(id){$('editor').style.display=id==='editor'?'block':'none';$('injeditor').style.display=id==='injeditor'?'block':'none';mpScrollTo($(id))}
 
 function edit(id){const p=allProfs.find(x=>x.id===id);if(!p)return;
   document.querySelectorAll('.prof').forEach(el=>el.classList.remove('sel'));

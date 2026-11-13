@@ -70,9 +70,15 @@ function activateProf(id) {
 
 /* Centralized editor: pages keep their #editor markup; this wraps it in a
    modal veil so editing always surfaces as a card — one place to restyle. */
+// Scroll an opened editor into view — including a preceding .cvhead title
+// panel when it shares the parent, so page titles don't scroll away.
+function mpScrollTo(el){
+  const p = el.previousElementSibling;
+  (p && p.classList.contains('cvhead') ? p : el).scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 function mpOpenEditor(mode){
   const ed = document.getElementById('editor'); if (!ed) return;
-  if (mode === 'inline') { ed.style.display = 'block'; ed.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+  if (mode === 'inline') { ed.style.display = 'block'; mpScrollTo(ed); return; }
   if (!document.getElementById('mpveil')) {
     if (!ed._home) { ed._home = ed.parentNode; ed._next = ed.nextSibling; }
     const v = document.createElement('div');
@@ -130,19 +136,36 @@ function initSidebar({ tabs = [], sections = [], buttons = [], footer = '' } = {
     sb.innerHTML =
         `<div class="tabs">${tabs.map(t => `<button class="tab${t.on ? ' on' : ''}"${t.id ? ` id="${t.id}"` : ''}${t.onclick ? ` onclick="${t.onclick}"` : ''}>${t.label}</button>`).join('')}</div>` +
         sections.map(s => `${s.wrap ? `<div id="${s.wrap}">` : ''}${s.title ? `<h3>${s.title}</h3>` : ''}<div id="${s.id}"></div>${s.wrap ? '</div>' : ''}`).join('') +
-        buttons.map(b => `<button class="${b.cls || 'act'}" onclick="${b.onclick}">${b.label}</button>`).join('') +
+        buttons.map(b => `<button${b.id ? ` id="${b.id}"` : ''} class="${b.cls || 'act'}" onclick="${b.onclick}">${b.label}</button>`).join('') +
         (footer ? `<small>${footer}</small>` : '');
 }
 
 /* Editor form header — every editor's first child is
    <div class="edhead" data-save="fnName" data-cancel="fnName"><h3 id="…">…</h3></div>
    and this injects the shared [Cancel][Save] pair wired to those globals.
+   Call initEdHeads(root) again after adding form markup dynamically.
    Cancel convention: editing → reset fields to the loaded item; new → discard. */
-document.querySelectorAll('.edhead[data-save]').forEach(h => {
-    const bar = document.createElement('span'); bar.className = 'edbtns';
-    for (const [fn, label, cls] of [[h.dataset.cancel, 'Cancel', 'sec'], [h.dataset.save, 'Save', 'act']]) {
-        const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls;
-        b.onclick = () => window[fn]?.(); bar.appendChild(b);
-    }
-    h.appendChild(bar);
-});
+function initEdHeads(root = document) {
+    root.querySelectorAll('.edhead[data-save]:not([data-wired])').forEach(h => {
+        h.dataset.wired = '1';
+        const bar = document.createElement('span'); bar.className = 'edbtns';
+        for (const [fn, label, cls] of [[h.dataset.cancel, 'Cancel', 'sec'], [h.dataset.save, 'Save', 'act']]) {
+            const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls;
+            b.onclick = () => window[fn]?.(); bar.appendChild(b);
+        }
+        h.appendChild(bar);
+    });
+}
+initEdHeads();
+
+/* In-place edit helpers — preserve unsaved input across a list re-render:
+   const d = draftFields(['a','b']); list.innerHTML = …; fillFields(d);
+   Keyed by element id; checkboxes round-trip via .checked. */
+function draftFields(ids) {
+    const d = {};
+    for (const i of ids) { const el = document.getElementById(i); if (el) d[i] = el.type === 'checkbox' ? el.checked : el.value; }
+    return Object.keys(d).length ? d : null;
+}
+function fillFields(d) {
+    for (const [i, v] of Object.entries(d || {})) { const el = document.getElementById(i); if (!el) continue; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; }
+}

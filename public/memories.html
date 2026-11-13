@@ -8,26 +8,25 @@
 <aside id="rsidebar"></aside>
 <div id="content">
 <main>
-  <div class="panel">
-    <h3 id="title">Memories</h3>
-    <div id="addbox">
-      <textarea id="newmem" placeholder="e.g. Fig hates the colour green" style="min-height:60px;width:100%"></textarea>
-      <div style="display:flex;gap:6px;margin-top:4px">
-        <select id="newtype" style="width:auto">
-          <option>fact</option><option>event</option><option>relationship</option><option>preference</option>
-        </select>
-        <button onclick="add()">Add memory</button>
-      </div>
-    </div>
-    <div id="smartbar" style="display:none;margin:8px 0">
+  <div class="cvhead">
+    <h2 id="title">Memories</h2>
+    <span class="cvbtns"><button class="act" id="btn_new" onclick="newMem()">+ New memory</button></span>
+  </div>
+  <div class="panel" id="newbox" style="display:none">
+    <div class="edhead" data-save="saveNew" data-cancel="cancelNew"><h3>New memory</h3></div>
+    <textarea id="newmem" placeholder="e.g. Fig hates the colour green" style="min-height:60px;width:100%"></textarea>
+    <select id="newtype" style="width:200px;margin-top:4px">
+      <option>fact</option><option>event</option><option>relationship</option><option>preference</option>
+    </select>
+  </div>
+  <div class="panel" id="smartbar" style="display:none">
       <div><span class="lbl" style="margin-bottom:3px" title="Which memory profile (preset of smart-memory settings) this chat follows.">Memory profile for this chat</span></div>
       <select id="smart_mprof" onchange="pickMProf(this.value)" style="width:240px"></select>
       <label class="cb" style="display:block;margin-top:6px"><input type="checkbox" id="smart_auto" onchange="toggleSmartAuto(this.checked)"> Enable Smart Memory</label>
       <span class="hint">When on, a second AI periodically reads new messages in this chat and stores lasting facts. Those memories are added to the prompt when relevant, so characters remember things between sessions.</span>
       <small id="smart_mprof_hint" style="display:block;color:var(--dim);margin-top:4px">Heavier settings live under the profile — edit them on the <a href="/memsettings.html" style="color:var(--muted)">Smart memory</a> page.</small>
-    </div>
   </div>
-  <div id="list"></div>
+  <div class="panel" id="list"></div>
 </main>
 </div>
 <script src="layout.js"></script>

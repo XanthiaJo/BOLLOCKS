@@ -76,6 +76,7 @@ nav a.on{background:var(--accent);color:var(--white)}
 #rsidebar{width:400px;flex:none;padding:24px 12px 12px;background:var(--surface);overflow-y:auto;border-left:1px solid var(--surface2)}
 #sidebar.hide,#rsidebar.hide{display:none}
 .navtoggle{color:var(--muted);text-decoration:none;padding:6px 10px;cursor:pointer;font-size:1.1em}
+#mpuserbtn{color:var(--ai)}
 .navtoggle:hover{color:var(--white)}
 .usermenu{position:relative}
 .userdrop{display:none;position:absolute;right:0;top:100%;min-width:150px;background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:4px 0;z-index:60;box-shadow:0 8px 24px var(--veil-soft)}
@@ -120,16 +121,27 @@ button.imp{background:var(--violet)}
 #rsidebar .tabs{margin-bottom:12px}
 #rsidebar .tab{flex:1;text-align:center}
 #rsidebar .tab:not([onclick]){cursor:default}
+#rsidebar .tab:disabled{opacity:.45;cursor:default}
 #rsidebar>small{display:block;margin-top:10px;color:var(--dim)}
 #cardssec{margin-top:14px}
 small{color:var(--dim)}
 /* shared card theme — item lists + editor panels */
-.card{display:grid;grid-template-columns:1fr auto;gap:10px;padding:12px;border:1px solid var(--line);border-radius:6px;margin-bottom:10px;background:var(--surface)}
+.card{display:grid;grid-template-columns:1fr 92px;gap:10px;padding:12px;border:1px solid var(--line);border-radius:6px;margin-bottom:10px;background:var(--surface)}
 .card .name{font-weight:700}
 .card .desc{color:var(--desc);font-size:.9em;white-space:pre-wrap;margin-top:4px}
 .card .meta{color:var(--faint);font-size:.8em;margin-top:4px}
 .card .btns{display:flex;flex-direction:column;gap:6px}
 .card .btns button{width:auto}
+/* in-place editing — a card that has become its edit form */
+.card.editing{display:block;border-color:var(--edge)}
+.card.off{opacity:.5}
+.card .comment{font-weight:700}
+.card .keys{color:var(--ai);font-size:.85em;font-weight:600;margin-top:2px}
+/* content header — page/scope title left, contextual actions right */
+.cvhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:12px 14px}
+.cvhead h2{margin:0}
+.cvhead .cvbtns{display:flex;gap:6px}
+.cvhead button{margin:0}
 .panel{border:1px solid var(--edge);border-radius:6px;padding:14px;margin-bottom:18px;background:var(--panel)}
 .panel h3{margin-top:0}
 /* editor form header — title left, Cancel/Save right. Markup is just
