@@ -42,7 +42,7 @@ async function load(){
 }
 
 function newBookPanel(){mpOpenEditor('inline');$('newname').focus()}
-function cancelBook(){$('newname').value='';$('editor').style.display='none'}
+function cancelBook(){$('newname').value=''}
 async function newBook(){
   const name=$('newname').value.trim();if(!name)return;
   $('newname').value='';

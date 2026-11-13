@@ -70,7 +70,7 @@ async function load(){
 function newEntry(){clearEd();mpOpenEditor('inline')}
 function editIdx(i){edit(allEntries[i])}
 function edit(e){$('edtitle').textContent='Edit entry #'+e.id;$('ed_id').value=e.id;$('ed_comment').value=e.comment||'';$('ed_keys').value=JSON.parse(e.keys||'[]').join(', ');$('ed_keys2').value=JSON.parse(e.keysecondary||'[]').join(', ');$('ed_content').value=e.content;$('ed_const').checked=!!e.constant;$('ed_enabled').checked=!!e.enabled;$('ed_ord').value=e.ord;mpOpenEditor('inline')}
-function cancelEd(){const id=Number($('ed_id').value)||0;const e=id?allEntries.find(e=>e.id===id):null;e?edit(e):closeEd()}
+function cancelEd(){const id=Number($('ed_id').value)||0;const e=id?allEntries.find(e=>e.id===id):null;e?edit(e):clearEd()}
 function clearEd(){$('edtitle').textContent='New entry';['ed_id','ed_comment','ed_keys','ed_keys2','ed_content'].forEach(i=>$(i).value='');$('ed_const').checked=false;$('ed_enabled').checked=true;$('ed_ord').value=0}
 function closeEd(){$('editor').style.display='none'}
 

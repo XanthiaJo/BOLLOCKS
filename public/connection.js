@@ -80,7 +80,7 @@ function clearEd(){
   $('injtitle').textContent='New injection profile';$('inj_id').value='';$('inj_name').value='';orderKeys=orderFrom(null);renderOrder();
 }
 function newProf(){clearEd();showEd(curTab==='inj'?'injeditor':'editor');$(curTab==='inj'?'inj_name':'ed_name').focus()}
-function cancelEd(){const inj=curTab==='inj';const id=Number($(inj?'inj_id':'ed_id').value)||0;if(!id){clearEd();$(inj?'injeditor':'editor').style.display='none';return}inj?editInj(id):edit(id)}
+function cancelEd(){const inj=curTab==='inj';const id=Number($(inj?'inj_id':'ed_id').value)||0;if(!id)return clearEd();inj?editInj(id):edit(id)}
 
 async function saveProf(){
   if(curTab==='inj'){
