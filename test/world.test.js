@@ -2,9 +2,10 @@
 // room linking, and deletion cascades.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { boot, tmp } from './helpers.js';
+import { boot, tmp, asUser } from './helpers.js';
 
 let s;
+const asAlice = fn => asUser(s, 'alice')(fn);
 before(async () => { s = await boot(tmp('data')); await s.login('admin'); });
 after(() => s.stop());
 
@@ -27,6 +28,19 @@ describe('world books', () => {
         assert.equal(e2.content, 'New.');
         assert.deepEqual(JSON.parse(e2.keys), ['hall']); // keys replaced wholesale
         assert.deepEqual(JSON.parse(e2.keysecondary), []); // untouched secondary cleared with primary
+    });
+
+    test('book rename via world/books/update is owner-only', async () => {
+        const bid = (await s.post('world/books', { name: 'Before' })).json.id;
+        assert.equal((await s.post('world/books/update', { id: bid, name: 'After' })).status, 200);
+        assert.equal((await s.get('world/books')).json.books.find(b => b.id === bid).name, 'After');
+        assert.equal((await s.post('world/books/update', { id: bid })).status, 400); // name required
+        await asAlice(async () => {
+            assert.equal((await s.post('world/books/update', { id: bid, name: 'Hijack' })).status, 403);
+        });
+        assert.equal((await s.get('world/books')).json.books.find(b => b.id === bid).name, 'After');
+        assert.equal((await s.post('world/books/update', { id: bid + 99999, name: 'Ghost' })).status, 403);
+        assert.equal((await s.post('world/books/delete', { id: bid })).status, 200);
     });
 
     test('ST lorebook JSON import', async () => {

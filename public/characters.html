@@ -38,8 +38,9 @@ textarea{min-height:90px;font-family:inherit;width:100%}
 </div>
 <div id="content">
 <main>
+  <div class="cvhead"><h2>Characters</h2></div>
   <div id="editor">
-    <h3 id="edtitle">New character</h3>
+    <div class="edhead" data-save="saveCard" data-cancel="cancelEd"><h3 id="edtitle">New character</h3></div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
       <img id="ed_av" src="" onload="this.style.visibility='visible'" onerror="this.style.visibility='hidden'" style="width:140px;height:140px;object-fit:cover;border-radius:10px;background:var(--surface2);cursor:pointer" title="Change picture" onclick="$('avpick').click()">
       <div><div class="cap" style="margin-top:0">Picture</div>
@@ -69,8 +70,6 @@ textarea{min-height:90px;font-family:inherit;width:100%}
     <label class="cap">API profile <small>— uses default unless changed</small></label>
     <select id="ed_profile" style="width:100%;padding:8px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:4px"></select>
     <div style="margin-top:18px">
-    <button onclick="saveCard()">Save</button>
-    <button class="sec" onclick="clearEd()">Clear</button>
     <button class="imp" onclick="document.getElementById('imp').click()">Import card…</button>
     <input type="file" id="imp" accept=".png,.json" style="display:none" onchange="importCard(this)">
     </div>

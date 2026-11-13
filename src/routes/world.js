@@ -18,6 +18,14 @@ export default {
         const id = db.prepare('INSERT INTO world_books (owner_users_id_fk,name) VALUES (?,?)').run(u.users_id_pk, b.name).lastInsertRowid;
         send(res, 200, { id });
     },
+    'POST /api/world/books/update': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!b.name) return send(res, 400, { error: 'name required' });
+        const r = db.prepare('UPDATE world_books SET name=? WHERE world_books_id_pk=? AND owner_users_id_fk=?')
+            .run(b.name, b.id || b.world_books_id_pk, u.users_id_pk);
+        if (!r.changes) return send(res, 403, { error: 'not your book' });
+        send(res, 200, { ok: true });
+    },
     'POST /api/world/books/delete': async (req, res, u) => {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;

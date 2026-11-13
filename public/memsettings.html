@@ -8,44 +8,45 @@
 <aside id="rsidebar"></aside>
 <div id="content">
 <main>
+  <div class="cvhead"><h2>Smart memory</h2></div>
   <div class="panel settings" id="profpanel" style="display:none">
-    <h3 id="pf_title"></h3>
-    <label class="lbl" style="display:block">Profile name</label><input id="pf_name" style="width:240px;margin:2px 0" onchange="saveProf()">
+    <div class="edhead" data-save="saveProf" data-cancel="cancelProf"><h3 id="edtitle"></h3></div>
+    <label class="lbl" style="display:block">Profile name</label><input id="pf_name" style="width:240px;margin:2px 0">
     <div style="opacity:.45;pointer-events:none"><label class="cb"><input type="checkbox" disabled> Read-only mode — protect memories</label></div>
 
     <h4>Memory LLM</h4>
     <span class="hint">The "memory-writer": a second AI that reads new chat and decides what to store. These settings control how it runs.</span>
-    <div class="row"><span class="lbl" title="Which API profile runs memory extraction — smart memories stay off until the room owner picks one.">Extraction profile (required)</span><span class="hint">Which API connection the memory-writer uses (set up under Connection). Smart memory can't run until you pick one — a small/cheap model is usually plenty.</span><select id="set_profile" onchange="saveProf()" style="width:220px"></select></div>
+    <div class="row"><span class="lbl" title="Which API profile runs memory extraction — smart memories stay off until the room owner picks one.">Extraction profile (required)</span><span class="hint">Which API connection the memory-writer uses (set up under Connection). Smart memory can't run until you pick one — a small/cheap model is usually plenty.</span><select id="set_profile" style="width:220px"></select></div>
     <div>
-      <div class="row"><span class="lbl" title="Max tokens the memory LLM may use per extraction call. Unlimited (-1) warns it may be slow/costly.">Generation budget (tokens)</span><span class="hint">How much the memory-writer may write per run. ~4 characters ≈ 1 token. Default: 2000. Enter -1 for unlimited — can be slow or expensive on paid APIs.</span><input type="number" id="set_genbudget" min="-1" max="32768" value="2000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
-      <label class="row cbrow"><span class="lbl">Show activity indicator</span><span class="hint">Show a snackbar in the chat when the memory-writer runs — handy to see it's working.</span><input type="checkbox" id="set_activity" onchange="saveProf()"></label>
-      <label class="row cbrow"><span class="lbl">Unified injection</span><span class="hint">On: memories reach the AI as one "Memories:" block. Off: split into "what happened here" (shared) and "what this character remembers" (personal).</span><input type="checkbox" id="set_unified" onchange="saveProf()"></label>
-      <label class="row cbrow"><span class="lbl">Generate contextual triggers</span><span class="hint">The writer tags each memory with keywords; a memory is only added to the prompt when a keyword appeared in the last few messages. Cheaper prompts, occasionally misses context.</span><input type="checkbox" id="set_triggers" onchange="saveProf()"></label>
-      <label class="row cbrow" style="opacity:.45;pointer-events:none"><span class="lbl">Auto-tune budgets</span><span class="hint">Automatically raise the injection token budget (below) if stored memories keep getting cut off. Temporarily disabled while the design gets reworked.</span><input type="checkbox" id="set_autotune" disabled onchange="saveProf()"></label>
-      <div class="row"><span class="lbl" title="How often the injected memory block is rebuilt. 1 = every generation.">Injection refresh every N AI messages</span><span class="hint">Only add memories to the prompt every Nth reply — saves tokens on the replies in between. 1 = every reply (default).</span><input type="number" id="set_refresh" min="1" max="50" value="1" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+      <div class="row"><span class="lbl" title="Max tokens the memory LLM may use per extraction call. Unlimited (-1) warns it may be slow/costly.">Generation budget (tokens)</span><span class="hint">How much the memory-writer may write per run. ~4 characters ≈ 1 token. Default: 2000. Enter -1 for unlimited — can be slow or expensive on paid APIs.</span><input type="number" id="set_genbudget" min="-1" max="32768" value="2000" style="width:80px;display:inline-block"></div>
+      <label class="row cbrow"><span class="lbl">Show activity indicator</span><span class="hint">Show a snackbar in the chat when the memory-writer runs — handy to see it's working.</span><input type="checkbox" id="set_activity"></label>
+      <label class="row cbrow"><span class="lbl">Unified injection</span><span class="hint">On: memories reach the AI as one "Memories:" block. Off: split into "what happened here" (shared) and "what this character remembers" (personal).</span><input type="checkbox" id="set_unified"></label>
+      <label class="row cbrow"><span class="lbl">Generate contextual triggers</span><span class="hint">The writer tags each memory with keywords; a memory is only added to the prompt when a keyword appeared in the last few messages. Cheaper prompts, occasionally misses context.</span><input type="checkbox" id="set_triggers"></label>
+      <label class="row cbrow" style="opacity:.45;pointer-events:none"><span class="lbl">Auto-tune budgets</span><span class="hint">Automatically raise the injection token budget (below) if stored memories keep getting cut off. Temporarily disabled while the design gets reworked.</span><input type="checkbox" id="set_autotune" disabled></label>
+      <div class="row"><span class="lbl" title="How often the injected memory block is rebuilt. 1 = every generation.">Injection refresh every N AI messages</span><span class="hint">Only add memories to the prompt every Nth reply — saves tokens on the replies in between. 1 = every reply (default).</span><input type="number" id="set_refresh" min="1" max="50" value="1" style="width:80px;display:inline-block"></div>
     </div>
 
     <h4>Extraction</h4>
     <span class="hint">When and how new chat gets turned into stored memories.</span>
-    <div class="row"><span class="lbl" title="How many new messages before the extractor summarizes them." title="How many new messages before the extractor summarizes them.">Extract after every N new messages</span><span class="hint">How often the memory-writer runs. Smaller = more up-to-date but more API calls. Default: 10.</span><input type="number" id="set_every" min="2" max="100" onchange="saveProf()" style="width:80px;display:inline-block"></div>
-    <div class="row"><span class="lbl" title="Cap on auto-extracted memories (total); oldest are dropped.">Max stored smart memories (total)</span><span class="hint">Overall cap across all types — oldest are forgotten first. 0 = unlimited. Default: 50.</span><input type="number" id="set_max" min="0" max="5000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl" title="How many new messages before the extractor summarizes them." title="How many new messages before the extractor summarizes them.">Extract after every N new messages</span><span class="hint">How often the memory-writer runs. Smaller = more up-to-date but more API calls. Default: 10.</span><input type="number" id="set_every" min="2" max="100" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl" title="Cap on auto-extracted memories (total); oldest are dropped.">Max stored smart memories (total)</span><span class="hint">Overall cap across all types — oldest are forgotten first. 0 = unlimited. Default: 50.</span><input type="number" id="set_max" min="0" max="5000" style="width:80px;display:inline-block"></div>
     <span class="hint">Caps per memory type — the oldest of that type drop first. 0 = no per-type limit (the total cap still applies). Default: 15 each.</span>
-    <div class="row"><span class="lbl">Max per type — fact</span><span class="hint">things that are true</span><input type="number" id="set_max_fact" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
-    <div class="row"><span class="lbl">Max per type — event</span><span class="hint">things that happened</span><input type="number" id="set_max_event" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
-    <div class="row"><span class="lbl">Max per type — relationship</span><span class="hint">how characters feel about each other</span><input type="number" id="set_max_rel" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
-    <div class="row"><span class="lbl">Max per type — preference</span><span class="hint">likes and dislikes</span><input type="number" id="set_max_pref" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — fact</span><span class="hint">things that are true</span><input type="number" id="set_max_fact" min="0" max="500" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — event</span><span class="hint">things that happened</span><input type="number" id="set_max_event" min="0" max="500" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — relationship</span><span class="hint">how characters feel about each other</span><input type="number" id="set_max_rel" min="0" max="500" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — preference</span><span class="hint">likes and dislikes</span><input type="number" id="set_max_pref" min="0" max="500" style="width:80px;display:inline-block"></div>
     <div>
       <div class="lbl" title="The instruction sent to the memory LLM when summarizing chat into memories. Leave blank for default.">Extraction prompt template</div>
       <span class="hint">Custom instructions for the memory-writer (e.g. focus on plot, ignore OOC). Leave blank for the built-in prompt — <a href="#" onclick="toggleDefPrompt(this);return false" style="color:var(--muted)">show it</a>.</span>
       <pre id="def_prompt" style="display:none;white-space:pre-wrap;font-size:.78em;color:var(--dim);background:var(--input);padding:8px;border-radius:4px;margin:2px 0 6px"></pre>
-      <textarea id="set_prompt" placeholder="(default extraction prompt)" style="min-height:60px" onchange="saveProf()"></textarea>
-      <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><span class="hint">Also run extraction early once the chat fills this % of the model's context — so nothing important is lost before old messages get trimmed. Default: 80.</span><input type="number" id="set_ctx" min="10" max="100" onchange="saveProf()" style="width:80px;display:inline-block"></div>
-      <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><span class="hint">Fallback reply length — only used when the generation budget above is unset. Usually safe to leave alone. Default: 2000.</span><input type="number" id="set_resplen" min="256" max="8192" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+      <textarea id="set_prompt" placeholder="(default extraction prompt)" style="min-height:60px"></textarea>
+      <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><span class="hint">Also run extraction early once the chat fills this % of the model's context — so nothing important is lost before old messages get trimmed. Default: 80.</span><input type="number" id="set_ctx" min="10" max="100" style="width:80px;display:inline-block"></div>
+      <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><span class="hint">Fallback reply length — only used when the generation budget above is unset. Usually safe to leave alone. Default: 2000.</span><input type="number" id="set_resplen" min="256" max="8192" style="width:80px;display:inline-block"></div>
     </div>
 
     <h4>Injection</h4>
     <span class="hint">How stored memories get put back into the AI's prompt.</span>
-    <div class="row"><span class="lbl" title="Max tokens of memory content injected into each generation prompt.">Token budget</span><span class="hint">Max memory text added to each reply's prompt — beyond this, newer memories are left out (oldest are kept). Default: 800.</span><input type="number" id="set_budget" min="50" max="4000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl" title="Max tokens of memory content injected into each generation prompt.">Token budget</span><span class="hint">Max memory text added to each reply's prompt — beyond this, newer memories are left out (oldest are kept). Default: 800.</span><input type="number" id="set_budget" min="50" max="4000" style="width:80px;display:inline-block"></div>
 
     <h4>Session Memory</h4>
     <div class="ph">
@@ -134,7 +135,7 @@
       <label class="cb"><input type="checkbox" disabled> Keep model in memory</label>
     </div>
 
-    <div style="display:flex;gap:6px;margin-top:12px"><button onclick="saveProf()">Save profile</button><button class="del" onclick="delMP(selProf)">Delete profile</button><button class="sec" onclick="deselectProf()">Close</button></div>
+    <button class="del" onclick="delMP(selProf)" style="margin-top:12px">Delete profile</button>
   </div>
 </main>
 </div>
