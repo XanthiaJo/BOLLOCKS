@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { db, seed, migrateProfiles, migrateSchema } from './db.js';
 import { send, auth } from './lib/util.js';
 import { PUB } from './lib/files.js';
@@ -14,6 +15,9 @@ import profilesRoutes from './routes/profiles.js';
 import chatRoutes from './routes/chat.js';
 
 const VERSION = JSON.parse(fs.readFileSync(path.join(PUB, '..', 'package.json'), 'utf8')).version;
+// Commit the deploy pulled — .git exists on checkout-style deploys; otherwise
+// a container build can pass GIT_SHA explicitly.
+const SHA = process.env.GIT_SHA || (() => { try { return execSync('git rev-parse --short HEAD', { cwd: path.join(PUB, '..') }).toString().trim(); } catch { return ''; } })();
 const PORT = Number(process.env.PORT || 8100);
 migrateSchema();
 migrateProfiles();
@@ -29,7 +33,7 @@ const router = {
     ...roomsRoutes,
     ...profilesRoutes,
     ...chatRoutes,
-    'GET /api/version': async (req, res) => send(res, 200, { version: VERSION }),
+    'GET /api/version': async (req, res) => send(res, 200, { version: VERSION, sha: SHA || null }),
 };
 
 http.createServer(async (req, res) => {
