@@ -241,7 +241,7 @@ function renderLastMem(m) {
 }
 let lastStats = null;
 const PAGE_LINKS = { 'World Info': '/world.html', 'Memories': '/memories.html' };
-function showJson(title, obj) {
+function showModal(title, text) {
     let v = document.getElementById('partview');
     if (!v) {
         v = document.createElement('div');
@@ -249,27 +249,14 @@ function showJson(title, obj) {
         v.onclick = e => { if (e.target === v) v.remove(); };
         document.body.appendChild(v);
     }
-    v.innerHTML = `<div class="card" style="width:min(720px,94vw);max-height:82vh;overflow-y:auto;background:var(--panel);padding:16px">
+    const esc = String(text ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    v.innerHTML = `<div class="mp-card">
         <h3 style="margin:0 0 10px">${title}</h3>
-        <pre style="white-space:pre-wrap;font-size:.8em;color:var(--pre);margin:0 0 14px">${String(obj ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+        <pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:.85em;color:var(--pre);margin:0 0 14px">${esc || '(empty)'}</pre>
         <button onclick="document.getElementById('partview').remove()">Close</button></div>`;
 }
-function showRequest() { showJson('Request JSON', JSON.stringify(lastStats?.request, null, 2)); }
-function showPart(k) {
-    const txt = (lastStats?.texts || {})[k];
-    let v = document.getElementById('partview');
-    if (!v) {
-        v = document.createElement('div');
-        v.id = 'partview'; v.className = 'mp-veil';
-        v.onclick = e => { if (e.target === v) v.remove(); };
-        document.body.appendChild(v);
-    }
-    const esc = String(txt ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    v.innerHTML = `<div class="card" style="width:min(720px,94vw);max-height:82vh;overflow-y:auto;background:var(--panel);padding:16px">
-        <h3 style="margin:0 0 10px">${k}</h3>
-        <pre style="white-space:pre-wrap;font-size:.85em;color:var(--pre);margin:0 0 14px">${esc || '(empty)'}</pre>
-        <button onclick="document.getElementById('partview').remove()">Close</button></div>`;
-}
+function showRequest() { showModal('Request JSON', JSON.stringify(lastStats?.request, null, 2)); }
+function showPart(k) { showModal(k, (lastStats?.texts || {})[k]); }
 async function renderToks() {
     const { stats } = await get('genstats?room=' + room);
     lastStats = stats;
