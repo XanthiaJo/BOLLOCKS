@@ -51,12 +51,13 @@ export const PROMPT_BLOCKS = [
 ];
 
 /** Effective memory settings for a room: always the memory profile it follows
- *  (falling back to the first profile when none is assigned) — there is no
- *  per-chat custom option. Room columns only carry per-room bits like
- *  the injection-refresh counter. */
+ *  via mem_profiles_id_fk. No link → the room's own columns, which default to
+ *  auto_mem=0: smart memories are simply off. Room columns only carry per-room
+ *  bits like the injection-refresh counter. */
 export function memProfileFor(room) {
-    const p = db.prepare(`SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=COALESCE(?,(SELECT mem_profiles_id_pk FROM mem_profiles WHERE users_id_fk=? ORDER BY mem_profiles_id_pk LIMIT 1))`)
-        .get(room?.mem_profiles_id_fk || null, room?.owner_users_id_fk ?? -1);
+    const p = room?.mem_profiles_id_fk
+        ? db.prepare('SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=?').get(room.mem_profiles_id_fk)
+        : null;
     if (!p) return room;
     const out = { ...room };
     for (const k of MEM_PROFILE_FIELDS) if (k in p) out[k] = p[k];

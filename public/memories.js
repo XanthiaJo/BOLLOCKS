@@ -70,15 +70,16 @@ async function load(){
   // Smart tab: picker showing which profile this chat follows.
   const followed=(rm?.mem_profiles_id_fk)&&(memProfiles.find(x=>x.mem_profiles_id_pk===rm.mem_profiles_id_fk))||null;
   const mprofOpts=(memProfiles||[]).map(p=>`<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
-  const mprofVal=String(followed?.mem_profiles_id_pk ?? memProfiles[0]?.mem_profiles_id_pk ?? '');
+  const mprofVal=String(rm?.mem_profiles_id_fk ?? 0);
   // Non-owners can't see the owner's profile list — show the followed name only.
   const followedName=followed?.name||rm?.mem_profile_name||null;
-  $('smart_mprof').innerHTML=rm?.is_owner?mprofOpts:`<option>${esc(followedName||'—')}</option>`;
+  $('smart_mprof').innerHTML=rm?.is_owner?`<option value="0">Disabled</option>`+mprofOpts:`<option>${esc(followedName||'Disabled')}</option>`;
   $('smart_mprof').value=mprofVal;
   $('smart_mprof_hint').textContent=rm?.is_owner
-    ? (followed?`This chat follows "${followed.name}" — edit it on the Smart memory page.`:'No profiles yet — create one on the Smart memory page.')
-    : (followedName?`This chat follows "${followedName}". `:'')+'Only the room owner can change the memory profile.';
-  const smartP=followed||memProfiles[0]||null;
+    ? (followed?`This chat follows "${followed.name}" — edit it on the Smart memory page.`
+        :memProfiles.length?'Smart memories are off — pick a profile to enable.':'No profiles yet — create one on the Smart memory page.')
+    : (followedName?`This chat follows "${followedName}". `:'Smart memories are off. ')+'Only the room owner can change the memory profile.';
+  const smartP=followed||null;
   // Non-owners see the followed profile's flag (from the room payload), not their own.
   $('smart_auto').checked=rm?.is_owner?!!smartP?.auto_mem:!!rm?.mem_profile_auto;
   $('smart_auto').disabled=!rm?.is_owner?true:!smartP;
@@ -95,7 +96,7 @@ async function load(){
   renderList();
 }
 function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') curTab='user';load()}
-async function toggleSmartAuto(on){const id=Number($('smart_mprof').value)||memProfiles[0]?.mem_profiles_id_pk;if(!id)return;const p=memProfiles.find(x=>x.mem_profiles_id_pk===id);if(!p)return;await api('memprofiles/update',{...rowToProf(p),auto:on?1:0});load()}
+async function toggleSmartAuto(on){const id=Number($('smart_mprof').value);if(!id)return;const p=memProfiles.find(x=>x.mem_profiles_id_pk===id);if(!p)return;await api('memprofiles/update',{...rowToProf(p),auto:on?1:0});load()}
 async function pickMProf(v){await api('room/memsettings',{room:ROOM,memProfile:Number(v)||0});load()}
 async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t,type:$('newtype').value});load()}
 async function toSmart(id){await api('memories/update',{id,origin:'smart'});load()}
