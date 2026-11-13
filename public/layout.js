@@ -107,9 +107,26 @@ function mpFlashSaved(msg = 'Saved') {
 /* Sidebar picker row — the single place this markup is built. All settings
    pages render .rprof rows through here so shape changes happen once.
      name/meta/img/btns are raw HTML (escape dynamic text at the call site);
-     onclick is a JS call string; on = in use (green), sel = editing (accent). */
-function rprofRow({ name, meta = '', img = '', on = false, sel = false, onclick = '', btns = '' }) {
-    return `<div class="rprof${on ? ' on' : ''}${sel ? ' sel' : ''}"${onclick ? ` onclick="${onclick}"` : ''}>${img}` +
+     onclick is a JS call string; sel = the one selected state (accent). */
+function rprofRow({ name, meta = '', img = '', sel = false, onclick = '', btns = '' }) {
+    return `<div class="rprof${sel ? ' sel' : ''}"${onclick ? ` onclick="${onclick}"` : ''}>${img}` +
         `<div class="txt"><div class="n">${name}</div>${meta ? `<div class="m">${meta}</div>` : ''}</div>` +
         `${btns ? `<div class="btns" onclick="event.stopPropagation()">${btns}</div>` : ''}</div>`;
+}
+
+/* Sidebar skeleton — the single place #rsidebar's structure exists. Pages
+   declare an empty <aside id="rsidebar"></aside> and call initSidebar({...});
+   identical layout/size everywhere, only the data differs.
+     tabs:     [{id,label,onclick}]  kind-switcher bar, always top
+     sections: [{id,title?,wrap?}]   h3 title + <div id> list; wrap wraps
+                                    title+list in <div id=wrap> (for toggling)
+     buttons:  [{label,onclick,cls?}] full-width actions under the list
+     footer:   html string for the trailing <small> caption */
+function initSidebar({ tabs = [], sections = [], buttons = [], footer = '' } = {}) {
+    const sb = document.getElementById('rsidebar'); if (!sb) return;
+    sb.innerHTML =
+        (tabs.length ? `<div class="tabs">${tabs.map(t => `<button class="tab" id="${t.id}" onclick="${t.onclick}">${t.label}</button>`).join('')}</div>` : '') +
+        sections.map(s => `${s.wrap ? `<div id="${s.wrap}">` : ''}${s.title ? `<h3>${s.title}</h3>` : ''}<div id="${s.id}"></div>${s.wrap ? '</div>' : ''}`).join('') +
+        buttons.map(b => `<button${b.cls ? ` class="${b.cls}"` : ''} onclick="${b.onclick}">${b.label}</button>`).join('') +
+        (footer ? `<small>${footer}</small>` : '');
 }

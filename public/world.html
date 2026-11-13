@@ -5,11 +5,7 @@
 <link rel="stylesheet" href="layout.css">
 </head>
 <body>
-<aside id="rsidebar">
-  <h3>Books</h3>
-  <div id="list"></div>
-  <button onclick="newBookPanel()">+ New book</button>
-</aside>
+<aside id="rsidebar"></aside>
 <div id="content">
 <main>
   <div class="panel" id="editor" style="display:none">
@@ -30,6 +26,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const ROOM=Number(localStorage.mp_room||1);
 let me='';
+initSidebar({sections:[{title:'Books',id:'list'}],buttons:[{label:'+ New book',onclick:'newBookPanel()'}]});
 
 async function load(){
   const [{books,rooms},who]=await Promise.all([get('world/books'),get('me')]);

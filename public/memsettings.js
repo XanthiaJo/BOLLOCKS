@@ -5,6 +5,11 @@ const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringif
 const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.status===401?location='/login.html':r.json());
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+initSidebar({
+  sections:[{title:'Smart memory profiles',id:'plist'}],
+  buttons:[{label:'+ New profile',onclick:'newMP()'},{label:'Save current as profile…',cls:'sec',onclick:'saveAsProfile()'}],
+  footer:'Chats pick which smart-memory profile they follow in their chat settings or the <a href="/memories.html" style="color:var(--muted)">Memories</a> page\'s Smart tab. Select a profile to edit it.',
+});
 let ROOM=Number(localStorage.mp_room||1);
 let memProfiles=[];let defPrompt='';
 async function load(){
@@ -17,8 +22,8 @@ async function load(){
   const followed=(rm?.mem_profiles_id_fk)&&(memProfiles.find(x=>x.mem_profiles_id_pk===rm.mem_profiles_id_fk))||null;
   effRow=followed||memProfiles[0]||null;
   $('plist').innerHTML=(memProfiles||[]).map(p=>
-    rprofRow({name:`${esc(p.name)}${p.auto_mem?' <span class="badge">smart on</span>':''}`,
-      on:p.mem_profiles_id_pk===followed?.mem_profiles_id_pk,sel:p.mem_profiles_id_pk===selProf,
+    rprofRow({name:`${esc(p.name)}${p.mem_profiles_id_pk===followed?.mem_profiles_id_pk?' <span class="badge">followed</span>':''}${p.auto_mem?' <span class="badge">smart on</span>':''}`,
+      sel:p.mem_profiles_id_pk===selProf,
       onclick:`selectProf(${p.mem_profiles_id_pk})`,
       btns:`<button class="del" onclick="delMP(${p.mem_profiles_id_pk})">Delete</button>`})).join('')||'<small>No profiles yet — create one.</small>';
   if(selProf&&!memProfiles.some(x=>x.mem_profiles_id_pk===selProf))setSelProf(0); // stale saved id

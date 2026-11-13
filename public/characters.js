@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.addEventListener('mouseup',()=>drag=null);document.addEventListener('touchend',()=>drag=null);
 });
 
+initSidebar({sections:[{title:'Characters',id:'list'}],buttons:[{label:'+ New character',onclick:'newCard()'}]});
 let me='',allCards=[];
 async function load(){
   const [{cards},who]=await Promise.all([get('cards'),get('me')]);

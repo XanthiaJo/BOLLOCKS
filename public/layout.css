@@ -91,10 +91,9 @@ nav a.on{background:var(--accent);color:var(--white)}
 #rsidebar h3{margin:4px 0 8px;font-size:.85em;text-transform:uppercase;color:var(--dim);letter-spacing:.06em}
 /* sidebar picker row — one pattern for all selectable list items:
    .txt (name+caption) flexes, optional thumb <img> and .btns sit beside it.
-   .on = in use / active (green), .sel = selected for editing (accent) */
+   .sel = the one selected/viewed state (accent). "In use" is a .badge. */
 .rprof{display:flex;align-items:center;gap:8px;padding:7px 8px;border:1px solid var(--line);border-radius:5px;margin-bottom:6px;cursor:pointer}
 .rprof:hover{background:var(--surface2)}
-.rprof.on{border-color:var(--ok)}
 .rprof.sel{border-color:var(--accent);background:var(--accent-bg)}
 .rprof>.txt{flex:1;min-width:0}
 .rprof .n{font-weight:600;font-size:.9em}

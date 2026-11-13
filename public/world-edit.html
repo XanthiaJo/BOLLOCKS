@@ -13,10 +13,7 @@ textarea{min-height:80px;font-family:inherit}
 </style>
 </head>
 <body>
-<aside id="rsidebar">
-  <h3>Books</h3>
-  <div id="rbooks"></div>
-</aside>
+<aside id="rsidebar"></aside>
 <div id="content">
 <main>
   <a class="back" href="/world.html">← Books</a>
@@ -47,6 +44,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const BOOK=Number(new URLSearchParams(location.search).get('id')||0);
 const ROOM=Number(localStorage.mp_room||1);
+initSidebar({sections:[{title:'Books',id:'rbooks'}]});
 
 let allEntries=[];
 async function load(){
@@ -54,7 +52,7 @@ async function load(){
   const b=(books||[]).find(b=>b.id===BOOK);
   $('bookname').textContent=b?.name||('Book #'+BOOK);
   $('rbooks').innerHTML=(books||[]).map(x=>
-    rprofRow({name:esc(x.name),meta:`${x.cnt||0} entries`,on:x.id===BOOK,onclick:`location='/world-edit.html?id=${x.id}'`})
+    rprofRow({name:esc(x.name),meta:`${x.cnt||0} entries`,sel:x.id===BOOK,onclick:`location='/world-edit.html?id=${x.id}'`})
   ).join('')||'<small>No books</small>';
   $('list').innerHTML=allEntries.map((e,i)=>`
     <div class="card ent${e.enabled?'':' off'}">
