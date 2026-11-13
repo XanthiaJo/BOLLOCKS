@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS mem_profiles (
     mem_gen_budget INTEGER DEFAULT 2000,
     mem_unlimited INTEGER DEFAULT 0,
     mem_unified INTEGER DEFAULT 1,
-    mem_triggers INTEGER DEFAULT 0,
+    mem_triggers INTEGER DEFAULT 1,
     mem_autotune INTEGER DEFAULT 0,
     mem_refresh INTEGER DEFAULT 1,
     mem_activity INTEGER DEFAULT 0,
@@ -265,7 +265,7 @@ export function migrateSchema() {
                 mem_gen_budget INTEGER DEFAULT 2000,
                 mem_unlimited INTEGER DEFAULT 0,
                 mem_unified INTEGER DEFAULT 1,
-                mem_triggers INTEGER DEFAULT 0,
+                mem_triggers INTEGER DEFAULT 1,
                 mem_autotune INTEGER DEFAULT 0,
                 mem_refresh INTEGER DEFAULT 1,
                 mem_activity INTEGER DEFAULT 0,
@@ -296,7 +296,10 @@ export function migrateSchema() {
             'mem_autotune', 'mem_refresh', 'mem_activity', 'mem_extraction_profile_id'];
         for (const c of DROP) if (rcolsNow.includes(c)) db.exec(`ALTER TABLE rooms DROP COLUMN ${c}`);
     }
-    if (uv !== 4) db.exec('PRAGMA user_version=4');
+    // One-time: auto-tune is shelved (the UI control is disabled) — force it
+    // off on every profile so it stops running server-side too.
+    if (uv < 5) db.exec('UPDATE mem_profiles SET mem_autotune=0');
+    if (uv !== 5) db.exec('PRAGMA user_version=5');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
     if (!mecols.includes('source')) db.exec("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'manual'");

@@ -91,7 +91,7 @@
       <label class="row cbrow"><span class="lbl">Show activity indicator</span><span class="hint">Show a snackbar in the chat when the memory-writer runs — handy to see it's working.</span><input type="checkbox" id="set_activity" onchange="saveProf()"></label>
       <label class="row cbrow"><span class="lbl">Unified injection</span><span class="hint">On: memories reach the AI as one "Memories:" block. Off: split into "what happened here" (shared) and "what this character remembers" (personal).</span><input type="checkbox" id="set_unified" onchange="saveProf()"></label>
       <label class="row cbrow"><span class="lbl">Generate contextual triggers</span><span class="hint">The writer tags each memory with keywords; a memory is only added to the prompt when a keyword appeared in the last few messages. Cheaper prompts, occasionally misses context.</span><input type="checkbox" id="set_triggers" onchange="saveProf()"></label>
-      <label class="row cbrow"><span class="lbl">Auto-tune budgets</span><span class="hint">Automatically raise the injection token budget (below) if stored memories keep getting cut off.</span><input type="checkbox" id="set_autotune" onchange="saveProf()"></label>
+      <label class="row cbrow" style="opacity:.45;pointer-events:none"><span class="lbl">Auto-tune budgets</span><span class="hint">Automatically raise the injection token budget (below) if stored memories keep getting cut off. Temporarily disabled while the design gets reworked.</span><input type="checkbox" id="set_autotune" disabled onchange="saveProf()"></label>
       <div class="row"><span class="lbl" title="How often the injected memory block is rebuilt. 1 = every generation.">Injection refresh every N AI messages</span><span class="hint">Only add memories to the prompt every Nth reply — saves tokens on the replies in between. 1 = every reply (default).</span><input type="number" id="set_refresh" min="1" max="50" value="1" onchange="saveProf()" style="width:80px;display:inline-block"></div>
     </div>
 
@@ -359,7 +359,7 @@ async function toggleSmartAuto(on){const id=Number($('smart_mprof').value)||memP
 async function saveProf(){if(!selProf)return;await api('memprofiles/update',collectProf());load()}
 async function pickMProf(v){await api('room/memsettings',{room:ROOM,memProfile:Number(v)||0});load()}
 async function newMP(){const name=prompt('Name for the new memory profile:');if(!name)return;
-  const r=await api('memprofiles',{name,auto:0,every:10,budget:800,max:50,maxFact:50,maxEvent:50,maxRel:50,maxPref:50,extractionPrompt:'',contextThreshold:80,responseLength:2000,genBudget:2000,unlimited:0,unified:1,triggers:0,autotune:0,refresh:1,activity:0,profileId:0});
+  const r=await api('memprofiles',{name,auto:0,every:10,budget:800,max:50,maxFact:50,maxEvent:50,maxRel:50,maxPref:50,extractionPrompt:'',contextThreshold:80,responseLength:2000,genBudget:2000,unlimited:0,unified:1,triggers:1,autotune:0,refresh:1,activity:0,profileId:0});
   if(r?.id)setSelProf(r.id);load()}
 async function saveAsProfile(){const name=prompt('Name this memory profile:');if(!name)return;const r=effRow||{};
   const {id,...rest}=rowToProf(r);await api('memprofiles',{name,...rest});load()}
