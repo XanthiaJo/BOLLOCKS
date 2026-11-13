@@ -33,6 +33,7 @@ function md(src) {
 }
 
 function addMsg(m) {
+    if (document.querySelector(`li[data-mid="${m.id}"]`)) return; // already rendered (say() appends optimistically, SSE echoes it)
     const li = document.createElement('li');
     li.dataset.mid = m.id;
     li.className = 'mes' + (m.kind === 'ai' ? ' ai' : m.kind === 'sys' ? ' sys' : '');
@@ -88,6 +89,9 @@ async function loadRoom() {
         if (d.type === 'delete') document.querySelector(`li[data-mid="${d.id}"]`)?.remove();
         if (d.type === 'mem') mpFlashSaved(d.phase === 'done' ? (d.count ? `${d.count} new memories` : 'Memories updated') : 'Extracting memories…');
     };
+    // Network drops auto-retry, but an HTTP error response leaves the source
+    // CLOSED forever — reopen it or live updates silently stop until refresh.
+    es.onerror = () => { if (es.readyState === EventSource.CLOSED) setTimeout(loadRoom, 3000); };
     renderRooms();
     renderWorld();
     renderToks();
@@ -208,7 +212,8 @@ async function say() {
     const text = $('in').value.trim();
     if (!text) return;
     $('in').value = '';
-    await api('say', { room, cardId: persona?.id || null, text });
+    const m = await api('say', { room, cardId: persona?.id || null, text });
+    if (m?.id) addMsg(m); // show immediately — SSE may be a dead socket
 }
 async function gen() {
     const r = await api('generate', { room });
