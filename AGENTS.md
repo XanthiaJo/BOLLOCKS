@@ -95,6 +95,7 @@ Core tables:
 - Images/SSE can't send headers — `/api/avatar`, `/api/roombg` authenticate via the `mp_token` cookie; `EventSource` uses `?token=`. Don't re-add public exemptions for them.
 - Element IDs like `$('msgs')`, `$('members')` come from each page's markup; the `$` helper is defined per-page.
 - **Sidebar anatomy** — every settings page declares a bare `<aside id="rsidebar"></aside>` and calls `initSidebar({tabs, sections, buttons, footer})` (layout.js); the skeleton (tabs → h3 → list → buttons → caption) exists only there. Picker rows render through `rprofRow()` and style via `.rprof` (layout.css): `sel:` is the single accent "selected" state, "in use/active" is a `.badge` — don't hand-write row HTML or per-page highlight classes.
+- **Editor forms** — every editor panel starts with `<div class="edhead" data-save="fn" data-cancel="fn"><h3 id="edtitle"></h3></div>`; layout.js injects the shared `[Cancel][Save]` pair (wired lazily to the named globals). Saves are explicit — never `onchange` auto-save. Cancel convention: editing → reset fields to the loaded item; new/draft → discard and close/clear.
 - Logout: nav link → `GET /api/logout` (deletes session server-side + clears cookie + redirects); the click handler clears `localStorage.mp_token`.
 
 ## Tech stack and runtime

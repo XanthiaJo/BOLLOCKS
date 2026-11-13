@@ -133,3 +133,16 @@ function initSidebar({ tabs = [], sections = [], buttons = [], footer = '' } = {
         buttons.map(b => `<button${b.cls ? ` class="${b.cls}"` : ''} onclick="${b.onclick}">${b.label}</button>`).join('') +
         (footer ? `<small>${footer}</small>` : '');
 }
+
+/* Editor form header — every editor's first child is
+   <div class="edhead" data-save="fnName" data-cancel="fnName"><h3 id="…">…</h3></div>
+   and this injects the shared [Cancel][Save] pair wired to those globals.
+   Cancel convention: editing → reset fields to the loaded item; new → discard. */
+document.querySelectorAll('.edhead[data-save]').forEach(h => {
+    const bar = document.createElement('span'); bar.className = 'edbtns';
+    for (const [fn, label, cls] of [[h.dataset.cancel, 'Cancel', 'sec'], [h.dataset.save, 'Save', '']]) {
+        const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls;
+        b.onclick = () => window[fn]?.(); bar.appendChild(b);
+    }
+    h.appendChild(bar);
+});

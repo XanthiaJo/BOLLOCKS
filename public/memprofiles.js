@@ -6,7 +6,7 @@ const BLANK_PROF={name:'',auto_mem:0,mem_every:10,mem_budget:800,mem_max:50,mem_
 function toggleDefPrompt(a){const p=$('def_prompt');const show=p.style.display==='none';p.style.display=show?'block':'none';if(show)p.textContent=defPrompt||'(built-in prompt unavailable)';a.textContent=show?'hide it':'show it';}
 function setSelProf(id){selProf=id;localStorage.mp_memprof=id;}
 function fillProf(p){
-  $('pf_title').textContent='Edit profile: '+p.name;$('pf_name').value=p.name;
+  $('edtitle').textContent='Edit profile: '+p.name;$('pf_name').value=p.name;
   $('set_every').value=p.mem_every||10;$('set_budget').value=p.mem_budget||800;$('set_max').value=p.mem_max||50;
   $('set_max_fact').value=p.mem_max_fact||15;$('set_max_event').value=p.mem_max_event||15;$('set_max_rel').value=p.mem_max_relationship||15;$('set_max_pref').value=p.mem_max_preference||15;
   $('set_prompt').value=p.mem_extraction_prompt||'';$('set_ctx').value=p.mem_context_threshold||80;$('set_resplen').value=p.mem_response_length||2000;
@@ -15,11 +15,11 @@ function fillProf(p){
   $('set_profile').value=p.mem_extraction_profile_id||0;
 }
 function selectProf(id){setSelProf(id);load()}
-function deselectProf(){setSelProf(0);load()}
+function cancelProf(){if(selProf>0){const p=memProfiles.find(x=>x.mem_profiles_id_pk===selProf);if(p)fillProf(p);return}setSelProf(0);load()}
 function rowToProf(p){return {id:p.mem_profiles_id_pk,name:p.name,auto:!!p.auto_mem,every:p.mem_every||10,budget:p.mem_budget||800,max:p.mem_max||50,maxFact:p.mem_max_fact||15,maxEvent:p.mem_max_event||15,maxRel:p.mem_max_relationship||15,maxPref:p.mem_max_preference||15,extractionPrompt:p.mem_extraction_prompt||'',contextThreshold:p.mem_context_threshold||80,responseLength:p.mem_response_length||2000,profileId:p.mem_extraction_profile_id||0,genBudget:p.mem_gen_budget||2000,unlimited:!!p.mem_unlimited,unified:(p.mem_unified??1)?1:0,triggers:!!p.mem_triggers,autotune:!!p.mem_autotune,refresh:p.mem_refresh||1,activity:!!p.mem_activity}}
 function collectProf(){const p=memProfiles.find(x=>x.mem_profiles_id_pk===selProf);const base=p?rowToProf(p):{name:'Profile'};const gb=Number($('set_genbudget').value)||0,unl=gb<=-1;return {...base,id:selProf,name:$('pf_name').value.trim()||base.name,extractionPrompt:$('set_prompt').value,contextThreshold:Number($('set_ctx').value)||80,responseLength:Number($('set_resplen').value)||2000,profileId:$('set_profile').value?Number($('set_profile').value):0,genBudget:unl?-1:(gb||2000),unlimited:unl?1:0,unified:$('set_unified').checked?1:0,triggers:$('set_triggers').checked?1:0,autotune:$('set_autotune').checked?1:0,refresh:Number($('set_refresh').value)||1,activity:$('set_activity').checked?1:0,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||800,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0}}
 async function saveProf(){
-  if(selProf===-1){const r=await api('memprofiles',collectProf());setSelProf(r?.id||0);load();return;}
+  if(selProf===-1){const {id:_id,...body}=collectProf();const r=await api('memprofiles',body);setSelProf(r?.id||0);load();return;}
   if(!selProf)return;await api('memprofiles/update',collectProf());load()}
 function newMP(){setSelProf(-1);load()}
 async function saveAsProfile(){const name=prompt('Name this memory profile:');if(!name)return;const r=effRow||{};

@@ -31,6 +31,6 @@ async function load(){
   if(selProf>0&&!memProfiles.some(x=>x.mem_profiles_id_pk===selProf))setSelProf(0); // stale saved id
   const sp=selProf>0&&memProfiles.find(x=>x.mem_profiles_id_pk===selProf)||null;
   $('profpanel').style.display=(sp||selProf===-1)?'block':'none';
-  if(sp)fillProf(sp);else if(selProf===-1){fillProf(BLANK_PROF);$('pf_title').textContent='New profile';}
+  if(sp)fillProf(sp);else if(selProf===-1){fillProf(BLANK_PROF);$('edtitle').textContent='New profile';}
   if(!booted){booted=true;if(!selProf)newMP();} // landing on the page opens the new form
 }
