@@ -12,7 +12,12 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 
 | File | Purpose | Key exports / sections |
 |---|---|---|
-| `server.js` | The entire HTTP layer: route table, auth, SSE fan-out, static file serving | `router` object (`"METHOD /path"` → handler); `auth(req)`; `push(roomId, evt)` SSE broadcast; `roomOwnerOnly()` guard; request-gate + static-file section at the bottom of the file |
+| `server.js` | Thin HTTP shell: merges route tables, request gates, static file serving | `router` merge of `src/routes/*`; unauthenticated-API 401 gate; static-file gate |
+| `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona/user admin), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats) | |
+| `util.js` | Request/response helpers | `send`, `readBody`, `cookieToken`, `auth(req)` |
+| `access.js` | Permission helpers for route handlers | `roomOwnerOnly`, `roomMember`, `memoryShared`, `isAdmin`, `worldEntryOk` |
+| `sse.js` | Server-Sent Events fan-out | `streams` map; `push(roomId, evt)` |
+| `files.js` | Filesystem locations | `PUB`, `CARDS_DIR`, `BG_DIR` (created on import) |
 | `db.js` | SQLite (`node:sqlite` `DatabaseSync`) at `data/app.db`: schema, migrations, auth/session helpers, seed data | `db` (shared handle); `hash`/`verify` (scrypt); `createUser`/`login`/`userForToken`; `activeProfile(userId)`; `MSG_SQL` (canonical messages SELECT); `migrateSchema()`; `migrateProfiles()`; `seed()` |
 | `generate.js` | LLM integration + prompt assembly (server-side only; API keys never reach clients) | `generateReply(roomId, card)` — builds system prompt (card fields + world entries + memories + history), calls `{apiUrl}/chat/completions`; `maybeSummarize(roomId)` — smart-memory extraction; `memProfileFor(room)`; `genStats` (per-room last-request stats for the prompt inspector) |
 | `pngcard.js` | SillyTavern character-card import | `extractCardJson(pngBuf)` (tEXt `chara` chunk); `normalizeCard(raw)` (ST v1/v2 → our columns) |
@@ -38,7 +43,9 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | `data/` | Runtime state, gitignored: `app.db` (SQLite), `cards/*.png` (avatars), `bg/*.png` (room backgrounds). Never commit it |
 | `scripts/` | Node ESM maintenance scripts run manually: `backfill-triggers.mjs` (LLM-fill memory trigger keywords on a live server), `pull-st-connection.mjs` (import a SillyTavern host's API connection over ssh) |
 | `docs/memories.md` | Design doc for the memory system (kinds, ownership rules, extraction flow) |
-| `.github/workflows/` | `pr-autofill.yml` (commit-list above PR body), `pr-checks.yml` (lint), `beta.yml`/`release.yml` (manual releases via `Box-of-Dragons/StructuredChaos`) |
+| `docs/tests.md` | Checklist of exactly what the test suite covers + known gaps it has surfaced |
+| `test/` | `node:test` suites run by `npm test`: `api-contract.test.js` (static frontend↔route checks), `upgrade.test.js` (migration/upgrade), one file per API domain (`auth`, `profile`, `rooms`, `access`, `cards`, `messages`, `world`, `memories`, `profiles`, `generate`, `users`), `pngcard.test.js` (card parser units), `helpers.js` (shared `boot()`/`mockLLM()`/`pub`/`asUser` harness) |
+| `.github/workflows/` | `pr-autofill.yml` (commit-list above PR body), `pr-checks.yml` (lint + `npm test`), `beta.yml`/`release.yml` (manual releases via `Box-of-Dragons/StructuredChaos`) |
 
 ## Request lifecycle (server.js)
 
@@ -48,7 +55,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 4. **Static gate:** no session → every file except `login.html` redirects (302) to `/login.html`. Files are confined to `PUB` via `file.startsWith(PUB + path.sep)`.
 5. SSE: `GET /api/stream?room=N` registers `res` in `streams`; `push()` fans `data:` events to a room. Event types: `{type:'message'}`, `{type:'delete'}`.
 
-Route-handler conventions: updates go through `/api/<thing>/update|delete` POST endpoints (no PUT/DELETE methods); permission checks use `roomOwnerOnly(rid, u)` or `card.owner_users_id_fk === u.users_id_pk`; the `u` arg may be undefined for public routes — don't dereference it unguarded.
+Route-handler conventions: routes are `export default { 'METHOD /path': handler }` maps in `src/routes/<domain>.js`; updates go through `/api/<thing>/update|delete` POST endpoints (no PUT/DELETE methods). Permission helpers live in `src/access.js`: `roomOwnerOnly(rid, u)` for room-admin routes, `roomMember(rid, u)` for anything reading/posting room content, `memoryShared(id, u)` for memory mutations, `worldEntryOk(id, u)` for lorebook entries, `isAdmin(u)` for user admin (first registered user is the site admin). Object ownership uses `…_users_id_fk === u.users_id_pk`. The `u` arg may be undefined for public routes — don't dereference it unguarded.
 
 ## Data model
 
@@ -121,9 +128,14 @@ Seeded dev users (fresh DB, `seed()`): `creamms`, `karima`, `blake`, `entropy75`
 
 - Use **Conventional Commits** where practical (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`, `test:`, `perf:`, `style:`; `!`/`BREAKING` for breaking changes). CI/release automation relies on commit conventions.
 - **Never push directly to `dev`, `beta`, or `master`.** All changes go on a feature branch and land via PR — even docs or one-line fixes. Branch flow and release automation are coordinated with `StructuredChaos` workflows (`dev` → beta/release processes; see workflow files). Do not change release/beta workflow behavior without understanding that integration.
-- PRs: `pr-autofill.yml` refreshes an autofilled commit list above any manual PR description (without changing the PR title); `pr-checks.yml` runs lint on PR updates. Ensure `npm run lint` passes before opening/updating a PR.
+- PRs: `pr-autofill.yml` refreshes an autofilled commit list above any manual PR description (without changing the PR title); `pr-checks.yml` runs lint and `npm test` on PR updates. Ensure both pass before opening/updating a PR.
 
 ## Validation
 
-- There is no automated test suite currently. Run `npm run lint` for static checks.
+- `npm run lint` for static checks; `npm test` (`node --test`, no extra deps) runs `test/`:
+  - `api-contract.test.js` — every `api()`/`get()` call in `public/` must hit an existing route, and every field it sends must be read by that handler (`b.<field>`). Add a field to the handler or drop it from the page; don't send dead fields.
+  - `upgrade.test.js` — populates a DB through the API using the base branch plus `origin/dev`/`beta`/`master` (override with `UPGRADE_FROM="ref ref"`), boots this checkout on it twice, and checks no rows/links were lost, `integrity_check`/`foreign_key_check` are clean, no FK points at a renamed column, and the second boot changes nothing. Run `git fetch origin dev beta master` first locally. When you add a table or link, extend `populate()` so it gets covered.
+  - One functional suite per API domain (`auth`, `profile`, `rooms`, `access`, `cards`, `messages`, `world`, `memories`, `profiles`, `generate`, `users`) — each boots its own real server + a mock OpenAI endpoint where needed: auth/session transports, request gating, rooms/members permissions, cards, memories, world, profiles, SSE fan-out, generation + trigger policies.
+  - `pngcard.test.js` — unit tests for `extractCardJson`/`normalizeCard`.
+  - New tests should reuse the harness in `test/helpers.js` (`boot` a real server on an isolated `BOLLOCKS_DATA`, `mockLLM`, `pngCardBuffer`, `rawPath`, `until`, `pub`, `asUser`). docs/tests.md lists what's covered and the known gaps found so far.
 - For behavior changes, manually verify the affected API/pages against a local server when feasible (e.g. `PORT=8123 node src/server.js` + `curl`; auth flows can be exercised with `-c`/`-b` cookie jars).

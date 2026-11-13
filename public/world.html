@@ -56,7 +56,7 @@ async function newBook(){
 async function delBook(id){if(confirm('Delete this book and all its entries?')){await api('world/books/delete',{id});load()}}
 async function importBook(input){
   const f=input.files[0];input.value='';if(!f)return;
-  const r=await api('world/import',{room:ROOM,book:await f.text(),name:f.name.replace(/\.json$/,'')});
+  const r=await api('world/import',{book:await f.text(),name:f.name.replace(/\.json$/,'')});
   if(r.error)return alert(r.error);
   location='/world-edit.html?id='+r.id;
 }

@@ -25,3 +25,33 @@ jobs:
 
       - name: Run lint
         run: npm run lint
+
+  test:
+    name: Upgrade + API contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # test/upgrade.test.js builds a DB with the base and deployed branches,
+      # then migrates it with this PR's code.
+      - name: Fetch upgrade-from branches
+        run: |
+          for b in $(printf '%s\n' "$BASE_REF" dev beta master | sort -u); do
+            git fetch --no-tags --depth=1 origin "+refs/heads/$b:refs/remotes/origin/$b" || echo "::warning::could not fetch $b"
+          done
+        env:
+          BASE_REF: ${{ github.base_ref }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+        env:
+          BASE_REF: ${{ github.base_ref }}
