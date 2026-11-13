@@ -8,8 +8,6 @@ textarea{min-height:80px;font-family:inherit}
 .ent.off{opacity:.5}
 .ent .comment{font-weight:700}
 .ent .keys{color:var(--ai);font-size:.85em;font-weight:600;margin-top:2px}
-.bvhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
-.bvhead h2{margin:0}
 </style>
 </head>
 <body>
@@ -27,11 +25,11 @@ textarea{min-height:80px;font-family:inherit}
     <input type="file" id="imp" accept=".json" style="display:none" onchange="importBook(this)">
   </div>
   <div id="bookView" style="display:none">
-    <div class="bvhead">
+    <div class="cvhead">
       <h2 id="bname"></h2>
-      <span style="display:flex;gap:6px">
+      <span class="cvbtns">
         <button class="sec" onclick="renameBook()">Rename book</button>
-        <button onclick="newEntry()">+ New entry</button>
+        <button class="act" onclick="newEntry()">+ New entry</button>
       </span>
     </div>
     <div class="panel" id="editor" style="display:none"></div>

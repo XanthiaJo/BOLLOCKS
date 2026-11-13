@@ -24,7 +24,8 @@ function renderList(){
   if($('cardssec')) $('cardssec').style.display=curTab==='smart'?'none':'block';
   const sb=$('smartbar'); if(sb) sb.style.display=curTab==='smart'?'block':'none';
   const mems = allMems.filter(m=>(m.origin||m.source||'user')===curTab);
-  $('addbox').style.display=curTab==='user'?'block':'none';
+  $('btn_new').style.display=curTab==='user'?'':'none';
+  if(curTab!=='user')$('newbox').style.display='none';
   // Group by type.
   const groups={};
   for(const m of mems){ const t=m.type||'fact'; (groups[t]=groups[t]||[]).push(m); }
@@ -106,7 +107,9 @@ async function load(){
 function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') curTab='user';load()}
 async function toggleSmartAuto(on){const id=Number($('smart_mprof').value);if(!id)return;const p=memProfiles.find(x=>x.mem_profiles_id_pk===id);if(!p)return;await api('memprofiles/update',{...rowToProf(p),auto:on?1:0});load()}
 async function pickMProf(v){await api('room/memsettings',{room:ROOM,memProfile:Number(v)||0});load()}
-async function add(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t,type:$('newtype').value});load()}
+function newMem(){$('newbox').style.display='block';$('newmem').focus()}
+function cancelNew(){$('newmem').value='';$('newbox').style.display='none'}
+async function saveNew(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t,type:$('newtype').value});load()}
 async function toSmart(id){await api('memories/update',{id,origin:'smart'});load()}
 async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
 let permPickId=0;
