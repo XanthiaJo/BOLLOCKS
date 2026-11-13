@@ -16,30 +16,20 @@ async function load(){
   $('t_inj').classList.toggle('on',curTab==='inj');
   if(curTab==='inj'){
     const r=await get('promptprofiles');injProfs=r?.profiles||[];promptBlocks=r?.promptBlocks||[];
-    $('list').innerHTML=injProfs.map(p=>`
-      <div class="rprof${p.active?' on':''}" onclick="editInj(${p.prompt_profiles_id_pk})">
-        <div class="txt">
-          <div class="n">${esc(p.name)}${p.active?'<span class="badge">active</span>':''}</div>
-          <div class="m">${p.prompt_order?'custom order':'built-in order'}</div>
-        </div>
-        <div class="btns" onclick="event.stopPropagation()">
-          ${p.active?'':`<button class="act" onclick="activate(${p.prompt_profiles_id_pk})">Make active</button>`}
-          <button class="del" onclick="del(${p.prompt_profiles_id_pk})">Delete</button>
-        </div>
-      </div>`).join('')||'<small>No injection profiles yet.</small>';
+    $('list').innerHTML=injProfs.map(p=>rprofRow({
+      name:`${esc(p.name)}${p.active?'<span class="badge">active</span>':''}`,
+      meta:p.prompt_order?'custom order':'built-in order',
+      on:p.active,onclick:`editInj(${p.prompt_profiles_id_pk})`,
+      btns:`${p.active?'':`<button class="act" onclick="activate(${p.prompt_profiles_id_pk})">Make active</button>`}<button class="del" onclick="del(${p.prompt_profiles_id_pk})">Delete</button>`,
+    })).join('')||'<small>No injection profiles yet.</small>';
   } else {
     const {profiles}=await get('profiles');allProfs=profiles||[];
-    $('list').innerHTML=allProfs.map(p=>`
-      <div class="rprof${p.active?' on':''}" onclick="edit(${p.id})">
-        <div class="txt">
-          <div class="n">${esc(p.name)}${p.active?'<span class="badge">active</span>':''}</div>
-          <div class="m">${esc(p.api_url)} · ${esc(p.model)} · ${p.has_key?'key set':'no key'}</div>
-        </div>
-        <div class="btns" onclick="event.stopPropagation()">
-          ${p.active?'':`<button class="act" onclick="activate(${p.id})">Make active</button>`}
-          <button class="del" onclick="del(${p.id})">Delete</button>
-        </div>
-      </div>`).join('')||'<small>No profiles yet.</small>';
+    $('list').innerHTML=allProfs.map(p=>rprofRow({
+      name:`${esc(p.name)}${p.active?'<span class="badge">active</span>':''}`,
+      meta:`${esc(p.api_url)} · ${esc(p.model)} · ${p.has_key?'key set':'no key'}`,
+      on:p.active,onclick:`edit(${p.id})`,
+      btns:`${p.active?'':`<button class="act" onclick="activate(${p.id})">Make active</button>`}<button class="del" onclick="del(${p.id})">Delete</button>`,
+    })).join('')||'<small>No profiles yet.</small>';
   }
 }
 

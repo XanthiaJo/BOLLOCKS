@@ -33,7 +33,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | `world-edit.html` | Entry editor for one book (`?id=<book>`): keys, secondary keys, content, constant/enabled, order |
 | `memories.html` + `memories.js` | Memory browser: Permanent/Smart tabs, sidebar scope picker (room-shared or per-character; Smart stays room-scoped for now). `memsettings.html` + `memsettings.js` | Smart memory page (nav: "Smart memory"): profile list in sidebar → editor panel (`class="panel settings"` accordions). `memprofiles.js` | Shared profile-editor code loaded by both pages — it ends by calling the page's own `load()`. All styles live in `layout.css` |
 | `connection.html` + `connection.js` | Profiles page, tabbed: Connection (API profiles — OpenAI-compatible url/model/key/headers/context) and Injection (prompt_profiles — prompt-assembly presets incl. prompt order) |
-| `layout.js` | Shared shell injected into every page: top nav + sidebar toggles + version badge. Also `mpOpenEditor`/`mpCloseEditor`/`mpFlashSaved` and `activateProf` helpers |
+| `layout.js` | Shared shell injected into every page: top nav + sidebar toggles + version badge. Helpers: `mpOpenEditor`/`mpCloseEditor`/`mpFlashSaved`, `activateProf`, and `rprofRow()` — the single builder for sidebar picker rows (`.rprof` in layout.css is its style) |
 | `layout.css` | Shared styles for the shell and pages |
 
 ### Everything else

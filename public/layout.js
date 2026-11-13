@@ -103,3 +103,13 @@ function mpFlashSaved(msg = 'Saved') {
     clearTimeout(t._t);
     t._t = setTimeout(() => t.classList.remove('show'), 1600);
 }
+
+/* Sidebar picker row — the single place this markup is built. All settings
+   pages render .rprof rows through here so shape changes happen once.
+     name/meta/img/btns are raw HTML (escape dynamic text at the call site);
+     onclick is a JS call string; on = in use (green), sel = editing (accent). */
+function rprofRow({ name, meta = '', img = '', on = false, sel = false, onclick = '', btns = '' }) {
+    return `<div class="rprof${on ? ' on' : ''}${sel ? ' sel' : ''}"${onclick ? ` onclick="${onclick}"` : ''}>${img}` +
+        `<div class="txt"><div class="n">${name}</div>${meta ? `<div class="m">${meta}</div>` : ''}</div>` +
+        `${btns ? `<div class="btns" onclick="event.stopPropagation()">${btns}</div>` : ''}</div>`;
+}

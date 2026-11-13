@@ -37,15 +37,10 @@ async function load(){
   $('list').innerHTML=(books||[]).map(b=>{
     const usedIn=rooms.filter(r=>r.world_books_id_fk===b.id).map(r=>r.name);
     const mine=!b.owner||b.owner===me;
-    return `
-    <div class="rprof" onclick="location='/world-edit.html?id=${b.id}'">
-      <div class="txt">
-        <div class="n">${esc(b.name)}</div>
-        <div class="m">${b.cnt||0} entries · ${esc(b.owner||'shared')}${usedIn.length?' · in: '+esc(usedIn.join(', ')):''}
-          ${mine?` <a href="#" onclick="event.stopPropagation();delBook(${b.id});return false" style="color:var(--err)">✕</a>`:''}
-        </div>
-      </div>
-    </div>`;
+    return rprofRow({name:esc(b.name),
+      meta:`${b.cnt||0} entries · ${esc(b.owner||'shared')}${usedIn.length?' · in: '+esc(usedIn.join(', ')):''}` +
+        `${mine?` <a href="#" onclick="event.stopPropagation();delBook(${b.id});return false" style="color:var(--err)">✕</a>`:''}`,
+      onclick:`location='/world-edit.html?id=${b.id}'`});
   }).join('')||'<small>No books yet — create one above or import an ST export.</small>';
 }
 
