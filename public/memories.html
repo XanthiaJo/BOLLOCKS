@@ -85,9 +85,7 @@
 
     <h4>Memory LLM</h4>
     <span class="hint">The "memory-writer": a second AI that reads new chat and decides what to store. These settings control how it runs.</span>
-    <div class="lbl" title="Which API profile runs memory extraction — smart memories stay off until the room owner picks one.">Extraction profile (required)</div>
-    <span class="hint">Which API connection the memory-writer uses (set up under Connection). Smart memory can't run until you pick one — a small/cheap model is usually plenty.</span>
-    <select id="set_profile" onchange="saveProf()" style="width:220px"></select>
+    <div class="row"><span class="lbl" title="Which API profile runs memory extraction — smart memories stay off until the room owner picks one.">Extraction profile (required)</span><span class="hint">Which API connection the memory-writer uses (set up under Connection). Smart memory can't run until you pick one — a small/cheap model is usually plenty.</span><select id="set_profile" onchange="saveProf()" style="width:220px"></select></div>
     <div>
       <div class="row"><span class="lbl" title="Max tokens the memory LLM may use per extraction call. Unlimited (-1) warns it may be slow/costly.">Generation budget (tokens)</span><span class="hint">How much the memory-writer may write per run. ~4 characters ≈ 1 token. Default: 2000.</span><input type="number" id="set_genbudget" min="256" max="32768" value="2000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
       <label class="row cbrow"><span class="lbl">Unlimited (-1)</span><span class="hint">No cap on the writer's reply. Overrides the budget above — can be slow or expensive on paid APIs.</span><input type="checkbox" id="set_unlimited" onchange="saveProf()"></label>
