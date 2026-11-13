@@ -27,16 +27,26 @@ const MEM_PROFILE_FIELDS = ['auto_mem', 'mem_every', 'mem_budget', 'mem_max', 'm
 // see the assembly comment in generateReply). A memory profile can reorder
 // them via mem_prompt_order (JSON array of keys); NULL means this order.
 export const PROMPT_BLOCKS = [
-    { key: 'main', label: 'Main prompt' },
-    { key: 'description', label: 'Card description' },
-    { key: 'personality', label: 'Card personality' },
-    { key: 'scenario', label: 'Scenario' },
-    { key: 'examples', label: 'Example dialogue' },
-    { key: 'roster', label: 'Other characters' },
-    { key: 'world', label: 'World info' },
-    { key: 'memories', label: 'Memories' },
-    { key: 'instructions', label: 'Instructions' },
-    { key: 'history', label: 'Chat history' },
+    { key: 'main', label: 'Main prompt',
+        example: 'You are Aria.' },
+    { key: 'description', label: 'Card description',
+        example: 'Description:\nAria is a wandering cartographer with a stolen map case.' },
+    { key: 'personality', label: 'Card personality',
+        example: 'Personality:\ncurious, blunt, secretly kind' },
+    { key: 'scenario', label: 'Scenario',
+        example: 'Scenario:\nThe party camps at the edge of the drowned forest.' },
+    { key: 'examples', label: 'Example dialogue',
+        example: 'Example dialogue:\nAria: We were never here.\n{{user}}: Says who?' },
+    { key: 'roster', label: 'Other characters',
+        example: 'Also present in the scene:\nBlake: a retired knight who owes Aria money' },
+    { key: 'world', label: 'World info',
+        example: 'World info:\nThe drowned forest floods every new moon.' },
+    { key: 'memories', label: 'Memories',
+        example: 'Memories:\n- [fact] Aria distrusts the harbor guild.\n- [event] Blake offered to carry the map case.' },
+    { key: 'instructions', label: 'Instructions',
+        example: "You are Aria and ONLY Aria — an NPC in a shared roleplay. The other characters listed are separate people speaking for themselves; do NOT speak for them or imitate them. Write ONLY Aria's next message." },
+    { key: 'history', label: 'Chat history',
+        example: 'creamms: We should leave before dawn.\nAria: The tide says otherwise.' },
 ];
 
 /** Effective memory settings for a room: always the memory profile it follows

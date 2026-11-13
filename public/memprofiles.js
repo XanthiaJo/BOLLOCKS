@@ -20,11 +20,16 @@ function orderFrom(raw){const keys=promptBlocks.map(b=>b.key);let a=null;try{a=J
   if(!Array.isArray(a))return keys;
   a=a.filter(k=>keys.includes(k));
   return [...a,...keys.filter(k=>!a.includes(k))];}
+const openBlocks=new Set();
+function toggleBlock(k){openBlocks.has(k)?openBlocks.delete(k):openBlocks.add(k);renderOrder()}
 function renderOrder(){const el=$('order_list');if(!el)return;
-  el.innerHTML=orderKeys.map((k,i)=>{const b=promptBlocks.find(x=>x.key===k);
-    return `<li style="display:flex;align-items:center;gap:6px;padding:2px 4px 2px 8px;background:var(--input);border-radius:4px;margin-bottom:3px"><span style="flex:1;font-size:.9em">${b?b.label:k}</span>`+
+  el.innerHTML=orderKeys.map((k,i)=>{const b=promptBlocks.find(x=>x.key===k);const open=openBlocks.has(k);
+    return `<li style="padding:2px 4px 2px 8px;background:var(--input);border-radius:4px;margin-bottom:3px"><div style="display:flex;align-items:center;gap:6px">`+
+      `<span style="flex:1;font-size:.9em;cursor:pointer" onclick="toggleBlock('${k}')">${open?'▾':'▸'} ${b?b.label:k}</span>`+
       `<button onclick="moveOrder(${i},-1)"${i?'':' disabled'}>&uarr;</button>`+
-      `<button onclick="moveOrder(${i},1)"${i<orderKeys.length-1?'':' disabled'}>&darr;</button></li>`}).join('')}
+      `<button onclick="moveOrder(${i},1)"${i<orderKeys.length-1?'':' disabled'}>&darr;</button></div>`+
+      (open?`<pre style="margin:4px 0 2px;padding-left:6px;border-left:2px solid var(--line2);font-size:.78em;color:var(--dim);white-space:pre-wrap">${esc(b?.example||'(no example)')}</pre>`:'')+
+      `</li>`}).join('')}
 async function moveOrder(i,d){const j=i+d;if(j<0||j>=orderKeys.length)return;
   [orderKeys[i],orderKeys[j]]=[orderKeys[j],orderKeys[i]];renderOrder();await saveProf()}
 function selectProf(id){setSelProf(id);load()}
