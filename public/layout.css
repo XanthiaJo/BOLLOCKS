@@ -125,7 +125,7 @@ button.imp{background:var(--violet)}
 #cardssec{margin-top:14px}
 small{color:var(--dim)}
 /* shared card theme — item lists + editor panels */
-.card{display:grid;grid-template-columns:1fr auto;gap:10px;padding:12px;border:1px solid var(--line);border-radius:6px;margin-bottom:10px;background:var(--surface)}
+.card{display:grid;grid-template-columns:1fr 92px;gap:10px;padding:12px;border:1px solid var(--line);border-radius:6px;margin-bottom:10px;background:var(--surface)}
 .card .name{font-weight:700}
 .card .desc{color:var(--desc);font-size:.9em;white-space:pre-wrap;margin-top:4px}
 .card .meta{color:var(--faint);font-size:.8em;margin-top:4px}
