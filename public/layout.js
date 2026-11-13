@@ -151,3 +151,15 @@ function initEdHeads(root = document) {
     });
 }
 initEdHeads();
+
+/* In-place edit helpers — preserve unsaved input across a list re-render:
+   const d = draftFields(['a','b']); list.innerHTML = …; fillFields(d);
+   Keyed by element id; checkboxes round-trip via .checked. */
+function draftFields(ids) {
+    const d = {};
+    for (const i of ids) { const el = document.getElementById(i); if (el) d[i] = el.type === 'checkbox' ? el.checked : el.value; }
+    return Object.keys(d).length ? d : null;
+}
+function fillFields(d) {
+    for (const [i, v] of Object.entries(d || {})) { const el = document.getElementById(i); if (!el) continue; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; }
+}

@@ -41,6 +41,8 @@ export default [
         initSidebar: "readonly",
         initEdHeads: "readonly",
         rprofRow: "readonly",
+        draftFields: "readonly",
+        fillFields: "readonly",
       },
     },
     rules: {

@@ -28,6 +28,7 @@ function renderList(){
   // Group by type.
   const groups={};
   for(const m of mems){ const t=m.type||'fact'; (groups[t]=groups[t]||[]).push(m); }
+  const draft=editId?draftFields(['em_content_'+editId,'em_type_'+editId,'em_scope_'+editId,'em_trig_'+editId]):null;
   const html=TYPE_ORDER.filter(t=>groups[t]?.length).map(t=>`
     <h4 style="margin:12px 0 4px;color:var(--dim);font-size:.85em;text-transform:uppercase;letter-spacing:.04em">${esc(t)} (${groups[t].length})</h4>
     ${groups[t].map(m=>editId===m.id?editForm(m):`
@@ -38,26 +39,28 @@ function renderList(){
     </div>
     ${permPicker(m)}</div>`).join('')}`).join('');
   $('list').innerHTML=html||`<small>No ${curTab==='smart'?'smart':'permanent'} memories yet.</small>`;
+  initEdHeads($('list'));if(draft&&editId)fillFields(draft);
 }
 
 let roomCards=[];let memProfiles=[];let editId=0;
-function editMem(id){editId=editId===id?0:id;renderList()}
+function editMem(id){editId=editId===id?0:id;renderList();document.querySelector('.card.editing')?.scrollIntoView({behavior:'smooth',block:'nearest'})}
 function editForm(m){
   const types=['fact','event','relationship','preference'];
   const scopeOpts=`<option value="0"${!m.cards_id_fk?' selected':''}>${esc(roomName||'This chat')} (shared)</option>`+
     roomCards.map(c=>`<option value="${c.id}"${m.cards_id_fk===c.id?' selected':''}>${esc(c.name)}</option>`).join('');
-  return `<div class="card" style="border-color:var(--accent)">
+  return `<div class="card editing">
+    <div class="edhead" data-save="saveEdit" data-cancel="cancelEdit"><h3>Edit memory #${m.id}</h3></div>
     <textarea id="em_content_${m.id}" style="min-height:60px;width:100%">${esc(m.content)}</textarea>
     <div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap">
       <select id="em_type_${m.id}" style="width:auto">${types.map(t=>`<option${t===(m.type||'fact')?' selected':''}>${t}</option>`).join('')}</select>
       <select id="em_scope_${m.id}" style="width:auto">${scopeOpts}</select>
     </div>
     <input id="em_trig_${m.id}" placeholder="trigger keywords" value="${esc(m.triggers||'')}" style="width:100%;margin-top:6px;font-size:.85em">
-    <div class="btns" style="margin-top:6px"><button onclick="saveEdit(${m.id})">Save</button><button onclick="editMem(${m.id})">Cancel</button></div>
   </div>`;
 }
-async function saveEdit(id){
-  const m=allMems.find(x=>x.id===id);if(!m)return;
+function cancelEdit(){editId=0;renderList()}
+async function saveEdit(){
+  const id=editId;const m=allMems.find(x=>x.id===id);if(!m)return;
   await api('memories/update',{id,content:$('em_content_'+id).value,type:$('em_type_'+id).value,triggers:$('em_trig_'+id).value});
   const scope=Number($('em_scope_'+id).value)||0;
   if(scope!==(m.cards_id_fk||0)) await api('memories/move',{id,cardId:scope||null});
@@ -110,7 +113,7 @@ let permPickId=0;
 function permPick(id){permPickId=permPickId===id?0:id;renderList()}
 function permPicker(m){if(permPickId!==m.id)return'';
   const cards=roomCards.map(c=>`<button onclick="moveToPerm(${m.id},${c.id})">${esc(c.name)}</button>`).join('');
-  return `<div class="card" style="border-color:var(--accent)"><div class="desc">Move to permanent — pick a scope:</div><div class="btns" style="flex-direction:row;flex-wrap:wrap"><button onclick="moveToPerm(${m.id},0)">${esc(roomName||'This chat')}</button>${cards}</div></div>`}
+  return `<div class="card editing"><div class="desc">Move to permanent — pick a scope:</div><div class="btns" style="flex-direction:row;flex-wrap:wrap"><button onclick="moveToPerm(${m.id},0)">${esc(roomName||'This chat')}</button>${cards}</div></div>`}
 async function moveToPerm(id,cid){const m=allMems.find(x=>x.id===id);if(!m)return;
   await api('memories',{content:m.content,type:m.type||'fact',triggers:m.triggers||'',room:ROOM,cardId:cid||0});
   await api('memories/delete',{id});permPickId=0;load()}

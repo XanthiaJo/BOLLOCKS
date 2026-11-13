@@ -6,7 +6,6 @@
 <style>
 textarea{min-height:80px;font-family:inherit}
 .ent.off{opacity:.5}
-.ent.editing{display:block}
 .ent .comment{font-weight:700}
 .ent .keys{color:var(--ai);font-size:.85em;font-weight:600;margin-top:2px}
 .bvhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
@@ -76,7 +75,7 @@ async function load(){
   if(!selBook)return;
   const b=books.find(x=>x.id===selBook);
   $('bname').textContent=b?.name||('Book #'+selBook);
-  const draft=$('ed_id')&&$('ed_id').closest('#elist')?{comment:$('ed_comment').value,keys:$('ed_keys').value,keys2:$('ed_keys2').value,content:$('ed_content').value,con:$('ed_const').checked,en:$('ed_enabled').checked,ord:$('ed_ord').value}:null;
+  const draft=$('ed_id')&&$('ed_id').closest('#elist')?draftFields(ED_FIELDS):null;
   $('elist').innerHTML=allEntries.map((e,i)=>{
     if(e.id===selEntry)return `<div class="card ent editing">${entryForm()}</div>`;
     const keys=JSON.parse(e.keys||'[]'),sec=JSON.parse(e.keysecondary||'[]');
@@ -95,7 +94,7 @@ async function load(){
     </div>`;
   }).join('')||'<small>No entries yet — "+ New entry".</small>';
   initEdHeads($('elist'));
-  const ed=allEntries.find(x=>x.id===selEntry);if(ed){fillEnt(ed);if(draft){$('ed_comment').value=draft.comment;$('ed_keys').value=draft.keys;$('ed_keys2').value=draft.keys2;$('ed_content').value=draft.content;$('ed_const').checked=draft.con;$('ed_enabled').checked=draft.en;$('ed_ord').value=draft.ord}}
+  const ed=allEntries.find(x=>x.id===selEntry);if(ed){fillEnt(ed);if(draft)fillFields(draft)}
 }
 
 function showPanel(p){$('bookPanel').style.display=p==='book'?'block':'none';$('bookView').style.display=p==='view'?'block':'none'}
@@ -138,13 +137,10 @@ function entryForm(){return `
   <label class="cb"><input type="checkbox" id="ed_const"> Always active (no keyword needed)</label>
   <label class="cb"><input type="checkbox" id="ed_enabled" checked> Enabled</label>
   <input id="ed_ord" type="number" placeholder="Order (0 = first)" value="0">`}
+const ED_FIELDS=['ed_id','ed_comment','ed_keys','ed_keys2','ed_content','ed_const','ed_enabled','ed_ord'];
 function fillEnt(e){
   $('edtitle').textContent=e?'Edit entry #'+e.id:'New entry';
-  $('ed_id').value=e?.id||'';$('ed_comment').value=e?.comment||'';
-  $('ed_keys').value=e?JSON.parse(e.keys||'[]').join(', '):'';
-  $('ed_keys2').value=e?JSON.parse(e.keysecondary||'[]').join(', '):'';
-  $('ed_content').value=e?.content||'';
-  $('ed_const').checked=!!e?.constant;$('ed_enabled').checked=e?!!e.enabled:true;$('ed_ord').value=e?.ord||0;
+  fillFields({ed_id:e?.id||'',ed_comment:e?.comment||'',ed_keys:e?JSON.parse(e.keys||'[]').join(', '):'',ed_keys2:e?JSON.parse(e.keysecondary||'[]').join(', '):'',ed_content:e?.content||'',ed_const:!!e?.constant,ed_enabled:e?!!e.enabled:true,ed_ord:e?.ord||0});
 }
 function newEntry(){selEntry=0;$('editor').innerHTML=entryForm();initEdHeads($('editor'));fillEnt(null);$('editor').style.display='block';$('editor').scrollIntoView({behavior:'smooth',block:'start'});load()}
 function editIdx(i){edit(allEntries[i])}
