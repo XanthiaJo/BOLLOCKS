@@ -92,7 +92,7 @@ async function load(){
   $('rchat').innerHTML=
     rprofRow({name:esc(roomName),meta:'shared memories',sel:cardId===0,onclick:`pick(0,'${esc(roomName)}')`});
   $('rcards').innerHTML=(cards||[]).map(c=>
-      rprofRow({name:esc(c.name),sel:c.id===cardId,onclick:`pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')`})
+      rprofRow({img:`<img src="/api/avatar?id=${c.id}" onerror="this.style.visibility='hidden'">`,name:esc(c.name),sel:c.id===cardId,onclick:`pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')`})
     ).join('')||'<small>None</small>';
   if(cardId<0)cardId=0;
   const {memories}=await get(`memories?card=${cardId}&room=${ROOM}`);
