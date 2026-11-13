@@ -6,7 +6,7 @@ const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.status===401?location='/
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 initSidebar({
-  tabs:[{label:'Smart memory profiles',on:true}],
+  tabs:[{label:'Smart memory profiles',on:true,onclick:'newMP()'}],
   sections:[{title:'Smart memory profiles',id:'plist'}],
   buttons:[{label:'+ New profile',onclick:'newMP()'},{label:'Save current as profile…',cls:'sec',onclick:'saveAsProfile()'}],
   footer:'Chats pick which smart-memory profile they follow in their chat settings or the <a href="/memories.html" style="color:var(--muted)">Memories</a> page\'s Smart tab. Select a profile to edit it.',
