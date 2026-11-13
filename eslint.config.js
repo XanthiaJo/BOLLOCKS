@@ -38,12 +38,21 @@ export default [
         mpFlashSaved: "readonly",
         mpOpenEditor: "readonly",
         mpCloseEditor: "readonly",
+        initSidebar: "readonly",
+        rprofRow: "readonly",
       },
     },
     rules: {
       // Browser page scripts expose top-level functions for inline handlers.
       "no-unused-vars": "off",
       "no-empty": ["error", { allowEmptyCatch: true }],
+    },
+  },
+  {
+    // layout.js defines the shared globals — allowed to declare them itself.
+    files: ["public/layout.js"],
+    rules: {
+      "no-redeclare": "off",
     },
   },
 ];
