@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, seed, login, userForToken, createUser, migrateProfiles, migrateSchema, MSG_SQL } from './db.js';
+import { db, seed, login, userForToken, createUser, migrateProfiles, migrateSchema, MSG_SQL, DATA_DIR } from './db.js';
 import { generateReply, genStats, maybeSummarize } from './generate.js';
 import { extractCardJson, normalizeCard } from './pngcard.js';
 
@@ -22,9 +22,9 @@ const push = (roomId, evt) => {
 
 // ---- HTTP helpers ----
 const readBody = req => new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { r(JSON.parse(b)); } catch { r({}); } }); });
-const CARDS_DIR = path.join(process.cwd(), 'data', 'cards');
+const CARDS_DIR = path.join(DATA_DIR, 'cards');
 fs.mkdirSync(CARDS_DIR, { recursive: true });
-const BG_DIR = path.join(process.cwd(), 'data', 'bg');
+const BG_DIR = path.join(DATA_DIR, 'bg');
 fs.mkdirSync(BG_DIR, { recursive: true });
 const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
 // Local testing mode: no token → ?as=<handle> impersonation, else first user.
@@ -266,7 +266,7 @@ const router = {
             const png = Buffer.from(b.png_b64, 'base64');
             raw = extractCardJson(png);
             if (!raw) return send(res, 400, { error: 'no character data in PNG' });
-            const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'cards');
+            const dir = CARDS_DIR;
             fs.mkdirSync(dir, { recursive: true });
             avatarPath = `cards/import-${Date.now()}.png`;
             fs.writeFileSync(path.join(dir, path.basename(avatarPath)), png);
@@ -288,7 +288,7 @@ const router = {
     'GET /api/avatar': (req, res) => {
         const id = Number(new URL(req.url, 'http://x').searchParams.get('id'));
         const c = db.prepare('SELECT avatar,name FROM cards WHERE cards_id_pk=?').get(id);
-        const file = c?.avatar && path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', c.avatar);
+        const file = c?.avatar && path.join(DATA_DIR, c.avatar);
         if (!c || !c.avatar || !fs.existsSync(file)) {
             const ch = (c?.name || '?').replace(/[^A-Za-z0-9]/g, '').slice(0, 1).toUpperCase() || '?';
             const hue = [...(c?.name || '')].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 360;
