@@ -116,7 +116,7 @@ npm run lint   # ESLint checks
 npm run lint:fix
 ```
 
-Seeded dev users (fresh DB, `seed()`): `creamms`, `karima`, `blake`, `entropy75` — all password `changeme`. Skip seeding with `BOLLOCKS_SEED=0`; the first `POST /api/register` then bootstraps the initial user. Fresh installs also get one-shot example content (`seedExamples()`): the "Wren" demo card seated in "The House", a linked lorebook, memories in each scope, and welcome messages — flagged in the `meta` table so deleted pieces never resurrect, and skipped on DBs that already have user-created cards or lorebooks.
+Seeded dev users (fresh DB, `seed()`): `admin`, `alice`, `bob`, `carol` — all password `changeme`. Skip seeding with `BOLLOCKS_SEED=0`; the first `POST /api/register` then bootstraps the initial user. Fresh installs also get one-shot example content (`seedExamples()`): the "Wren" demo card seated in "The House", a linked lorebook, memories in each scope, and welcome messages — flagged in the `meta` table so deleted pieces never resurrect, and skipped on DBs that already have user-created cards or lorebooks.
 
 ## Code conventions
 

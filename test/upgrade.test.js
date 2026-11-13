@@ -88,7 +88,10 @@ async function boot(appDir, dataDir) {
 // Realistic data touching every link table, created through the API of
 // whichever build is running.
 async function populate(s) {
-    await s.login('creamms');
+    // The seeded demo handle differs across versions (admin now, creamms
+    // on older branches) — record whichever works so verify can log in as
+    // the same user that populated the DB.
+    const user = await s.login('admin').then(() => 'admin').catch(() => s.login('creamms').then(() => 'creamms'));
     const failed = [];
     const ok = async (p, b) => {
         const r = await s.post(p, b);
@@ -112,7 +115,7 @@ async function populate(s) {
     const roomMem = (await ok('memories', { room, content: 'The house has a red door.', triggers: 'door' }))?.id;
     await ok('memories/update', { id: roomMem, origin: 'smart' });
     await ok('say', { room, text: 'Hello there.' });
-    return { room, card, book, cardMem, roomMem, failed };
+    return { room, card, book, cardMem, roomMem, failed, user };
 }
 
 function snapshot(dataDir) {
@@ -164,7 +167,7 @@ async function upgradeAndVerify(dataDir, before, ids, label) {
 
     const s2 = await boot(ROOT, dataDir);
     try {
-        await s2.login('creamms');
+        await s2.login(ids.user || 'admin');
         if (ids.room) {
             const rooms = (await s2.get('rooms')).json.rooms || [];
             assert.ok(rooms.some(r => r.id === ids.room), `${label}: room ${ids.room} missing from /api/rooms after upgrade`);

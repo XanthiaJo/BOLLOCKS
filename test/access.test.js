@@ -5,12 +5,12 @@ import assert from 'node:assert/strict';
 import { boot, tmp, asUser } from './helpers.js';
 
 let s;
-const asKarima = fn => asUser(s, 'karima')(fn);
-before(async () => { s = await boot(tmp('data')); await s.login('creamms'); });
+const asKarima = fn => asUser(s, 'alice')(fn);
+before(async () => { s = await boot(tmp('data')); await s.login('admin'); });
 after(() => s.stop());
 
 describe('access control', () => {
-    // A private room karima is NOT in, with data inside it.
+    // A private room alice is NOT in, with data inside it.
     let priv, privMem, privMsg, privBook, privEntry;
 
     before(async () => {
@@ -63,10 +63,10 @@ describe('access control', () => {
 
     test('user administration is admin-only', async () => {
         await asKarima(async () => {
-            const blake = (await s.get('users')).json.users.find(u => u.handle === 'blake');
-            assert.equal((await s.post('users/delete', { id: blake.id })).status, 403);
+            const bob = (await s.get('users')).json.users.find(u => u.handle === 'bob');
+            assert.equal((await s.post('users/delete', { id: bob.id })).status, 403);
             assert.equal((await s.post('register', { handle: 'sneaky', password: 'pw' })).status, 403);
         });
-        assert.ok((await s.get('users')).json.users.some(u => u.handle === 'blake'));
+        assert.ok((await s.get('users')).json.users.some(u => u.handle === 'bob'));
     });
 });

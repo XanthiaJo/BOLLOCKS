@@ -9,7 +9,7 @@ let llm;
 before(async () => {
     s = await boot(tmp('data'));
     llm = await mockLLM();
-    await s.login('creamms');
+    await s.login('admin');
 });
 after(async () => { await s.stop(); await llm.close(); });
 

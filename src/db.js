@@ -589,7 +589,7 @@ export function seed() {
     // Test users — every account gets membership in room 1.
     const room = db.prepare('SELECT rooms_id_pk AS id FROM rooms ORDER BY rooms_id_pk LIMIT 1').get()?.id
         || db.prepare(`INSERT INTO rooms (name,mem_profiles_id_fk) VALUES ('The House',(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1))`).run().lastInsertRowid;
-    for (const h of ['creamms', 'karima', 'blake', 'entropy75']) {
+    for (const h of ['admin', 'alice', 'bob', 'carol']) {
         if (!db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get(h))
             createUser(h, 'changeme');
     }
@@ -602,7 +602,7 @@ export function seed() {
         return mid;
     };
     if (!db.prepare('SELECT 1 FROM members LIMIT 1').get()) {
-        for (const h of ['creamms', 'karima', 'blake', 'entropy75']) {
+        for (const h of ['admin', 'alice', 'bob', 'carol']) {
             const uid = db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get(h).id;
             db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)')
                 .run(room, memberFor(uid, h));

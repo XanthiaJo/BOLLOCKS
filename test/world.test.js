@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { boot, tmp } from './helpers.js';
 
 let s;
-before(async () => { s = await boot(tmp('data')); await s.login('creamms'); });
+before(async () => { s = await boot(tmp('data')); await s.login('admin'); });
 after(() => s.stop());
 
 describe('world books', () => {

@@ -47,7 +47,7 @@ export const PROMPT_BLOCKS = [
     { key: 'instructions', label: 'Instructions',
         example: "You are Aria and ONLY Aria — an NPC in a shared roleplay. The other characters listed are separate people speaking for themselves; do NOT speak for them or imitate them. Write ONLY Aria's next message." },
     { key: 'history', label: 'Chat history',
-        example: 'creamms: We should leave before dawn.\nAria: The tide says otherwise.' },
+        example: 'Alice: We should leave before dawn.\nAria: The tide says otherwise.' },
 ];
 
 /** Effective memory settings for a room: always the memory profile it follows
