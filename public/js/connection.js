@@ -46,7 +46,7 @@ function edit(id){const p=allProfs.find(x=>x.id===id);if(!p)return;
   $('edtitle').textContent='Edit '+p.name;$('ed_id').value=p.id;$('ed_name').value=p.name;$('ed_url').value=p.api_url;$('ed_model').value=p.model;$('ed_key').value='';$('ed_headers').value=p.headers&&p.headers!=='{}'?p.headers:'';$('ed_ctx').value=p.context_size||0;$('ed_maxr').value=p.max_response||2048;
   showEd('editor')}
 function editInj(id){const p=injProfs.find(x=>x.prompt_profiles_id_pk===id);if(!p)return;
-  $('injtitle').textContent='Edit '+p.name;$('inj_id').value=id;$('inj_name').value=p.name;
+  $('injtitle').textContent='Edit '+p.name;$('inj_id').value=id;$('inj_name').value=p.name;$('inj_time').checked=!!p.include_time;
   orderKeys=orderFrom(p.prompt_order);renderOrder();
   showEd('injeditor')}
 
@@ -78,7 +78,7 @@ async function fetchModels(){
 }
 function clearEd(){
   $('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value='';$('ed_headers').value='';$('ed_ctx').value='';$('ed_maxr').value='';
-  $('injtitle').textContent='New injection profile';$('inj_id').value='';$('inj_name').value='';orderKeys=orderFrom(null);renderOrder();
+  $('injtitle').textContent='New injection profile';$('inj_id').value='';$('inj_name').value='';$('inj_time').checked=false;orderKeys=orderFrom(null);renderOrder();
 }
 function newProf(){clearEd();showEd(curTab==='inj'?'injeditor':'editor');$(curTab==='inj'?'inj_name':'ed_name').focus()}
 function cancelEd(){const inj=curTab==='inj';const id=Number($(inj?'inj_id':'ed_id').value)||0;if(!id)return clearEd();inj?editInj(id):edit(id)}
@@ -86,7 +86,7 @@ function cancelEd(){const inj=curTab==='inj';const id=Number($(inj?'inj_id':'ed_
 async function saveProf(){
   if(curTab==='inj'){
     const id=Number($('inj_id').value)||0;
-    const b={name:$('inj_name').value.trim(),order:orderKeys};
+    const b={name:$('inj_name').value.trim(),order:orderKeys,includeTime:$('inj_time').checked?1:0};
     if(!b.name)return alert('needs a name');
     if(id)await api('promptprofiles/update',{id,...b});
     else await api('promptprofiles',b);

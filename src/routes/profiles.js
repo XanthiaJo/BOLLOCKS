@@ -115,15 +115,15 @@ export default {
         const b = await readBody(req);
         if (!b.name) return send(res, 400, { error: 'name required' });
         const first = !db.prepare('SELECT 1 FROM prompt_profiles WHERE users_id_fk=?').get(u.users_id_pk);
-        const id = db.prepare('INSERT INTO prompt_profiles (users_id_fk,name,prompt_order,active) VALUES (?,?,?,?)')
-            .run(u.users_id_pk, b.name, b.order ? JSON.stringify(b.order) : null, first ? 1 : 0).lastInsertRowid;
+        const id = db.prepare('INSERT INTO prompt_profiles (users_id_fk,name,prompt_order,active,include_time) VALUES (?,?,?,?,?)')
+            .run(u.users_id_pk, b.name, b.order ? JSON.stringify(b.order) : null, first ? 1 : 0, b.includeTime ? 1 : 0).lastInsertRowid;
         send(res, 200, { id });
     },
     'POST /api/promptprofiles/update': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare(`UPDATE prompt_profiles SET name=COALESCE(NULLIF(?,''),name), prompt_order=?
+        db.prepare(`UPDATE prompt_profiles SET name=COALESCE(NULLIF(?,''),name), prompt_order=?, include_time=?
             WHERE prompt_profiles_id_pk=? AND users_id_fk=?`)
-            .run(String(b.name ?? '').trim(), b.order ? JSON.stringify(b.order) : null, b.id, u.users_id_pk);
+            .run(String(b.name ?? '').trim(), b.order ? JSON.stringify(b.order) : null, b.includeTime ? 1 : 0, b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
     'POST /api/promptprofiles/activate': async (req, res, u) => {

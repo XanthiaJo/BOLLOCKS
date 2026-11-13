@@ -57,6 +57,7 @@
     <div class="edhead" data-save="saveProf" data-cancel="cancelEd"><h3 id="injtitle">New injection profile</h3></div>
     <input type="hidden" id="inj_id">
     <div class="row"><span class="lbl">Profile name</span><span class="hint">A label for this prompt-layout preset.</span><input id="inj_name" placeholder="e.g. Cache-friendly" style="width:320px"></div>
+    <div class="row"><span class="lbl" title="Adds the current date/time and how long ago the last message was, right before the AI's reply.">Current time</span><span class="hint">Include current date, time and time since last message.</span><input type="checkbox" id="inj_time"></div>
     <div class="lbl" title="Order the prompt sections are assembled in — earlier sections are more likely to stay in the provider's prompt cache.">Prompt order</div>
     <span class="hint">Where each section lands in the AI's prompt. The default order is cache-friendly: stable card text first, sections that change often last. Move a section below Chat history to inject it after the conversation — right before the AI's reply. Click a name to see what it injects.</span>
     <ol id="order_list" style="list-style:none;margin:4px 0 10px;padding:0"></ol>
