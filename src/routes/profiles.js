@@ -121,9 +121,10 @@ export default {
     },
     'POST /api/promptprofiles/update': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare(`UPDATE prompt_profiles SET name=COALESCE(NULLIF(?,''),name), prompt_order=?, include_time=?
+        db.prepare(`UPDATE prompt_profiles SET name=COALESCE(NULLIF(?,''),name), prompt_order=?, include_time=COALESCE(?,include_time)
             WHERE prompt_profiles_id_pk=? AND users_id_fk=?`)
-            .run(String(b.name ?? '').trim(), b.order ? JSON.stringify(b.order) : null, b.includeTime ? 1 : 0, b.id, u.users_id_pk);
+            .run(String(b.name ?? '').trim(), b.order ? JSON.stringify(b.order) : null,
+                b.includeTime === undefined ? null : (b.includeTime ? 1 : 0), b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
     'POST /api/promptprofiles/activate': async (req, res, u) => {
