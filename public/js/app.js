@@ -32,8 +32,22 @@ function md(src) {
         .replace(/~~([^~]+)~~/g, '<s>$1</s>');
 }
 
-function addMsg(m) {
+let newBelow = 0;
+function bumpNew() {
+    const b = $('newmsgs'); if (!b) return;
+    newBelow++;
+    b.textContent = `↓ ${newBelow} new`;
+    b.classList.add('on');
+}
+function jumpLatest() {
+    newBelow = 0;
+    $('newmsgs')?.classList.remove('on');
+    $('msgs').scrollTop = 1e9;
+}
+function addMsg(m, stick) {
     if (document.querySelector(`li[data-mid="${m.id}"]`)) return; // already rendered (say() appends optimistically, SSE echoes it)
+    const el = $('msgs');
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     const li = document.createElement('li');
     li.dataset.mid = m.id;
     li.className = 'mes' + (m.kind === 'ai' ? ' ai' : m.kind === 'sys' ? ' sys' : '');
@@ -41,8 +55,9 @@ function addMsg(m) {
         `<button class="delm" title="Delete" onclick="delMsg(${m.id},this)">✕</button>`;
     li.querySelector('.n').textContent = m.name;
     li.querySelector('.t').innerHTML = md(m.text);
-    $('msgs').append(li);
-    $('msgs').scrollTop = 1e9;
+    el.append(li);
+    if (stick || (stick === undefined && nearBottom)) el.scrollTop = 1e9;
+    else bumpNew();
 }
 
 async function loadRoom() {
@@ -55,6 +70,7 @@ async function loadRoom() {
         }
     } catch { }
     const r = await get(`room?id=${room}`);
+    newBelow = 0; $('newmsgs')?.classList.remove('on');
     $('msgs').innerHTML = '';
     (r.messages || []).forEach(addMsg);
     $('members').innerHTML = (r.members || [])
@@ -213,7 +229,7 @@ async function say() {
     if (!text) return;
     $('in').value = '';
     const m = await api('say', { room, cardId: persona?.id || null, text });
-    if (m?.id) addMsg(m); // show immediately — SSE may be a dead socket
+    if (m?.id) addMsg(m, true); // own message always snaps — SSE may be a dead socket
 }
 async function gen() {
     const r = await api('generate', { room });
@@ -286,6 +302,13 @@ async function renderToks() {
 }
 
 async function start() {
+    $('msgs').addEventListener('scroll', () => {
+        const el = $('msgs');
+        if (newBelow && el.scrollHeight - el.scrollTop - el.clientHeight < 80) {
+            newBelow = 0;
+            $('newmsgs')?.classList.remove('on');
+        }
+    });
     const m = await get('me');
     me = m.handle || 'you';
     persona = m.persona || null;

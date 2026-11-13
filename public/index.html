@@ -8,6 +8,8 @@
 #chat::before{content:'';position:absolute;inset:0;background:var(--bg,none) center/cover no-repeat;opacity:.18;pointer-events:none;z-index:0}
 #chat>*{position:relative;z-index:1}
 #msgs{list-style:none;padding:8px 16px;margin:0;flex:1;overflow-y:auto}
+#newmsgs{display:none;position:absolute;top:64px;right:22px;z-index:2;padding:5px 12px;border-radius:12px;border:1px solid var(--edge);background:var(--panel);color:var(--text);cursor:pointer;box-shadow:0 4px 14px var(--veil-soft);font-size:.82em}
+#newmsgs.on{display:block}
 .mes{padding:12px 4px;border-bottom:1px solid var(--surface2);display:flex;align-items:flex-start;gap:14px;min-height:66px;position:relative}
 .mes .mav{width:60px;height:60px;border-radius:50%;object-fit:cover;background:var(--surface2);flex:none}
 .mes .body{flex:1;min-width:0;align-self:center}
@@ -93,6 +95,7 @@ button.gen{background:var(--ok)}
   <div id="chat">
     <div class="cvhead"><h2 id="chatname">Chat</h2></div>
     <ul id="msgs"></ul>
+    <button id="newmsgs" onclick="jumpLatest()">↓ new</button>
     <div id="composer">
       <textarea id="in" placeholder="Type a message" autofocus rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();say()}" style="resize:none;overflow:hidden;padding:10px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;flex:1;font:inherit" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
       <button onclick="say()">Send</button>
