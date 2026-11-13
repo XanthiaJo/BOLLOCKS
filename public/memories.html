@@ -117,14 +117,12 @@
     <span class="hint">How stored memories get put back into the AI's prompt.</span>
     <div class="row"><span class="lbl" title="Max tokens of memory content injected into each generation prompt." title="Max tokens of memory content injected into each generation prompt.">Token budget</span><span class="hint">Max memory text added to each reply's prompt — beyond this, newer memories are left out (oldest are kept). Default: 800.</span><input type="number" id="set_budget" min="50" max="4000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
     <div class="ph">
-      <div class="lbl" title="Where memory text lands in the prompt: before/after the system block, or mid-history at depth N.">Injection position</div>
-      <label class="cb"><input type="radio" name="pos" checked disabled> Before main prompt</label>
-      <label class="cb"><input type="radio" name="pos" disabled> After main prompt</label>
-      <label class="cb"><input type="radio" name="pos" disabled> In-chat @ depth</label>
-      <div class="row"><span class="lbl">Triggered memories: in-chat depth</span><input value="0" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Where memory text lands in the prompt: before/after the system block, or mid-history at depth N.">Injection position</span><span class="hint">Where the memory block lands in the prompt: just before or after the main system block, or inserted partway down the chat history.</span><select disabled style="width:220px"><option>Before main prompt</option><option>After main prompt</option><option>In-chat @ depth</option></select></div>
+      <div class="row"><span class="lbl">Triggered memories: in-chat depth</span><span class="hint">How many messages back to drop the memory block when using in-chat position. 0 = right before the AI's reply.</span><input value="0" disabled style="width:80px"></div>
       <div class="lbl" title="Wrapper format for injected memory text.">Injection template</div>
+      <span class="hint">Wrapper around the injected memory text (e.g. "Memories:\n{content}"). Leave blank for the built-in layout.</span>
       <textarea placeholder="(default template)" disabled style="min-height:60px"></textarea>
-      <div class="row"><span class="lbl" title="If set, this block only injects when a keyword appears in recent chat." title="If set, this block only injects when a keyword appears in recent chat.">Trigger keywords (inject only when mentioned)</span><input placeholder="comma-separated triggers" disabled></div>
+      <div class="row"><span class="lbl" title="If set, this block only injects when a keyword appears in recent chat." title="If set, this block only injects when a keyword appears in recent chat.">Trigger keywords (block-level)</span><span class="hint">If set, the entire memory block only injects when a keyword appeared in recent chat — on top of each memory's own triggers.</span><input placeholder="comma-separated triggers" disabled></div>
     </div>
 
     <h4>Session Memory</h4>
