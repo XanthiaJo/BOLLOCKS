@@ -55,8 +55,8 @@ export const PROMPT_BLOCKS = [
  *  per-chat custom option. Room columns only carry per-room bits like
  *  the injection-refresh counter. */
 export function memProfileFor(room) {
-    const p = db.prepare(`SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=COALESCE(?,(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1))`)
-        .get(room?.mem_profiles_id_fk || null);
+    const p = db.prepare(`SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=COALESCE(?,(SELECT mem_profiles_id_pk FROM mem_profiles WHERE users_id_fk=? ORDER BY mem_profiles_id_pk LIMIT 1))`)
+        .get(room?.mem_profiles_id_fk || null, room?.owner_users_id_fk ?? -1);
     if (!p) return room;
     const out = { ...room };
     for (const k of MEM_PROFILE_FIELDS) if (k in p) out[k] = p[k];

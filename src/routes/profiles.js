@@ -96,9 +96,11 @@ export default {
     },
     'POST /api/memprofiles/delete': async (req, res, u) => {
         const b = await readBody(req);
-        // Rooms following the deleted profile are re-pointed at another one
-        // (0 = feature-less room columns only when NO profiles remain).
-        db.prepare(`UPDATE rooms SET mem_profiles_id_fk=COALESCE((SELECT mem_profiles_id_pk FROM mem_profiles WHERE mem_profiles_id_pk<>? ORDER BY mem_profiles_id_pk LIMIT 1),0) WHERE mem_profiles_id_fk=?`).run(b.id, b.id);
+        // Rooms following the deleted profile are re-pointed at another of
+        // the SAME user's profiles (0 = feature-less room columns only when
+        // none remain). Only the owner's own rooms can legitimately follow.
+        db.prepare(`UPDATE rooms SET mem_profiles_id_fk=COALESCE((SELECT mem_profiles_id_pk FROM mem_profiles WHERE mem_profiles_id_pk<>? AND users_id_fk=? ORDER BY mem_profiles_id_pk LIMIT 1),0)
+            WHERE mem_profiles_id_fk=? AND owner_users_id_fk=?`).run(b.id, u.users_id_pk, b.id, u.users_id_pk);
         db.prepare('DELETE FROM mem_profiles WHERE mem_profiles_id_pk=? AND users_id_fk=?').run(b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },

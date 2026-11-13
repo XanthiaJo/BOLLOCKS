@@ -27,6 +27,7 @@ There are two kinds of memory, distinguished by `origin`:
 ### Smart memories (AI-extracted)
 
 - Created automatically by `maybeSummarize()` after every `mem_every` messages when `auto_mem=1`.
+- **Profile link:** a room follows a smart-memory profile via `rooms.mem_profiles_id_fk`. Profiles stay user-owned presets (`mem_profiles.users_id_fk`); a room may only follow a profile owned by the room's owner, and only the room owner can change the link (`POST /api/room/memsettings`). When the link is unset, the room falls back to the room owner's first profile — never another user's. Deleting a profile re-points only the owner's own rooms at another of their profiles.
 - Extraction runs only through the room owner's configured extraction profile (`mem_extraction_profile_id` on the memory profile). No fallback: if it is unset, missing, or belongs to someone other than the room owner, extraction is skipped.
 - **Smart memories belong to the chat (room) only** - they are always stored as shared room memories (no `memory_cards` row).
   - Rationale: deciding whether an extracted fact belongs to a specific character vs. the chat as a whole is ambiguous and error-prone. Keep smart memories room-scoped; users can promote a fact to a character's permanent memory manually if desired.
@@ -124,7 +125,7 @@ flowchart TD
 | `/api/memories/delete` | POST | user + ownership | `{id}`. Delete if owner/member. |
 | `/api/memories/update` | POST | user + ownership | `{id, content?, type?, triggers?}`. |
 | `/api/memories/move` | POST | user + ownership | `{id, cardId}`. Move between card and shared. |
-| `/api/room/memsettings` | POST | room member | `{room, auto, every, budget, max, profileId?}`. Persist profile selection. |
+| `/api/room/memsettings` | POST | room owner only | `{room, memProfile}`. Point the room at one of the owner's own `mem_profiles` (0 clears). |
 | `/api/lastmem?room=` | GET | user | Latest `origin='smart'` memory in room. |
 
 ## Known issues to fix (tracked)

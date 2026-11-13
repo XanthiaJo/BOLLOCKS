@@ -71,12 +71,18 @@ async function load(){
   const followed=(rm?.mem_profiles_id_fk)&&(memProfiles.find(x=>x.mem_profiles_id_pk===rm.mem_profiles_id_fk))||null;
   const mprofOpts=(memProfiles||[]).map(p=>`<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
   const mprofVal=String(followed?.mem_profiles_id_pk ?? memProfiles[0]?.mem_profiles_id_pk ?? '');
-  $('smart_mprof').innerHTML=mprofOpts;$('smart_mprof').value=mprofVal;
-  $('smart_mprof_hint').textContent=followed?`This chat follows "${followed.name}" — edit it on the Smart memory page.`:'No profiles yet — create one on the Smart memory page.';
+  // Non-owners can't see the owner's profile list — show the followed name only.
+  const followedName=followed?.name||rm?.mem_profile_name||null;
+  $('smart_mprof').innerHTML=rm?.is_owner?mprofOpts:`<option>${esc(followedName||'—')}</option>`;
+  $('smart_mprof').value=mprofVal;
+  $('smart_mprof_hint').textContent=rm?.is_owner
+    ? (followed?`This chat follows "${followed.name}" — edit it on the Smart memory page.`:'No profiles yet — create one on the Smart memory page.')
+    : (followedName?`This chat follows "${followedName}". `:'')+'Only the room owner can change the memory profile.';
   const smartP=followed||memProfiles[0]||null;
-  $('smart_auto').checked=!!smartP?.auto_mem;$('smart_auto').disabled=!smartP||!rm?.is_owner;
+  // Non-owners see the followed profile's flag (from the room payload), not their own.
+  $('smart_auto').checked=rm?.is_owner?!!smartP?.auto_mem:!!rm?.mem_profile_auto;
+  $('smart_auto').disabled=!rm?.is_owner?true:!smartP;
   $('smart_mprof').disabled=!rm?.is_owner;
-  if(!rm?.is_owner)$('smart_mprof_hint').textContent='Only the room owner can change the memory profile.';
   $('rchat').innerHTML=
     `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div>`;
   $('rcards').innerHTML=(cards||[]).map(c=>
