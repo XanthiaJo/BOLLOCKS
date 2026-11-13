@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { identiconPng } from './identicon.js';
 
 export const DATA_DIR = path.resolve(process.env.BOLLOCKS_DATA || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data'));
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -585,6 +586,15 @@ export function migrateProfiles() {
     }
 }
 
+// Deterministic identicon avatar for a card — files land in data/cards and
+// the column stores the api-facing path, same shape as an uploaded avatar.
+function seedAvatar(cardId, name) {
+    const file = `cards/${cardId}.png`;
+    fs.mkdirSync(path.join(DATA_DIR, 'cards'), { recursive: true });
+    fs.writeFileSync(path.join(DATA_DIR, file), identiconPng(`${name}:${cardId}`));
+    db.prepare('UPDATE cards SET avatar=? WHERE cards_id_pk=?').run(file, cardId);
+}
+
 export function seed() {
     // Test users — every account gets membership in room 1.
     const room = db.prepare('SELECT rooms_id_pk AS id FROM rooms ORDER BY rooms_id_pk LIMIT 1').get()?.id
@@ -596,7 +606,10 @@ export function seed() {
     // Only auto-join the test users on a fresh install (no humans anywhere).
     const memberFor = (uid, handle) => {
         let pc = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(uid)?.cards_id_pk;
-        if (!pc) pc = db.prepare('INSERT INTO cards (owner_users_id_fk,name,is_persona) VALUES (?,?,1)').run(uid, handle).lastInsertRowid;
+        if (!pc) {
+            pc = db.prepare('INSERT INTO cards (owner_users_id_fk,name,is_persona) VALUES (?,?,1)').run(uid, handle).lastInsertRowid;
+            seedAvatar(pc, handle);
+        }
         let mid = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc)?.members_id_pk;
         if (!mid) mid = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(pc).lastInsertRowid;
         return mid;
@@ -648,6 +661,7 @@ function seedExamples(room) {
         "The kettle had just boiled when you walked in. Wren set down a second cup without being asked. \"You look like you've had a day. Sit — the armchair by the window's the good one.\"",
         "<START>\n{{user}}: Do you ever sleep, Wren?\n{{char}}: \"The House sleeps. I keep it.\" She folds a tea towel with surgical precision. \"But if it makes you feel better, I'll close my eyes on Tuesdays.\"\n<START>\n{{user}}: What's behind the locked door upstairs?\n{{char}}: \"Storage.\" A pause that lands exactly one beat too long. \"And the previous caretaker's dignity.\"",
         '["demo"]', 'seed').lastInsertRowid;
+    seedAvatar(wren, 'wren');
     const wmid = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(wren).lastInsertRowid;
     db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(room, wmid);
 
