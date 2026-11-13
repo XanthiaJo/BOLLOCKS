@@ -26,6 +26,7 @@
 - **AI activation** — manual / every message / named / round-robin, plus per-member talkativeness
 - **Context caps** — per-chat and per-profile token limits; history middle-trims to fit
 - **Live updates** — messages, deletions and memory extraction stream to all clients
+- **Prompt transparency** — per-block token inspector in the chat sidebar, and a per-room log of the last 50 prompts/responses actually sent to the LLM
 
 # Getting started
 
@@ -33,6 +34,10 @@
 npm install
 npm start          # http://localhost:8100
 ```
+
+Environment overrides: `PORT` for the listen port, `BOLLOCKS_DATA` for the data directory (database + avatars + backgrounds — point a local dev server at a copied prod `data/` for realistic testing), `BOLLOCKS_SEED=0` to skip seeding.
+
+Dev commands: `npm test` (route + generation suites against mock LLMs), `npm run lint`.
 
 First run seeds a demo: four demo users (`admin` — the site admin — plus `alice`, `bob`, `carol`, all password `changeme`), a chat called **The House** with the character **Wren** seated in it, a linked lorebook, and some example memories — so there's something to click through straight away. Skip it with `BOLLOCKS_SEED=0` and register your own account instead.
 
@@ -161,12 +166,12 @@ erDiagram
         int rooms_id_pk PK
         string name
         string ai_trigger
-        int auto_mem
-        int mem_every
-        int mem_budget
-        int mem_max
         int max_context
+        string bg
+        int owner_users_id_fk FK
+        int mem_profiles_id_fk FK
         int mem_last_messages_id
+        int mem_refresh_count
     }
     MESSAGES {
         int messages_id_pk PK
@@ -178,13 +183,52 @@ erDiagram
     }
     MEMORIES {
         int memories_id_pk PK
-        int cards_id_fk FK "null = shared"
-        int rooms_id_fk FK
         string content
         string created
         string type
-        string source
+        string origin "user|smart"
         string triggers
+    }
+    ROOM_MEMORIES {
+        int rooms_id_fk PK,FK
+        int memories_id_fk PK,FK
+    }
+    MEMORY_CARDS {
+        int memories_id_fk PK,FK
+        int cards_id_fk PK,FK
+    }
+    MEM_PROFILES {
+        int mem_profiles_id_pk PK
+        int users_id_fk FK
+        string name
+        int auto_mem
+        int mem_every
+        int mem_budget
+        int mem_max
+        string mem_extraction_prompt
+        int mem_context_threshold
+        int mem_unified
+        int mem_triggers
+        int mem_refresh
+        int mem_extraction_profile_id
+    }
+    PROMPT_PROFILES {
+        int prompt_profiles_id_pk PK
+        int users_id_fk FK
+        string name
+        string prompt_order
+        int active
+    }
+    PROMPT_LOGS {
+        int prompt_logs_id_pk PK
+        int rooms_id_fk FK
+        int cards_id_fk FK "null = extraction"
+        string kind "reply|extract"
+        string request
+        string response
+        int prompt_tokens
+        int completion_tokens
+        string created
     }
     WORLD_BOOKS {
         int world_books_id_pk PK
@@ -218,15 +262,23 @@ erDiagram
     USERS ||--o{ API_PROFILES : owns
     USERS ||--o{ CARDS : owns
     USERS ||--o{ WORLD_BOOKS : owns
+    USERS ||--o{ MEM_PROFILES : owns
+    USERS ||--o{ PROMPT_PROFILES : owns
     CARDS ||--o{ MEMBERS : "is a member"
     CARDS ||--o{ MESSAGES : speaks
-    CARDS ||--o{ MEMORIES : "scoped (null = room)"
+    CARDS ||--o{ MEMORY_CARDS : "scoped memories"
     CARDS }o--o| API_PROFILES : "optional override"
+    CARDS ||--o{ PROMPT_LOGS : generates
     MEMBERS ||--o{ ROOM_MEMBERS : sits
     ROOMS ||--o{ ROOM_MEMBERS : has
     ROOMS ||--o{ MESSAGES : holds
-    ROOMS ||--o{ MEMORIES : has
+    ROOMS ||--o{ ROOM_MEMORIES : shares
     ROOMS ||--o{ ROOM_BOOKS : links
+    ROOMS ||--o{ PROMPT_LOGS : logs
+    ROOMS }o--o| MEM_PROFILES : follows
+    MEM_PROFILES }o--o| API_PROFILES : "extraction profile"
+    MEMORIES ||--o{ ROOM_MEMORIES : linked
+    MEMORIES ||--o{ MEMORY_CARDS : linked
     WORLD_BOOKS ||--o{ ROOM_BOOKS : linked
     WORLD_BOOKS ||--o{ BOOK_ENTRIES : contains
     WORLD_ENTRIES ||--o{ BOOK_ENTRIES : member
@@ -240,9 +292,14 @@ erDiagram
 - **cards** — characters (owner, ST fields, `is_persona`, `api_profiles_id_fk` override, `avatar`)
 - **members** — a card's seat: `cards_id_fk` + `talkativeness` (persona card = human)
 - **room_members** — junction: which members sit in which rooms
-- **rooms** — chats (`ai_trigger`, `auto_mem`, `mem_every`, `mem_budget`, `mem_max`, `max_context`, `mem_last_messages_id`)
+- **rooms** — chats (`ai_trigger`, `max_context`, `bg`, `mem_profiles_id_fk` → the memory profile it follows, `owner_users_id_fk`, extraction watermark + refresh counter)
 - **messages** — chat log (`rooms_id_fk`, `cards_id_fk` sender, `text`, `supersedes`)
-- **memories** — `cards_id_fk` nullable (NULL = shared room memory), `type`, `source` (manual/auto), `triggers`
+- **memories** — facts shared via junctions, not room/card columns: `type` (fact/event/relationship/preference), `origin` (`user` permanent vs `smart` extracted), `triggers` keyword gate
+- **room_memories** — junction: which memories a room can inject
+- **memory_cards** — junction: narrows a memory to one character (unlinked = room-shared)
+- **mem_profiles** — named memory presets a room follows: extraction cadence/model/prompt, per-type caps, injection budget, trigger + unified-mode toggles
+- **prompt_profiles** — named prompt-assembly presets (`prompt_order` block sequence, `active`)
+- **prompt_logs** — newest 50 LLM calls per room (`kind` reply|extract, request JSON, raw response, token usage) — the prompt inspector's durable half
 - **world_books** — lorebooks (owner, name)
 - **room_books** — junction: which books feed which rooms
 - **world_entries** — lore entries (`content`, `constant`, `enabled`, `ord`, `comment`)
