@@ -18,7 +18,11 @@ export default {
         res.flushHeaders(); // writeHead alone buffers until the first write — flush so EventSource connects now
         if (!streams.has(roomId)) streams.set(roomId, new Set());
         streams.get(roomId).add(res);
-        req.on('close', () => streams.get(roomId)?.delete(res));
+        // Heartbeat — a comment line EventSource ignores. Without it a dead
+        // socket looks alive to the browser forever after a restart, and
+        // pushes silently stop arriving until the page is refreshed.
+        const hb = setInterval(() => { try { res.write(':hb\n\n'); } catch { clearInterval(hb); } }, 20000);
+        req.on('close', () => { clearInterval(hb); streams.get(roomId)?.delete(res); });
     },
     'POST /api/say': async (req, res, u) => {
         const b = await readBody(req);
