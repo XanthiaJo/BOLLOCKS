@@ -571,6 +571,16 @@ export function migrateSchema() {
         WHERE rm.rooms_id_fk=rooms.rooms_id_pk AND c.is_persona=1),
         (SELECT users_id_pk FROM users ORDER BY users_id_pk LIMIT 1))
         WHERE owner_users_id_fk IS NULL`);
+    db.exec(`CREATE TABLE IF NOT EXISTS prompt_logs (
+        prompt_logs_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+        rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+        cards_id_fk INTEGER REFERENCES cards(cards_id_pk),
+        kind TEXT NOT NULL DEFAULT 'reply',
+        request TEXT NOT NULL,
+        response TEXT DEFAULT '',
+        prompt_tokens INTEGER,
+        completion_tokens INTEGER,
+        created TEXT DEFAULT (datetime('now')))`);
 }
 
 /** One-time: import legacy settings-JSON connections as a "Default" profile. */

@@ -46,6 +46,14 @@ describe('generation (mock LLM)', () => {
         const stats = (await s.get(`genstats?room=${room}`)).json.stats;
         assert.equal(stats.card, 'Kira');
         assert.equal(stats.prompt_tokens, 42);
+
+        // And it's persisted to prompt_logs for post-hoc inspection.
+        const logs = (await s.get(`promptlog?room=${room}`)).json.logs;
+        assert.equal(logs[0].kind, 'reply');
+        assert.equal(logs[0].cards_id_fk, card);
+        assert.equal(logs[0].response, 'Kira: Mock reply!'); // raw model output, before tag-strip
+        assert.equal(logs[0].prompt_tokens, 42);
+        assert.equal(logs[0].request.messages.at(-1).content, 'Kira:');
     });
 
     test('profile prompt_order reorders the system prompt', async () => {
