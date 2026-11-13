@@ -70,9 +70,15 @@ function activateProf(id) {
 
 /* Centralized editor: pages keep their #editor markup; this wraps it in a
    modal veil so editing always surfaces as a card — one place to restyle. */
+// Scroll an opened editor into view — including a preceding .cvhead title
+// panel when it shares the parent, so page titles don't scroll away.
+function mpScrollTo(el){
+  const p = el.previousElementSibling;
+  (p && p.classList.contains('cvhead') ? p : el).scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 function mpOpenEditor(mode){
   const ed = document.getElementById('editor'); if (!ed) return;
-  if (mode === 'inline') { ed.style.display = 'block'; ed.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+  if (mode === 'inline') { ed.style.display = 'block'; mpScrollTo(ed); return; }
   if (!document.getElementById('mpveil')) {
     if (!ed._home) { ed._home = ed.parentNode; ed._next = ed.nextSibling; }
     const v = document.createElement('div');

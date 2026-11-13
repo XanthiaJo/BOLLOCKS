@@ -39,7 +39,7 @@ async function load(){
   }
 }
 
-function showEd(id){$('editor').style.display=id==='editor'?'block':'none';$('injeditor').style.display=id==='injeditor'?'block':'none';$(id).scrollIntoView({behavior:'smooth',block:'start'})}
+function showEd(id){$('editor').style.display=id==='editor'?'block':'none';$('injeditor').style.display=id==='injeditor'?'block':'none';mpScrollTo($(id))}
 
 function edit(id){const p=allProfs.find(x=>x.id===id);if(!p)return;
   document.querySelectorAll('.prof').forEach(el=>el.classList.remove('sel'));

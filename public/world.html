@@ -137,7 +137,7 @@ function fillEnt(e){
   $('edtitle').textContent=e?'Edit entry #'+e.id:'New entry';
   fillFields({ed_id:e?.id||'',ed_comment:e?.comment||'',ed_keys:e?JSON.parse(e.keys||'[]').join(', '):'',ed_keys2:e?JSON.parse(e.keysecondary||'[]').join(', '):'',ed_content:e?.content||'',ed_const:!!e?.constant,ed_enabled:e?!!e.enabled:true,ed_ord:e?.ord||0});
 }
-function newEntry(){selEntry=0;$('editor').innerHTML=entryForm();initEdHeads($('editor'));fillEnt(null);$('editor').style.display='block';$('editor').scrollIntoView({behavior:'smooth',block:'start'});load()}
+function newEntry(){selEntry=0;$('editor').innerHTML=entryForm();initEdHeads($('editor'));fillEnt(null);$('editor').style.display='block';mpScrollTo($('editor'));load()}
 function editIdx(i){edit(allEntries[i])}
 async function edit(e){selEntry=e.id;$('editor').innerHTML='';$('editor').style.display='none';await load();document.querySelector('.card.editing')?.scrollIntoView({behavior:'smooth',block:'start'})}
 function cancelEd(){selEntry=0;$('editor').innerHTML='';$('editor').style.display='none';load()}

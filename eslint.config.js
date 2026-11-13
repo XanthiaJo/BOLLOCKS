@@ -37,6 +37,7 @@ export default [
         // Defined in layout.js, used across page scripts.
         mpFlashSaved: "readonly",
         mpOpenEditor: "readonly",
+        mpScrollTo: "readonly",
         mpCloseEditor: "readonly",
         initSidebar: "readonly",
         initEdHeads: "readonly",
