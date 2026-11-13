@@ -1,5 +1,5 @@
 // --- Smart-memory profile editor: shared by the settings page + memories page ---
-/* global $, esc, api, load, ROOM, memProfiles, defPrompt */
+/* global $, esc, api, load, memProfiles, defPrompt */
 let selProf=Number(localStorage.mp_memprof||0);
 // selProf===-1 = unsaved "new profile" draft — panel opens blank, Save creates.
 const BLANK_PROF={name:'',auto_mem:0,mem_every:10,mem_budget:800,mem_max:50,mem_max_fact:15,mem_max_event:15,mem_max_relationship:15,mem_max_preference:15,mem_extraction_prompt:'',mem_context_threshold:80,mem_response_length:2000,mem_gen_budget:2000,mem_unlimited:0,mem_unified:1,mem_triggers:0,mem_autotune:0,mem_refresh:1,mem_activity:0,mem_extraction_profile_id:0};

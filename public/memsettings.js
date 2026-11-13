@@ -12,18 +12,14 @@ initSidebar({
   buttons:[{label:'+ New profile',onclick:'newMP()'}],
   footer:'Chats pick which smart-memory profile they follow in their chat settings or the <a href="/memories.html" style="color:var(--muted)">Memories</a> page\'s Smart tab. Select a profile to edit it.',
 });
-let ROOM=Number(localStorage.mp_room||1);
 let memProfiles=[];let defPrompt='';
 async function load(){
-  const [{profiles},{rooms},mps]=await Promise.all([get('profiles'),get('rooms'),get('memprofiles')]);
+  const [{profiles},mps]=await Promise.all([get('profiles'),get('memprofiles')]);
   memProfiles=mps?.profiles||[];defPrompt=mps?.defaultPrompt||'';
   const profOpts='<option value="0">— none (extraction off) —</option>'+(profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   $('set_profile').innerHTML=profOpts;
-  // What "current" means for Save-current-as-profile: the profile this chat follows.
-  const rm=(rooms||[]).find(r=>r.id===ROOM);
-  const followed=(rm?.mem_profiles_id_fk)&&(memProfiles.find(x=>x.mem_profiles_id_pk===rm.mem_profiles_id_fk))||null;
   $('plist').innerHTML=(memProfiles||[]).map(p=>
-    rprofRow({name:`${esc(p.name)}${p.mem_profiles_id_pk===followed?.mem_profiles_id_pk?' <span class="badge">followed</span>':''}${p.auto_mem?' <span class="badge">smart on</span>':''}`,
+    rprofRow({name:esc(p.name),
       sel:p.mem_profiles_id_pk===selProf,
       onclick:`selectProf(${p.mem_profiles_id_pk})`,
       btns:`<button class="del" onclick="delMP(${p.mem_profiles_id_pk})">Delete</button>`})).join('')||'<small>No profiles yet — create one.</small>';
