@@ -1,0 +1,40 @@
+name: PR lint comment
+
+# Runs in the base-repo context (write token) after a pull_request-triggered
+# "PR checks" run completes. The lint job uploads its output as a "lint-failure"
+# artifact; this workflow just downloads that text and posts it on the PR.
+# It never checks out or executes PR code, so it's safe to run for forks —
+# this is what gets the failure comment working on fork PRs.
+on:
+  workflow_run:
+    workflows: ["PR checks"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read # to download the triggering run's artifacts
+
+jobs:
+  comment:
+    # Only runs triggered by PRs; pushes to branches have no PR to comment on.
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post lint failure comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          # No artifact = lint passed (or the failure was elsewhere, e.g. tests);
+          # nothing to comment on.
+          gh run download "$RUN_ID" -n lint-failure -D lint-fail 2>/dev/null || exit 0
+
+          PR_NUMBER=$(cat lint-fail/pr-number.txt)
+          SHA=$(cat lint-fail/pr-sha.txt)
+          # Comments cap at ~64k chars; keep the tail where the errors are.
+          TAIL=$(tail -c 60000 lint-fail/lint-output.txt)
+          BODY=$(printf '**Lint failed** on %s — [workflow run](%s)\n\n~~~\n%s\n~~~' "$SHA" "$RUN_URL" "$TAIL")
+          gh api -X POST "repos/$GH_REPO/issues/$PR_NUMBER/comments" -f body="$BODY" > /dev/null
