@@ -24,7 +24,7 @@ jobs:
         run: npm ci
 
       # tee keeps the step's pipefail failure while saving output for the
-      # pr-lint-comment.yml workflow_run follower to post as a PR comment
+      # pr-check-comments.yml workflow_run follower to post as a PR comment
       # (this job can't comment itself — fork PRs get a read-only token).
       - name: Run lint
         run: npm run lint 2>&1 | tee lint-output.txt
@@ -72,6 +72,23 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        run: npm test
+        run: npm test 2>&1 | tee test-output.txt
         env:
           BASE_REF: ${{ github.base_ref }}
+
+      - name: Stage test output for commenter
+        if: failure()
+        run: |
+          echo "${{ github.event.pull_request.number }}" > pr-number.txt
+          echo "${{ github.event.pull_request.head.sha }}" > pr-sha.txt
+
+      - name: Upload test output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-failure
+          path: |
+            test-output.txt
+            pr-number.txt
+            pr-sha.txt
+          retention-days: 5
