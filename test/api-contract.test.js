@@ -84,19 +84,24 @@ function objectKeys(body) {
 }
 
 function parseRouter() {
-    const src = fs.readFileSync(path.join(ROOT, 'src', 'server.js'), 'utf8');
+    // Route tables live in src/server.js plus every file under src/routes/.
+    const files = ['src/server.js',
+        ...fs.readdirSync(path.join(ROOT, 'src', 'routes')).filter(f => f.endsWith('.js')).map(f => `src/routes/${f}`)];
     const re = /^\s{4}'(GET|POST) (\/api\/[^']+)':/gm;
-    const hits = [...src.matchAll(re)];
     const routes = new Map();
-    hits.forEach((m, i) => {
-        const body = src.slice(m.index, hits[i + 1]?.index ?? src.indexOf('\n};', m.index));
-        const reads = new Set([
-            ...[...body.matchAll(/\bb\.([A-Za-z_$][\w$]*)/g)].map(x => x[1]),
-            ...[...body.matchAll(/\b(?:q|searchParams)\.get\(\s*['"]([^'"]+)['"]/g)].map(x => x[1]),
-        ]);
-        const dynamic = /\bb\[/.test(body) || /\{\s*[^}]*\}\s*=\s*b\b/.test(body);
-        routes.set(`${m[1]} ${m[2]}`, { reads, dynamic });
-    });
+    for (const file of files) {
+        const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
+        const hits = [...src.matchAll(re)];
+        hits.forEach((m, i) => {
+            const body = src.slice(m.index, hits[i + 1]?.index ?? src.indexOf('\n};', m.index));
+            const reads = new Set([
+                ...[...body.matchAll(/\bb\.([A-Za-z_$][\w$]*)/g)].map(x => x[1]),
+                ...[...body.matchAll(/\b(?:q|searchParams)\.get\(\s*['"]([^'"]+)['"]/g)].map(x => x[1]),
+            ]);
+            const dynamic = /\bb\[/.test(body) || /\{\s*[^}]*\}\s*=\s*b\b/.test(body);
+            routes.set(`${m[1]} ${m[2]}`, { reads, dynamic });
+        });
+    }
     return routes;
 }
 

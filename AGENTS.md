@@ -12,7 +12,12 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 
 | File | Purpose | Key exports / sections |
 |---|---|---|
-| `server.js` | The entire HTTP layer: route table, auth, SSE fan-out, static file serving | `router` object (`"METHOD /path"` → handler); `auth(req)`; `push(roomId, evt)` SSE broadcast; `roomOwnerOnly()` guard; request-gate + static-file section at the bottom of the file |
+| `server.js` | Thin HTTP shell: merges route tables, request gates, static file serving | `router` merge of `src/routes/*`; unauthenticated-API 401 gate; static-file gate |
+| `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona/user admin), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats) | |
+| `util.js` | Request/response helpers | `send`, `readBody`, `cookieToken`, `auth(req)` |
+| `access.js` | Permission helpers for route handlers | `roomOwnerOnly`, `roomMember`, `memoryShared`, `isAdmin`, `worldEntryOk` |
+| `sse.js` | Server-Sent Events fan-out | `streams` map; `push(roomId, evt)` |
+| `files.js` | Filesystem locations | `PUB`, `CARDS_DIR`, `BG_DIR` (created on import) |
 | `db.js` | SQLite (`node:sqlite` `DatabaseSync`) at `data/app.db`: schema, migrations, auth/session helpers, seed data | `db` (shared handle); `hash`/`verify` (scrypt); `createUser`/`login`/`userForToken`; `activeProfile(userId)`; `MSG_SQL` (canonical messages SELECT); `migrateSchema()`; `migrateProfiles()`; `seed()` |
 | `generate.js` | LLM integration + prompt assembly (server-side only; API keys never reach clients) | `generateReply(roomId, card)` — builds system prompt (card fields + world entries + memories + history), calls `{apiUrl}/chat/completions`; `maybeSummarize(roomId)` — smart-memory extraction; `memProfileFor(room)`; `genStats` (per-room last-request stats for the prompt inspector) |
 | `pngcard.js` | SillyTavern character-card import | `extractCardJson(pngBuf)` (tEXt `chara` chunk); `normalizeCard(raw)` (ST v1/v2 → our columns) |
@@ -50,7 +55,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 4. **Static gate:** no session → every file except `login.html` redirects (302) to `/login.html`. Files are confined to `PUB` via `file.startsWith(PUB + path.sep)`.
 5. SSE: `GET /api/stream?room=N` registers `res` in `streams`; `push()` fans `data:` events to a room. Event types: `{type:'message'}`, `{type:'delete'}`.
 
-Route-handler conventions: updates go through `/api/<thing>/update|delete` POST endpoints (no PUT/DELETE methods). Permission helpers (all defined at the top of `server.js`): `roomOwnerOnly(rid, u)` for room-admin routes, `roomMember(rid, u)` for anything reading/posting room content, `memoryShared(id, u)` for memory mutations, `worldEntryOk(id, u)` for lorebook entries, `isAdmin(u)` for user admin (first registered user is the site admin). Object ownership uses `…_users_id_fk === u.users_id_pk`. The `u` arg may be undefined for public routes — don't dereference it unguarded.
+Route-handler conventions: routes are `export default { 'METHOD /path': handler }` maps in `src/routes/<domain>.js`; updates go through `/api/<thing>/update|delete` POST endpoints (no PUT/DELETE methods). Permission helpers live in `src/access.js`: `roomOwnerOnly(rid, u)` for room-admin routes, `roomMember(rid, u)` for anything reading/posting room content, `memoryShared(id, u)` for memory mutations, `worldEntryOk(id, u)` for lorebook entries, `isAdmin(u)` for user admin (first registered user is the site admin). Object ownership uses `…_users_id_fk === u.users_id_pk`. The `u` arg may be undefined for public routes — don't dereference it unguarded.
 
 ## Data model
 
