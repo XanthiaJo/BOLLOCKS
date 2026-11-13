@@ -23,13 +23,41 @@ const MEM_PROFILE_FIELDS = ['auto_mem', 'mem_every', 'mem_budget', 'mem_max', 'm
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
     'mem_extraction_profile_id'];
 
+// Named system-prompt sections in cache-optimal order (stable content first —
+// see the assembly comment in generateReply). The user's active
+// prompt_profiles row can reorder them via prompt_order (JSON array of
+// keys); NULL means this order. 'history' is a position marker, not text.
+export const PROMPT_BLOCKS = [
+    { key: 'main', label: 'Main prompt',
+        example: 'You are Aria.' },
+    { key: 'description', label: 'Card description',
+        example: 'Description:\nAria is a wandering cartographer with a stolen map case.' },
+    { key: 'personality', label: 'Card personality',
+        example: 'Personality:\ncurious, blunt, secretly kind' },
+    { key: 'scenario', label: 'Scenario',
+        example: 'Scenario:\nThe party camps at the edge of the drowned forest.' },
+    { key: 'examples', label: 'Example dialogue',
+        example: 'Example dialogue:\nAria: We were never here.\n{{user}}: Says who?' },
+    { key: 'roster', label: 'Other characters',
+        example: 'Also present in the scene:\nBlake: a retired knight who owes Aria money' },
+    { key: 'world', label: 'World info',
+        example: 'World info:\nThe drowned forest floods every new moon.' },
+    { key: 'memories', label: 'Memories',
+        example: 'Memories:\n- [fact] Aria distrusts the harbor guild.\n- [event] Blake offered to carry the map case.' },
+    { key: 'instructions', label: 'Instructions',
+        example: "You are Aria and ONLY Aria — an NPC in a shared roleplay. The other characters listed are separate people speaking for themselves; do NOT speak for them or imitate them. Write ONLY Aria's next message." },
+    { key: 'history', label: 'Chat history',
+        example: 'creamms: We should leave before dawn.\nAria: The tide says otherwise.' },
+];
+
 /** Effective memory settings for a room: always the memory profile it follows
- *  (falling back to the first profile when none is assigned) — there is no
- *  per-chat custom option. Room columns only carry per-room bits like
- *  the injection-refresh counter. */
+ *  via mem_profiles_id_fk. No link → the room's own columns, which default to
+ *  auto_mem=0: smart memories are simply off. Room columns only carry per-room
+ *  bits like the injection-refresh counter. */
 export function memProfileFor(room) {
-    const p = db.prepare(`SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=COALESCE(?,(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1))`)
-        .get(room?.mem_profiles_id_fk || null);
+    const p = room?.mem_profiles_id_fk
+        ? db.prepare('SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=?').get(room.mem_profiles_id_fk)
+        : null;
     if (!p) return room;
     const out = { ...room };
     for (const k of MEM_PROFILE_FIELDS) if (k in p) out[k] = p[k];
@@ -118,21 +146,42 @@ export async function generateReply(roomId, card) {
             ].filter(Boolean).join('\n\n'))
         : null;
 
-    const system = [
-        card.system_prompt || `You are ${card.name}.`,
-        worldText,
-        memText,
-        card.description && `Description:\n${card.description}`,
-        card.personality && `Personality:\n${card.personality}`,
-        card.scenario && `Scenario:\n${card.scenario}`,
-        card.mes_example && `Example dialogue:\n${card.mes_example}`,
-        others.length && `Also present in the scene:\n` +
+    // Prompt sections assemble in PROMPT_BLOCKS order — stable -> volatile for
+    // prefix caching: card sheet fields and the member roster rarely change;
+    // keyword-triggered world entries and freshly-extracted memories change
+    // often, so they go last. Anything after a changed block re-bills, so
+    // volatility decides position. A profile's mem_prompt_order overrides.
+    const blocks = {
+        main: card.system_prompt || `You are ${card.name}.`,
+        description: card.description && `Description:\n${card.description}`,
+        personality: card.personality && `Personality:\n${card.personality}`,
+        scenario: card.scenario && `Scenario:\n${card.scenario}`,
+        examples: card.mes_example && `Example dialogue:\n${card.mes_example}`,
+        roster: others.length && `Also present in the scene:\n` +
             others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
-        `You are ${card.name} and ONLY ${card.name} — an NPC in a shared roleplay. ` +
+        world: worldText,
+        memories: memText,
+        instructions: `You are ${card.name} and ONLY ${card.name} — an NPC in a shared roleplay. ` +
             `The other characters listed are separate people speaking for themselves; ` +
             `do NOT speak for them or imitate them. Write ONLY ${card.name}'s next message.` +
             (card.post_history_instructions ? ` ${card.post_history_instructions}` : ''),
-    ].filter(Boolean).join('\n\n');
+    };
+    // The card owner's active injection profile decides section order —
+    // prompt layout follows the user, not whichever API profile generated.
+    const inj = db.prepare('SELECT * FROM prompt_profiles WHERE users_id_fk=? AND active=1').get(card.owner_users_id_fk)
+        || db.prepare('SELECT * FROM prompt_profiles WHERE users_id_fk=? ORDER BY prompt_profiles_id_pk LIMIT 1').get(card.owner_users_id_fk);
+    let order;
+    try { order = JSON.parse(inj?.prompt_order || ''); } catch { order = null; }
+    if (!Array.isArray(order)) order = [];
+    const known = new Set(PROMPT_BLOCKS.map(b => b.key));
+    order = order.filter(k => known.has(k));
+    for (const b of PROMPT_BLOCKS) if (!order.includes(b.key)) order.push(b.key);
+    // 'history' is a position marker, not a text block: everything above it
+    // joins the system prompt; everything below is appended as a second
+    // system message after the chat history, right before the reply nudge.
+    const hi = order.indexOf('history');
+    const system = order.slice(0, hi < 0 ? order.length : hi).map(k => blocks[k]).filter(Boolean).join('\n\n');
+    const postSys = hi < 0 ? '' : order.slice(hi + 1).map(k => blocks[k]).filter(Boolean).join('\n\n');
 
     const parts = {
         'Main Prompt': tok(card.system_prompt || `You are ${card.name}.`),
@@ -189,12 +238,15 @@ export async function generateReply(roomId, card) {
     const reqBody = {
         model: conn.model || 'local',
         messages: [
-            { role: 'system', content: system },
+            ...(system ? [{ role: 'system', content: system }] : []),
             // The card's own past lines are its voice (assistant);
             // everyone else's lines are tagged context (user).
             ...history.map(m => m.cards_id_fk === card.id
                 ? { role: 'assistant', content: m.text }
                 : { role: 'user', content: `${m.name}: ${m.text}` }),
+            // Blocks ordered below 'history' land here — recent context the
+            // model reads right before replying.
+            ...(postSys ? [{ role: 'system', content: postSys }] : []),
             // Final nudge — primes the model to continue as this character.
             { role: 'user', content: `${card.name}:` },
         ],

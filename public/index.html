@@ -74,6 +74,8 @@ button.gen{background:var(--ok)}
   <h3 style="margin-top:16px">Chat settings</h3>
   <div class="cap">World</div>
   <select id="worldsel" onchange="setWorld(this.value)" style="width:100%"></select>
+  <div class="cap">Smart memory</div>
+  <select id="mprofsel" onchange="setMProf(this.value)" style="width:100%"></select>
   <div style="font-size:.8em;color:var(--dim);margin-top:8px" title="Cap on total prompt size — oldest history is dropped when exceeded">Max prompt tokens (0 = unlimited)</div>
   <input type="number" id="ctxmax" min="0" step="500" onchange="setCtx(this.value)" style="width:100%">
   <div class="cap">Chat background</div>

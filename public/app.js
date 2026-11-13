@@ -7,6 +7,7 @@ let allUsers = [], allCards = [], memberCur = new Set();
 
 const AS = '';
 const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const api = (p, b, method = 'POST') => fetch(`/api/${p}`, {
     method,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -95,7 +96,7 @@ async function loadRoom() {
         document.title = `BOLLOCKS · ${r?.name || `room ${room}`}`;
         roomIsOwner = !!r?.is_owner;
         applyOwnerUI();
-        if (r) { $('trigsel').value = r.ai_trigger || 'manual'; $('ctxmax').value = r.max_context || 0; }
+        if (r) { $('trigsel').value = r.ai_trigger || 'manual'; $('ctxmax').value = r.max_context || 0; renderMProf(r); }
         $('chat').style.setProperty('--bg', r?.bg ? `url(/api/roombg?id=${room})` : 'none');
     });
 }
@@ -110,7 +111,7 @@ async function renderRooms() {
         .join('');
 }
 function applyOwnerUI() {
-    for (const id of ['trigsel', 'worldsel', 'ctxmax', 'bgfile']) {
+    for (const id of ['trigsel', 'worldsel', 'mprofsel', 'ctxmax', 'bgfile']) {
         const el = $(id); if (el) el.disabled = !roomIsOwner;
     }
     document.querySelectorAll('#members .talk').forEach(el => el.disabled = !(roomIsOwner || el.dataset.mine === '1'));
@@ -166,6 +167,21 @@ async function setTrig(mode) {
 }
 async function setCtx(v) {
     await api('room/settings', { room, maxContext: Math.max(0, Number(v) || 0) });
+}
+async function renderMProf(r) {
+    const sel = $('mprofsel'); if (!sel) return;
+    // Owners pick from their own profiles; members only see the followed name.
+    if (roomIsOwner) {
+        const { profiles } = await get('memprofiles');
+        sel.innerHTML = '<option value="0">Disabled</option>' +
+            (profiles || []).map(p => `<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
+        sel.value = String(r?.mem_profiles_id_fk || 0);
+    } else {
+        sel.innerHTML = `<option>${esc(r?.mem_profile_name || 'Disabled')}</option>`;
+    }
+}
+async function setMProf(v) {
+    await api('room/memsettings', { room, memProfile: Number(v) || 0 });
 }
 async function uploadBg(inp) {
     const f = inp.files?.[0]; if (!f) return;

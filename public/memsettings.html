@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"><title>BOLLOCKS · Smart memory</title>
+<link rel="stylesheet" href="layout.css">
+</head>
+<body>
+<aside id="rsidebar">
+  <h3 style="margin-top:0">Smart memory profiles</h3>
+  <div id="plist"></div>
+  <button onclick="newMP()" style="width:100%;margin-top:8px">+ New profile</button>
+  <button onclick="saveAsProfile()" style="width:100%;margin-top:4px;background:var(--border)">Save current as profile…</button>
+  <small style="color:var(--dim);display:block;margin-top:10px">Chats pick which smart-memory profile they follow on the <a href="/memories.html" style="color:var(--muted)">Memories</a> page's Smart tab. Select a profile to edit it.</small>
+</aside>
+<div id="content">
+<main>
+  <div class="panel settings" id="profpanel" style="display:none">
+    <h3 id="pf_title"></h3>
+    <label class="lbl" style="display:block">Profile name</label><input id="pf_name" style="width:240px;margin:2px 0" onchange="saveProf()">
+    <div style="opacity:.45;pointer-events:none"><label class="cb"><input type="checkbox" disabled> Read-only mode — protect memories</label></div>
+
+    <h4>Memory LLM</h4>
+    <span class="hint">The "memory-writer": a second AI that reads new chat and decides what to store. These settings control how it runs.</span>
+    <div class="row"><span class="lbl" title="Which API profile runs memory extraction — smart memories stay off until the room owner picks one.">Extraction profile (required)</span><span class="hint">Which API connection the memory-writer uses (set up under Connection). Smart memory can't run until you pick one — a small/cheap model is usually plenty.</span><select id="set_profile" onchange="saveProf()" style="width:220px"></select></div>
+    <div>
+      <div class="row"><span class="lbl" title="Max tokens the memory LLM may use per extraction call. Unlimited (-1) warns it may be slow/costly.">Generation budget (tokens)</span><span class="hint">How much the memory-writer may write per run. ~4 characters ≈ 1 token. Default: 2000. Enter -1 for unlimited — can be slow or expensive on paid APIs.</span><input type="number" id="set_genbudget" min="-1" max="32768" value="2000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+      <label class="row cbrow"><span class="lbl">Show activity indicator</span><span class="hint">Show a snackbar in the chat when the memory-writer runs — handy to see it's working.</span><input type="checkbox" id="set_activity" onchange="saveProf()"></label>
+      <label class="row cbrow"><span class="lbl">Unified injection</span><span class="hint">On: memories reach the AI as one "Memories:" block. Off: split into "what happened here" (shared) and "what this character remembers" (personal).</span><input type="checkbox" id="set_unified" onchange="saveProf()"></label>
+      <label class="row cbrow"><span class="lbl">Generate contextual triggers</span><span class="hint">The writer tags each memory with keywords; a memory is only added to the prompt when a keyword appeared in the last few messages. Cheaper prompts, occasionally misses context.</span><input type="checkbox" id="set_triggers" onchange="saveProf()"></label>
+      <label class="row cbrow" style="opacity:.45;pointer-events:none"><span class="lbl">Auto-tune budgets</span><span class="hint">Automatically raise the injection token budget (below) if stored memories keep getting cut off. Temporarily disabled while the design gets reworked.</span><input type="checkbox" id="set_autotune" disabled onchange="saveProf()"></label>
+      <div class="row"><span class="lbl" title="How often the injected memory block is rebuilt. 1 = every generation.">Injection refresh every N AI messages</span><span class="hint">Only add memories to the prompt every Nth reply — saves tokens on the replies in between. 1 = every reply (default).</span><input type="number" id="set_refresh" min="1" max="50" value="1" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    </div>
+
+    <h4>Extraction</h4>
+    <span class="hint">When and how new chat gets turned into stored memories.</span>
+    <div class="row"><span class="lbl" title="How many new messages before the extractor summarizes them." title="How many new messages before the extractor summarizes them.">Extract after every N new messages</span><span class="hint">How often the memory-writer runs. Smaller = more up-to-date but more API calls. Default: 10.</span><input type="number" id="set_every" min="2" max="100" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl" title="Cap on auto-extracted memories (total); oldest are dropped.">Max stored smart memories (total)</span><span class="hint">Overall cap across all types — oldest are forgotten first. 0 = unlimited. Default: 50.</span><input type="number" id="set_max" min="0" max="5000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <span class="hint">Caps per memory type — the oldest of that type drop first. 0 = no per-type limit (the total cap still applies). Default: 15 each.</span>
+    <div class="row"><span class="lbl">Max per type — fact</span><span class="hint">things that are true</span><input type="number" id="set_max_fact" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — event</span><span class="hint">things that happened</span><input type="number" id="set_max_event" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — relationship</span><span class="hint">how characters feel about each other</span><input type="number" id="set_max_rel" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl">Max per type — preference</span><span class="hint">likes and dislikes</span><input type="number" id="set_max_pref" min="0" max="500" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    <div>
+      <div class="lbl" title="The instruction sent to the memory LLM when summarizing chat into memories. Leave blank for default.">Extraction prompt template</div>
+      <span class="hint">Custom instructions for the memory-writer (e.g. focus on plot, ignore OOC). Leave blank for the built-in prompt — <a href="#" onclick="toggleDefPrompt(this);return false" style="color:var(--muted)">show it</a>.</span>
+      <pre id="def_prompt" style="display:none;white-space:pre-wrap;font-size:.78em;color:var(--dim);background:var(--input);padding:8px;border-radius:4px;margin:2px 0 6px"></pre>
+      <textarea id="set_prompt" placeholder="(default extraction prompt)" style="min-height:60px" onchange="saveProf()"></textarea>
+      <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><span class="hint">Also run extraction early once the chat fills this % of the model's context — so nothing important is lost before old messages get trimmed. Default: 80.</span><input type="number" id="set_ctx" min="10" max="100" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+      <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><span class="hint">Fallback reply length — only used when the generation budget above is unset. Usually safe to leave alone. Default: 2000.</span><input type="number" id="set_resplen" min="256" max="8192" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+    </div>
+
+    <h4>Injection</h4>
+    <span class="hint">How stored memories get put back into the AI's prompt.</span>
+    <div class="row"><span class="lbl" title="Max tokens of memory content injected into each generation prompt.">Token budget</span><span class="hint">Max memory text added to each reply's prompt — beyond this, newer memories are left out (oldest are kept). Default: 800.</span><input type="number" id="set_budget" min="50" max="4000" onchange="saveProf()" style="width:80px;display:inline-block"></div>
+
+    <h4>Session Memory</h4>
+    <div class="ph">
+      <div class="row"><span class="lbl" title="How many AI replies pass before a memory extraction runs." title="How many AI replies pass before a memory extraction runs.">Extract after every N AI messages</span><input value="10" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Cap on session-scoped (temporary) memories; oldest drop off." title="Cap on session-scoped (temporary) memories; oldest drop off.">Max session memories</span><input value="30" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for session-memory text in prompts." title="Token cap for session-memory text in prompts.">Session injection budget</span><input value="400" disabled style="width:80px"></div>
+    </div>
+
+    <h4>Current Summary</h4>
+    <div class="ph">
+      <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><input value="80" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><input value="2000" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for the rolling chat summary." title="Token cap for the rolling chat summary.">Summary injection budget</span><input value="500" disabled style="width:80px"></div>
+      <div class="lbl" title="Format the rolling summary is injected with.">Summary template</div>
+      <textarea disabled style="min-height:50px"></textarea>
+    </div>
+
+    <h4>Scene History</h4>
+    <div class="ph">
+      <label class="cb"><input type="checkbox" disabled> Use AI scene detection</label>
+      <div class="row"><span class="lbl" title="How many recent scene summaries to retain." title="How many recent scene summaries to retain.">Keep last N scenes</span><input value="5" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for scene history in prompts." title="Token cap for scene history in prompts.">Scene injection budget</span><input value="300" disabled style="width:80px"></div>
+    </div>
+
+    <h4>Active Threads</h4>
+    <div class="ph">
+      <div class="row"><span class="lbl" title="How many open story threads are tracked at once." title="How many open story threads are tracked at once.">Max tracked arcs</span><input value="10" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for open-threads context in prompts." title="Token cap for open-threads context in prompts.">Thread injection budget</span><input value="700" disabled style="width:80px"></div>
+    </div>
+
+    <h4>Consolidation</h4>
+    <div class="ph">
+      <div class="row"><span class="lbl" title="Merge N pending fact-memories into one consolidated entry." title="Merge N pending fact-memories into one consolidated entry.">Consolidate [fact] after N unprocessed</span><input value="4" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for relationship-type memories." title="Same, for relationship-type memories.">Consolidate [relationship] after N</span><input value="3" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for preference-type memories." title="Same, for preference-type memories.">Consolidate [preference] after N</span><input value="3" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for event-type memories." title="Same, for event-type memories.">Consolidate [event] after N</span><input value="4" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for scene summaries." title="Same, for scene summaries.">Consolidate [scene] after N</span><input value="3" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for character revelations." title="Same, for character revelations.">Consolidate [revelation] after N</span><input value="3" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for character development notes." title="Same, for character development notes.">Consolidate [development] after N</span><input value="3" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Same, for detail memories." title="Same, for detail memories.">Consolidate [detail] after N</span><input value="3" disabled style="width:80px"></div>
+    </div>
+
+    <h4>Canon</h4>
+    <div class="ph">
+      <div class="row"><span class="lbl" title="Token cap for canon (always-true world facts) in prompts." title="Token cap for canon (always-true world facts) in prompts.">Canon injection budget</span><input value="800" disabled style="width:80px"></div>
+      <div class="lbl" title="Format canon facts are injected with.">Canon template</div><textarea disabled style="min-height:50px"></textarea>
+    </div>
+
+    <h4>Profiles</h4>
+    <div class="ph">
+      <div class="row"><span class="lbl" title="Rebuild the character profile if older than this." title="Rebuild the character profile if older than this.">Regenerate when older than</span><input value="30m" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Or rebuild after this many messages, whichever first." title="Or rebuild after this many messages, whichever first.">Also regenerate every N msgs</span><input value="20" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for generated character profiles in prompts." title="Token cap for generated character profiles in prompts.">Profile injection budget</span><input value="400" disabled style="width:80px"></div>
+    </div>
+
+    <h4>Pairs (relationships)</h4>
+    <div class="ph">
+      <div class="row"><span class="lbl" title="Token cap for relationship-pair data in prompts." title="Token cap for relationship-pair data in prompts.">Pairs injection budget</span><input value="250" disabled style="width:80px"></div>
+    </div>
+
+    <h4>Perspective</h4>
+    <div class="ph">
+      <label class="cb"><input type="checkbox" disabled> Inject "does not know" entries</label>
+      <label class="cb"><input type="checkbox" disabled> Frame secondhand long-term memories</label>
+      <div class="row"><span class="lbl" title="Token cap for perspective entries in prompts." title="Token cap for perspective entries in prompts.">Perspective injection budget</span><input value="200" disabled style="width:80px"></div>
+    </div>
+
+    <h4>Recap</h4>
+    <div class="ph">
+      <div class="row"><span class="lbl" title="Time between automatic scene/session recaps." title="Time between automatic scene/session recaps.">Generate recap after</span><input value="4h" disabled style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for recap text in prompts." title="Token cap for recap text in prompts.">Recap injection budget</span><input value="200" disabled style="width:80px"></div>
+    </div>
+
+    <h4>State cards</h4>
+    <div class="ph">
+      <label class="cb"><input type="checkbox" disabled> Auto-check after each response</label>
+      <label class="cb"><input type="checkbox" disabled> Auto-repair contradictions</label>
+    </div>
+
+    <h4>Deduplication</h4>
+    <div class="ph">
+      <label class="cb"><input type="checkbox" disabled> Use semantic embeddings</label>
+      <div class="row"><span class="lbl" title="Service providing embeddings." title="Service providing embeddings.">Embedding source</span><input placeholder="ollama / openai" disabled></div>
+      <div class="row"><span class="lbl" title="Endpoint for the embeddings service." title="Endpoint for the embeddings service.">Embedding URL</span><input disabled></div>
+      <div class="row"><span class="lbl" title="Model used for embeddings, e.g. nomic-embed-text." title="Model used for embeddings, e.g. nomic-embed-text.">Embedding model</span><input placeholder="nomic-embed-text" disabled></div>
+      <label class="cb"><input type="checkbox" disabled> Keep model in memory</label>
+    </div>
+
+    <div style="display:flex;gap:6px;margin-top:12px"><button onclick="saveProf()">Save profile</button><button onclick="delMP(selProf)" style="background:var(--danger)">Delete profile</button><button onclick="deselectProf()" style="background:var(--border)">Close</button></div>
+  </div>
+</main>
+</div>
+<script src="layout.js"></script>
+<script src="memsettings.js"></script>
+<script src="memprofiles.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 // Connection routes: API profiles, memory profiles, /models proxy.
 import { db } from '../db.js';
 import { send, readBody } from '../util.js';
-import { MEM_EXTRACT_PROMPT } from '../generate.js';
+import { MEM_EXTRACT_PROMPT, PROMPT_BLOCKS } from '../generate.js';
 
 export default {
     'POST /api/models': async (req, res, u) => {
@@ -96,10 +96,49 @@ export default {
     },
     'POST /api/memprofiles/delete': async (req, res, u) => {
         const b = await readBody(req);
-        // Rooms following the deleted profile are re-pointed at another one
-        // (0 = feature-less room columns only when NO profiles remain).
-        db.prepare(`UPDATE rooms SET mem_profiles_id_fk=COALESCE((SELECT mem_profiles_id_pk FROM mem_profiles WHERE mem_profiles_id_pk<>? ORDER BY mem_profiles_id_pk LIMIT 1),0) WHERE mem_profiles_id_fk=?`).run(b.id, b.id);
+        // Rooms following the deleted profile are re-pointed at another of
+        // the SAME user's profiles (0 = feature-less room columns only when
+        // none remain). Only the owner's own rooms can legitimately follow.
+        db.prepare(`UPDATE rooms SET mem_profiles_id_fk=COALESCE((SELECT mem_profiles_id_pk FROM mem_profiles WHERE mem_profiles_id_pk<>? AND users_id_fk=? ORDER BY mem_profiles_id_pk LIMIT 1),0)
+            WHERE mem_profiles_id_fk=? AND owner_users_id_fk=?`).run(b.id, u.users_id_pk, b.id, u.users_id_pk);
         db.prepare('DELETE FROM mem_profiles WHERE mem_profiles_id_pk=? AND users_id_fk=?').run(b.id, u.users_id_pk);
+        send(res, 200, { ok: true });
+    },
+    // Injection profiles: named prompt-assembly presets (section order today,
+    // templates/block triggers later). The user's `active` one applies to all
+    // their generations — layout survives swapping API connections.
+    'GET /api/promptprofiles': async (req, res, u) => {
+        const profiles = db.prepare('SELECT * FROM prompt_profiles WHERE users_id_fk=? ORDER BY prompt_profiles_id_pk').all(u.users_id_pk);
+        send(res, 200, { profiles, promptBlocks: PROMPT_BLOCKS });
+    },
+    'POST /api/promptprofiles': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!b.name) return send(res, 400, { error: 'name required' });
+        const first = !db.prepare('SELECT 1 FROM prompt_profiles WHERE users_id_fk=?').get(u.users_id_pk);
+        const id = db.prepare('INSERT INTO prompt_profiles (users_id_fk,name,prompt_order,active) VALUES (?,?,?,?)')
+            .run(u.users_id_pk, b.name, b.order ? JSON.stringify(b.order) : null, first ? 1 : 0).lastInsertRowid;
+        send(res, 200, { id });
+    },
+    'POST /api/promptprofiles/update': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare(`UPDATE prompt_profiles SET name=COALESCE(NULLIF(?,''),name), prompt_order=?
+            WHERE prompt_profiles_id_pk=? AND users_id_fk=?`)
+            .run(String(b.name ?? '').trim(), b.order ? JSON.stringify(b.order) : null, b.id, u.users_id_pk);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/promptprofiles/activate': async (req, res, u) => {
+        const b = await readBody(req);
+        db.prepare('UPDATE prompt_profiles SET active=0 WHERE users_id_fk=?').run(u.users_id_pk);
+        db.prepare('UPDATE prompt_profiles SET active=1 WHERE prompt_profiles_id_pk=? AND users_id_fk=?').run(b.id, u.users_id_pk);
+        send(res, 200, { ok: true });
+    },
+    'POST /api/promptprofiles/delete': async (req, res, u) => {
+        const b = await readBody(req);
+        // Deleting the active profile falls back to the next one, so a
+        // generation never silently loses its assigned layout.
+        const wasActive = db.prepare('SELECT active FROM prompt_profiles WHERE prompt_profiles_id_pk=? AND users_id_fk=?').get(b.id, u.users_id_pk)?.active;
+        db.prepare('DELETE FROM prompt_profiles WHERE prompt_profiles_id_pk=? AND users_id_fk=?').run(b.id, u.users_id_pk);
+        if (wasActive) db.prepare('UPDATE prompt_profiles SET active=1 WHERE users_id_fk=? ORDER BY prompt_profiles_id_pk LIMIT 1').run(u.users_id_pk);
         send(res, 200, { ok: true });
     },
 };
