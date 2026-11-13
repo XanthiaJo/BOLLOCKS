@@ -4,29 +4,95 @@ Guidance for coding agents working in this repository.
 
 ## Project overview
 
-BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer group-chat server that mixes AI characters and humans. The server owns state (SQLite) and exposes a thin HTTP + SSE API consumed by plain HTML/JS pages.
+BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer group-chat server that mixes AI characters and humans. The server owns all state (SQLite + the LLM connection) and exposes a thin HTTP + SSE API consumed by plain HTML/JS pages. There is no build step and no framework anywhere.
 
-## Repository structure
+## Where things live (file map)
 
-- `src/` — Node.js backend (ES modules)
-  - `server.js` — built-in `node:http` server, route table, JSON API, SSE fan-out, static file serving
-  - `db.js` — `node:sqlite` (`DatabaseSync`) database at `data/app.db`, schema migrations/seed helpers
-  - `generate.js` — OpenAI-compatible chat/completions integration and prompt/context assembly
-  - `pngcard.js` — SillyTavern character card PNG/JSON import helpers
-- `public/` — frontend (no build step): HTML pages + shared `app.js`, `layout.js`, `layout.css`
-- `scripts/` — maintenance/util scripts (Node ESM `.mjs`)
-- `.github/workflows/` — GitHub Actions
-  - `pr-autofill.yml` — maintains an autofilled commit list above any hand-written PR body (runs on PR open/sync/reopen); leaves the PR title unchanged
-  - `pr-checks.yml` — PR lint checks
-  - `beta.yml` / `release.yml` — manual release flows (reusable workflow in `Box-of-Dragons/StructuredChaos`)
-- `data/` — runtime data (gitignored): SQLite DB, imported card images, etc.
-- `package.json` — ESM package (`"type": "module"`), scripts, dev dependencies
+### `src/` — Node.js backend (ES modules)
+
+| File | Purpose | Key exports / sections |
+|---|---|---|
+| `server.js` | The entire HTTP layer: route table, auth, SSE fan-out, static file serving | `router` object (`"METHOD /path"` → handler); `auth(req)`; `push(roomId, evt)` SSE broadcast; `roomOwnerOnly()` guard; request-gate + static-file section at the bottom of the file |
+| `db.js` | SQLite (`node:sqlite` `DatabaseSync`) at `data/app.db`: schema, migrations, auth/session helpers, seed data | `db` (shared handle); `hash`/`verify` (scrypt); `createUser`/`login`/`userForToken`; `activeProfile(userId)`; `MSG_SQL` (canonical messages SELECT); `migrateSchema()`; `migrateProfiles()`; `seed()` |
+| `generate.js` | LLM integration + prompt assembly (server-side only; API keys never reach clients) | `generateReply(roomId, card)` — builds system prompt (card fields + world entries + memories + history), calls `{apiUrl}/chat/completions`; `maybeSummarize(roomId)` — smart-memory extraction; `memProfileFor(room)`; `genStats` (per-room last-request stats for the prompt inspector) |
+| `pngcard.js` | SillyTavern character-card import | `extractCardJson(pngBuf)` (tEXt `chara` chunk); `normalizeCard(raw)` (ST v1/v2 → our columns) |
+
+### `public/` — frontend, static files served by `server.js` (no bundler)
+
+| File | Purpose |
+|---|---|
+| `login.html` | Login page — the ONLY file served without a session. Self-contained (inline CSS/JS); stores token in `localStorage.mp_token`, redirects to `/` |
+| `index.html` + `app.js` | Chat page: room list, messages, members sidebar, prompt-token inspector, SSE live updates |
+| `characters.html` | Card list + editor, avatar upload with in-browser crop |
+| `world.html` | Lorebook list (create/delete/link-to-room, ST JSON import) |
+| `world-edit.html` | Entry editor for one book (`?id=<book>`): keys, secondary keys, content, constant/enabled, order |
+| `memories.html` | Memory browser/editor: filter by card/room, triggers, move between card↔room scope |
+| `connection.html` | API profiles (OpenAI-compatible endpoints: url/model/key/headers/context), memory profiles, user admin |
+| `layout.js` | Shared shell injected into every page: top nav + sidebar toggles + version badge. Also `mpOpenEditor`/`mpCloseEditor`/`mpFlashSaved` and `activateProf` helpers |
+| `layout.css` | Shared styles for the shell and pages |
+
+### Everything else
+
+| Path | Purpose |
+|---|---|
+| `data/` | Runtime state, gitignored: `app.db` (SQLite), `cards/*.png` (avatars), `bg/*.png` (room backgrounds). Never commit it |
+| `scripts/` | Node ESM maintenance scripts run manually: `backfill-triggers.mjs` (LLM-fill memory trigger keywords on a live server), `pull-st-connection.mjs` (import a SillyTavern host's API connection over ssh) |
+| `docs/memories.md` | Design doc for the memory system (kinds, ownership rules, extraction flow) |
+| `.github/workflows/` | `pr-autofill.yml` (commit-list above PR body), `pr-checks.yml` (lint), `beta.yml`/`release.yml` (manual releases via `Box-of-Dragons/StructuredChaos`) |
+
+## Request lifecycle (server.js)
+
+1. `auth(req)` resolves the session from, in order: `Authorization: Bearer` header → `mp_token` HttpOnly cookie (set by `/api/login`) → `?token=` query param (for `EventSource`). Returns the user row or undefined.
+2. **API gate:** unauthenticated `/api/*` → 401, except `POST /api/login`, `GET /api/logout`, `GET /api/version`, and `POST /api/register` when zero users exist (first-run bootstrap).
+3. `router[key]` dispatch; handlers get `(req, res, user)`. JSON via `send(res, code, obj)`. Body via `readBody(req)`.
+4. **Static gate:** no session → every file except `login.html` redirects (302) to `/login.html`. Files are confined to `PUB` via `file.startsWith(PUB + path.sep)`.
+5. SSE: `GET /api/stream?room=N` registers `res` in `streams`; `push()` fans `data:` events to a room. Event types: `{type:'message'}`, `{type:'delete'}`.
+
+Route-handler conventions: updates go through `/api/<thing>/update|delete` POST endpoints (no PUT/DELETE methods); permission checks use `roomOwnerOnly(rid, u)` or `card.owner_users_id_fk === u.users_id_pk`; the `u` arg may be undefined for public routes — don't dereference it unguarded.
+
+## Data model
+
+Canonical column naming: `<table>_<col>_pk` for primary keys, `<referenced_table>_<col>_fk` for foreign keys (e.g. `rooms_id_pk`, `owner_users_id_fk`). The `CREATE TABLE` block at the top of `db.js` uses legacy short names — `migrateSchema()`'s `REN` map renames them on startup, so always write queries against the pk/fk names.
+
+Core tables:
+
+- `users` / `sessions` — accounts; `sessions.sessions_token_pk` is the bearer/cookie token.
+- `rooms` — chats; carries `ai_trigger` (manual/all/named/roundrobin), `bg`, `max_context`, `mem_profiles_id_fk`, `owner_users_id_fk`, `mem_last_messages_id`, `mem_refresh_count`.
+- `cards` — character sheets (ST v2 field parity); `is_persona=1` marks a user's human persona; `owner_users_id_fk` owns it; `api_profiles_id_fk` may pin a generation profile.
+- `members` + `room_members` — a `members` row wraps one card (adds `talkativeness`); `room_members` joins members into rooms. Humans sit in rooms via their persona card.
+- `messages` — chat log per room (`cards_id_fk` NULL = system line); use `MSG_SQL` for the standard SELECT (adds `id`, `name`, `kind` ∈ say/ai/sys).
+- `world_books` → `book_entries` → `world_entries` → `world_entry_keys` (primary/secondary keyword rows); `room_books` links at most one book to a room.
+- `memories` (+`room_memories`, +`memory_cards`) — `origin='user'` permanent vs `origin='smart'` auto-extracted; `triggers` keyword-gate injection; `type` ∈ fact/event/relationship/preference.
+- `api_profiles` — per-user OpenAI-compatible connections (`active` flag, `headers` JSON, `context_size`, `max_response`, `strip_prefix`, `key`).
+- `mem_profiles` — named memory-setting presets a room follows (`mem_*` columns; see `MEM_PROFILE_FIELDS` in `generate.js`).
+
+**Schema changes** go in `migrateSchema()` in `db.js`: additive `ALTER TABLE ... ADD COLUMN` guarded by `PRAGMA table_info` checks, or table rebuilds for FK changes; one-time data fixes are gated by `PRAGMA user_version` bumps. Never edit the top `CREATE TABLE` block alone — migrations must bring existing DBs along.
+
+## Generation pipeline (generate.js)
+
+- `generateReply(roomId, card)`: picks the connection (card's `api_profiles_id_fk`, else card-owner's active profile), applies `{{char}}`/`{{user}}` macros, injects keyword-triggered world entries + trigger-gated memories (budget-capped, chars/4 estimate), trims history to the smaller of room `max_context` / profile `context_size` (keeps greeting + tail), posts to `/chat/completions`, strips a leading `Name:` tag, records `genStats[roomId]`.
+- `maybeSummarize(roomId)`: if the room's memory profile has `auto_mem`, every `mem_every` messages (or context-threshold hit) it asks the LLM to distill recent lines into typed bullet memories, enforces per-type and total caps, and can autotune the injection budget.
+- Who replies: `POST /api/say` in `server.js` applies the room's `ai_trigger` policy (talkativeness roll per AI member) — generation itself is always server-side.
+
+## Frontend conventions
+
+- Plain browser JS in each page's inline `<script>` + `app.js` for chat. No modules, no imports — pages share helpers via `layout.js` globals and copy this boilerplate:
+  ```js
+  const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
+  const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.status===401?location='/login.html':r.json());
+  const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.status===401?location='/login.html':r.json());
+  ```
+  Keep that pattern (including the 401→login redirect) when adding pages.
+- `localStorage` keys: `mp_token` (session), `mp_room` (last room).
+- Images/SSE can't send headers — `/api/avatar`, `/api/roombg` authenticate via the `mp_token` cookie; `EventSource` uses `?token=`. Don't re-add public exemptions for them.
+- Element IDs like `$('msgs')`, `$('members')` come from each page's markup; the `$` helper is defined per-page.
+- Logout: nav link → `GET /api/logout` (deletes session server-side + clears cookie + redirects); the click handler clears `localStorage.mp_token`.
 
 ## Tech stack and runtime
 
 - **Node.js ESM** throughout (`import`/`export`, `"type": "module"`). Prefer `node:` specifiers for built-ins.
 - **No framework / no bundler.** Backend uses Node's built-in `http`; frontend is static assets served by the app.
-- **Database:** SQLite via `node:sqlite` (`DatabaseSync`), file `data/app.db`. Treat `data/` as runtime state (not committed).
+- **Database:** SQLite via `node:sqlite` (`DatabaseSync`), file `data/app.db`.
 - **Realtime:** Server-Sent Events (`/api/stream`).
 - **LLM API:** OpenAI-compatible `chat/completions` with per-profile connection settings.
 
@@ -34,12 +100,14 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 
 ```bash
 npm install
-npm start      # runs: node src/server.js (default PORT 8100)
+npm start      # runs: node src/server.js (default PORT 8100, override with env PORT)
+               # data dir defaults to ./data; override with env BOLLOCKS_DATA
+               # (e.g. point at an sshfs mount to share another host's live DB)
 npm run lint   # ESLint checks
 npm run lint:fix
 ```
 
-`data/` is created/used at runtime; it is gitignored. Do not commit database files or generated card images.
+Seeded dev users (fresh DB, `seed()`): `creamms`, `karima`, `blake`, `entropy75` — all password `changeme`. Skip seeding with `BOLLOCKS_SEED=0`; the first `POST /api/register` then bootstraps the initial user.
 
 ## Code conventions
 
@@ -58,4 +126,4 @@ npm run lint:fix
 ## Validation
 
 - There is no automated test suite currently. Run `npm run lint` for static checks.
-- For behavior changes, manually verify the affected API/pages against a local server when feasible.
+- For behavior changes, manually verify the affected API/pages against a local server when feasible (e.g. `PORT=8123 node src/server.js` + `curl`; auth flows can be exercised with `-c`/`-b` cookie jars).
