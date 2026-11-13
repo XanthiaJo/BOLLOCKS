@@ -9,7 +9,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 // which list the sidebar shows and which editor opens.
 let curTab=localStorage.mp_conntab||'api';
 let allProfs=[],injProfs=[],promptBlocks=[],orderKeys=[];
-function connTab(t){curTab=t;localStorage.mp_conntab=t;load()}
+function connTab(t){curTab=t;localStorage.mp_conntab=t;load();newProf()}
 
 async function load(){
   $('t_api').classList.toggle('on',curTab==='api');
