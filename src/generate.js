@@ -57,6 +57,8 @@ export const PROMPT_BLOCKS = [
         example: "You are Aria and ONLY Aria — an NPC in a shared roleplay. The other characters listed are separate people speaking for themselves; do NOT speak for them or imitate them. Write ONLY Aria's next message." },
     { key: 'history', label: 'Chat history',
         example: 'Alice: We should leave before dawn.\nAria: The tide says otherwise.' },
+    { key: 'time', label: 'Current time',
+        example: 'Current time: Friday 13 November 2026, 21:49. Last message: 3 minutes ago.' },
 ];
 
 /** Effective memory settings for a room: always the memory profile it follows
@@ -179,6 +181,25 @@ export async function generateReply(roomId, card) {
     // prompt layout follows the user, not whichever API profile generated.
     const inj = db.prepare('SELECT * FROM prompt_profiles WHERE users_id_fk=? AND active=1').get(card.owner_users_id_fk)
         || db.prepare('SELECT * FROM prompt_profiles WHERE users_id_fk=? ORDER BY prompt_profiles_id_pk LIMIT 1').get(card.owner_users_id_fk);
+    // Current-time block — only when the active injection profile asks for
+    // it. Most volatile block, so the default order puts it below 'history',
+    // right before the reply nudge.
+    let timeText = null;
+    if (inj?.include_time) {
+        const now = new Date();
+        const fmt = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+            + ', ' + now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const lastAt = Date.parse((history.at(-1)?.send_date || '').replace(' ', 'T') + 'Z');
+        const d = Number.isFinite(lastAt) ? Math.max(0, Date.now() - lastAt) : null;
+        let ago = '';
+        if (d != null) {
+            ago = 'just now';
+            for (const [ms, unit] of [[864e5, 'day'], [36e5, 'hour'], [6e4, 'minute']])
+                if (d >= ms) { const n = Math.round(d / ms); ago = `${n} ${unit}${n === 1 ? '' : 's'} ago`; break; }
+        }
+        timeText = `Current time: ${fmt}.` + (ago ? ` Last message: ${ago}.` : '');
+        blocks.time = timeText;
+    }
     let order;
     try { order = JSON.parse(inj?.prompt_order || ''); } catch { order = null; }
     if (!Array.isArray(order)) order = [];
@@ -204,6 +225,7 @@ export async function generateReply(roomId, card) {
         'Chat History': history.reduce((n, m) => n + tok(m.name + ' ' + m.text), 0),
     };
     parts.Memories = tok(memText);
+    parts['Current Time'] = tok(timeText);
 
     // Section texts for the chat sidebar's click-to-view prompt inspector.
     const texts = {
@@ -216,6 +238,7 @@ export async function generateReply(roomId, card) {
         'Other Characters': others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
         'Post-History Instructions': card.post_history_instructions,
         'Memories': memText,
+        'Current Time': timeText,
         'Chat History': history.map(m => `${m.name}: ${m.text}`).join('\n'),
     };
 

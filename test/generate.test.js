@@ -58,7 +58,7 @@ describe('generation (mock LLM)', () => {
 
     test('profile prompt_order reorders the system prompt', async () => {
         const mps = (await s.get('promptprofiles')).json;
-        assert.equal(mps.promptBlocks.length, 10);
+        assert.equal(mps.promptBlocks.length, 11);
         const prof = mps.profiles[0];
         // 'history' stays last so the reversed sections still land in system.
         const rev = mps.promptBlocks.map(b => b.key).filter(k => k !== 'history').reverse().concat('history');
@@ -70,6 +70,23 @@ describe('generation (mock LLM)', () => {
         assert.match(sys, /^You are Kira and ONLY Kira/);
         assert.ok(sys.indexOf('You are Kira and ONLY') < sys.indexOf('Description:\nKira is Kira'));
         await s.post('promptprofiles/update', { id: prof.prompt_profiles_id_pk, name: prof.name, order: null });
+    });
+
+    test('include_time injects a current-time block below history', async () => {
+        const mps = (await s.get('promptprofiles')).json;
+        const prof = mps.profiles[0];
+        await s.post('promptprofiles/update', { id: prof.prompt_profiles_id_pk, name: prof.name, order: null, includeTime: 1 });
+        llm.requests.length = 0;
+        await s.post('generate', { room, card });
+        const msgs = JSON.parse(llm.requests.at(-1).body).messages;
+        assert.equal(msgs.at(-2).role, 'system'); // below 'history', before the nudge
+        assert.match(msgs.at(-2).content, /Current time: \w+,? \d+ \w+ \d{4}, \d{2}:\d{2}\./);
+        assert.match(msgs.at(-2).content, /Last message: just now\./);
+        await s.post('promptprofiles/update', { id: prof.prompt_profiles_id_pk, name: prof.name, order: null, includeTime: 0 });
+        llm.requests.length = 0;
+        await s.post('generate', { room, card });
+        const msgs2 = JSON.parse(llm.requests.at(-1).body).messages;
+        assert.doesNotMatch(msgs2.at(-2).content, /Current time:/);
     });
 
     test("prompt_order injects sections below 'history' after the chat", async () => {

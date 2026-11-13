@@ -571,6 +571,8 @@ export function migrateSchema() {
         WHERE rm.rooms_id_fk=rooms.rooms_id_pk AND c.is_persona=1),
         (SELECT users_id_pk FROM users ORDER BY users_id_pk LIMIT 1))
         WHERE owner_users_id_fk IS NULL`);
+    const pprow = db.prepare('PRAGMA table_info(prompt_profiles)').all().map(c => c.name);
+    if (!pprow.includes('include_time')) db.exec('ALTER TABLE prompt_profiles ADD COLUMN include_time INTEGER DEFAULT 0');
     db.exec(`CREATE TABLE IF NOT EXISTS prompt_logs (
         prompt_logs_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
         rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
