@@ -148,7 +148,7 @@ function fillEnt(e){
 function newEntry(){selEntry=0;$('editor').innerHTML=entryForm();initEdHeads($('editor'));fillEnt(null);$('editor').style.display='block';$('editor').scrollIntoView({behavior:'smooth',block:'start'});load()}
 function editIdx(i){edit(allEntries[i])}
 async function edit(e){selEntry=e.id;$('editor').innerHTML='';$('editor').style.display='none';await load();document.querySelector('.ent.editing')?.scrollIntoView({behavior:'smooth',block:'start'})}
-function cancelEd(){const id=Number($('ed_id').value)||0;const e=id?allEntries.find(x=>x.id===id):null;if(e){edit(e);return}selEntry=0;$('editor').innerHTML='';$('editor').style.display='none'}
+function cancelEd(){selEntry=0;$('editor').innerHTML='';$('editor').style.display='none';load()}
 async function saveEnt(){
   const id=$('ed_id').value;
   const b={book:selBook,comment:$('ed_comment').value.trim(),keys:$('ed_keys').value,keysecondary:$('ed_keys2').value,content:$('ed_content').value,constant:$('ed_const').checked,enabled:$('ed_enabled').checked,ord:Number($('ed_ord').value)||0};
