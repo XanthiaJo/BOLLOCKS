@@ -38,7 +38,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | `data/` | Runtime state, gitignored: `app.db` (SQLite), `cards/*.png` (avatars), `bg/*.png` (room backgrounds). Never commit it |
 | `scripts/` | Node ESM maintenance scripts run manually: `backfill-triggers.mjs` (LLM-fill memory trigger keywords on a live server), `pull-st-connection.mjs` (import a SillyTavern host's API connection over ssh) |
 | `docs/memories.md` | Design doc for the memory system (kinds, ownership rules, extraction flow) |
-| `.github/workflows/` | `pr-autofill.yml` (commit-list above PR body), `pr-checks.yml` (lint), `beta.yml`/`release.yml` (manual releases via `Box-of-Dragons/StructuredChaos`) |
+| `.github/workflows/` | `pr-autofill.yml` (commit-list above PR body), `pr-checks.yml` (lint + `npm test`), `beta.yml`/`release.yml` (manual releases via `Box-of-Dragons/StructuredChaos`) |
 
 ## Request lifecycle (server.js)
 
@@ -121,9 +121,11 @@ Seeded dev users (fresh DB, `seed()`): `creamms`, `karima`, `blake`, `entropy75`
 
 - Use **Conventional Commits** where practical (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`, `test:`, `perf:`, `style:`; `!`/`BREAKING` for breaking changes). CI/release automation relies on commit conventions.
 - **Never push directly to `dev`, `beta`, or `master`.** All changes go on a feature branch and land via PR — even docs or one-line fixes. Branch flow and release automation are coordinated with `StructuredChaos` workflows (`dev` → beta/release processes; see workflow files). Do not change release/beta workflow behavior without understanding that integration.
-- PRs: `pr-autofill.yml` refreshes an autofilled commit list above any manual PR description (without changing the PR title); `pr-checks.yml` runs lint on PR updates. Ensure `npm run lint` passes before opening/updating a PR.
+- PRs: `pr-autofill.yml` refreshes an autofilled commit list above any manual PR description (without changing the PR title); `pr-checks.yml` runs lint and `npm test` on PR updates. Ensure both pass before opening/updating a PR.
 
 ## Validation
 
-- There is no automated test suite currently. Run `npm run lint` for static checks.
+- `npm run lint` for static checks; `npm test` (`node --test`, no extra deps) runs `test/`:
+  - `api-contract.test.js` — every `api()`/`get()` call in `public/` must hit an existing route, and every field it sends must be read by that handler (`b.<field>`). Add a field to the handler or drop it from the page; don't send dead fields.
+  - `upgrade.test.js` — populates a DB through the API using the base branch plus `origin/dev`/`beta`/`master` (override with `UPGRADE_FROM="ref ref"`), boots this checkout on it twice, and checks no rows/links were lost, `integrity_check`/`foreign_key_check` are clean, no FK points at a renamed column, and the second boot changes nothing. Run `git fetch origin dev beta master` first locally. When you add a table or link, extend `populate()` so it gets covered.
 - For behavior changes, manually verify the affected API/pages against a local server when feasible (e.g. `PORT=8123 node src/server.js` + `curl`; auth flows can be exercised with `-c`/`-b` cookie jars).

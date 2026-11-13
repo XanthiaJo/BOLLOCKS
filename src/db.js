@@ -401,9 +401,24 @@ export function migrateSchema() {
     }
     // Books ↔ rooms is many-to-many — junction replaces rooms.world_books_id_fk.
     db.exec(`CREATE TABLE IF NOT EXISTS room_books (
-        rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
-        world_books_id_fk INTEGER NOT NULL REFERENCES world_books(id),
+        rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+        world_books_id_fk INTEGER NOT NULL REFERENCES world_books(world_books_id_pk),
         UNIQUE(rooms_id_fk, world_books_id_fk))`);
+    // room_books was first created pointing at rooms(id)/world_books(id), which no
+    // longer exist after the pk renames — every insert failed with "foreign key mismatch".
+    const rbSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='room_books'").get()?.sql || '';
+    if (rbSql.includes('REFERENCES rooms(id)') || rbSql.includes('REFERENCES world_books(id)')) {
+        db.exec('PRAGMA foreign_keys=OFF');
+        db.exec(`BEGIN;
+            CREATE TABLE room_books_new (
+                rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+                world_books_id_fk INTEGER NOT NULL REFERENCES world_books(world_books_id_pk),
+                UNIQUE(rooms_id_fk, world_books_id_fk));
+            INSERT OR IGNORE INTO room_books_new (rooms_id_fk, world_books_id_fk)
+                SELECT rooms_id_fk, world_books_id_fk FROM room_books;
+            DROP TABLE room_books; ALTER TABLE room_books_new RENAME TO room_books; COMMIT;`);
+        db.exec('PRAGMA foreign_keys=ON');
+    }
     if (db.prepare('PRAGMA table_info(rooms)').all().some(c => c.name === 'world_books_id_fk'))
         db.exec(`INSERT OR IGNORE INTO room_books (rooms_id_fk,world_books_id_fk)
             SELECT rooms_id_pk, world_books_id_fk FROM rooms WHERE world_books_id_fk IS NOT NULL`);

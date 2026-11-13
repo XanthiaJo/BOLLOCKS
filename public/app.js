@@ -150,7 +150,7 @@ async function addMember() {
     const v = $('addpick').value;
     if (!v) return;
     const [kind, id] = [v[0], Number(v.slice(1))];
-    const r = await api('members', kind === 'c' ? { room, cardId: id, kind: 'ai' } : { room, userId: id });
+    const r = await api('members', kind === 'c' ? { room, cardId: id } : { room, userId: id });
     if (r.error) alert(r.error);
     loadRoom();
 }
@@ -189,7 +189,7 @@ async function say() {
     const text = $('in').value.trim();
     if (!text) return;
     $('in').value = '';
-    await api('say', { room, name: persona?.name || me, cardId: persona?.id || null, text });
+    await api('say', { room, cardId: persona?.id || null, text });
 }
 async function gen() {
     const r = await api('generate', { room });

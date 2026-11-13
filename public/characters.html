@@ -185,7 +185,7 @@ async function saveCard(){
   mpFlashSaved();load();
 }
 async function del(id){if(confirm('Delete this character?')){await api('cards/delete',{id});load()}}
-async function addToRoom(id){await api('members',{room:Number(localStorage.mp_room||1),cardId:id,kind:'ai'});alert('added to current chat')}
+async function addToRoom(id){await api('members',{room:Number(localStorage.mp_room||1),cardId:id});alert('added to current chat')}
 
 async function importCard(input){
   const f=input.files[0];input.value='';
