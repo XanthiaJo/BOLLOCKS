@@ -31,14 +31,12 @@ export function memProfileFor(room) {
  * { apiUrl, model, key }) — read from DB, never reaches clients.
  */
 export async function generateReply(roomId, card) {
-    const owner = db.prepare(`SELECT u.users_id_pk FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
-        JOIN cards c ON c.cards_id_pk=m.cards_id_fk JOIN users u ON u.users_id_pk=c.owner_users_id_fk
-        WHERE rm.rooms_id_fk=? AND c.is_persona=1 ORDER BY c.owner_users_id_fk LIMIT 1`).get(roomId);
     // Card's own profile wins; otherwise the card owner's active profile.
+    // Everyone is responsible for their own API keys — never the room owner's.
     const p = card.api_profiles_id_fk
         ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(card.api_profiles_id_fk)
         : null;
-    const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(card.owner_users_id_fk || owner?.id);
+    const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(card.owner_users_id_fk);
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(
@@ -242,13 +240,16 @@ export async function maybeSummarize(roomId) {
     const intervalMet = lastId - room.mem_last_messages_id >= interval;
     const thresholdMet = contextPct >= threshold;
     if (!intervalMet && !thresholdMet) return;
-    const owner = db.prepare(`SELECT u.users_id_pk FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
-        JOIN cards c ON c.cards_id_pk=m.cards_id_fk JOIN users u ON u.users_id_pk=c.owner_users_id_fk
-        WHERE rm.rooms_id_fk=? AND c.is_persona=1 ORDER BY c.owner_users_id_fk LIMIT 1`).get(roomId);
-    const conn = mem.mem_extraction_profile_id
+    // Memory extraction uses only the profile the room owner configured —
+    // no fallback. Unset, missing, or owned by someone else: skip.
+    const ext = mem.mem_extraction_profile_id
         ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(mem.mem_extraction_profile_id)
-        : activeProfile(owner?.id);
-    if (!conn?.apiUrl) return;
+        : null;
+    if (!ext?.api_url || ext.users_id_fk !== room.owner_users_id_fk) {
+        if (mem.mem_activity) console.log(`[mem] activity: extraction skipped for room ${roomId} (no owner-configured extraction profile)`);
+        return;
+    }
+    const conn = { ...ext, apiUrl: ext.api_url };
     const excerpt = db.prepare(
         MSG_SQL + ' WHERE m.rooms_id_fk=? AND m.messages_id_pk>? ORDER BY m.messages_id_pk LIMIT 30')
         .all(roomId, room.mem_last_messages_id);

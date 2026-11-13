@@ -27,7 +27,7 @@ There are two kinds of memory, distinguished by `origin`:
 ### Smart memories (AI-extracted)
 
 - Created automatically by `maybeSummarize()` after every `mem_every` messages when `auto_mem=1`.
-- Extraction runs against the room owner's active profile (see open issue: profile selection not persisted).
+- Extraction runs only through the room owner's configured extraction profile (`mem_extraction_profile_id` on the memory profile). No fallback: if it is unset, missing, or belongs to someone other than the room owner, extraction is skipped.
 - **Smart memories belong to the chat (room) only** - they are always stored as shared room memories (no `memory_cards` row).
   - Rationale: deciding whether an extracted fact belongs to a specific character vs. the chat as a whole is ambiguous and error-prone. Keep smart memories room-scoped; users can promote a fact to a character's permanent memory manually if desired.
 - Capped to `mem_max` per room (oldest `origin='smart'` dropped). Permanent memories are never subject to the cap.
@@ -100,7 +100,7 @@ flowchart TD
     CheckAuto -- no --> Skip[Skip]
     CheckAuto -- yes --> CheckInterval{"messages since watermark >= mem_every?"}
     CheckInterval -- no --> Skip
-    CheckInterval -- yes --> Extract["LLM extracts facts<br/>room owner's profile"]
+    CheckInterval -- yes --> Extract["LLM extracts facts<br/>room owner's configured profile"]
     Extract --> StoreShared["INSERT as shared room memory<br/>(no memory_cards row)"]
     StoreShared --> Cap["Cap to mem_max<br/>drop oldest auto"]
     Cap --> Watermark[Advance watermark]
@@ -134,7 +134,7 @@ flowchart TD
 2. `/api/memories/triggers` filters by `rooms_id_pk` instead of `memories_id_pk` — would update all memories in a room. Fix filter.
 3. No ownership/auth checks on memory endpoints or memsettings. Add per the table above.
 4. Smart extraction stores everything as shared (strips `[Name]`) — acceptable per design; document it.
-5. Extraction profile (`set_profile`) not persisted — add `api_profiles_id_fk` to `rooms` or store in settings.
+5. ~~Extraction profile (`set_profile`) not persisted~~ — resolved: `mem_extraction_profile_id` on the memory profile is used, and it must belong to the room owner (no fallback).
 6. `POST /api/memories` doesn't accept `type`/`triggers` from frontend.
 7. Consider adding `updated` timestamp and `owner_users_id_fk` for audit.
 
