@@ -117,15 +117,18 @@ function rprofRow({ name, meta = '', img = '', sel = false, onclick = '', btns =
 /* Sidebar skeleton — the single place #rsidebar's structure exists. Pages
    declare an empty <aside id="rsidebar"></aside> and call initSidebar({...});
    identical layout/size everywhere, only the data differs.
-     tabs:     [{id,label,onclick}]  kind-switcher bar, always top
+     tabs:     [{id?,label,onclick?,on?}]  REQUIRED — every sidebar has the
+                                    kind bar at top; one static .on tab for
+                                    single-kind pages. onclick optional.
      sections: [{id,title?,wrap?}]   h3 title + <div id> list; wrap wraps
                                     title+list in <div id=wrap> (for toggling)
      buttons:  [{label,onclick,cls?}] full-width actions under the list
      footer:   html string for the trailing <small> caption */
 function initSidebar({ tabs = [], sections = [], buttons = [], footer = '' } = {}) {
     const sb = document.getElementById('rsidebar'); if (!sb) return;
+    if (!tabs.length) console.warn('[layout] initSidebar: every sidebar must show a tab bar');
     sb.innerHTML =
-        (tabs.length ? `<div class="tabs">${tabs.map(t => `<button class="tab" id="${t.id}" onclick="${t.onclick}">${t.label}</button>`).join('')}</div>` : '') +
+        `<div class="tabs">${tabs.map(t => `<button class="tab${t.on ? ' on' : ''}"${t.id ? ` id="${t.id}"` : ''}${t.onclick ? ` onclick="${t.onclick}"` : ''}>${t.label}</button>`).join('')}</div>` +
         sections.map(s => `${s.wrap ? `<div id="${s.wrap}">` : ''}${s.title ? `<h3>${s.title}</h3>` : ''}<div id="${s.id}"></div>${s.wrap ? '</div>' : ''}`).join('') +
         buttons.map(b => `<button${b.cls ? ` class="${b.cls}"` : ''} onclick="${b.onclick}">${b.label}</button>`).join('') +
         (footer ? `<small>${footer}</small>` : '');

@@ -44,7 +44,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const BOOK=Number(new URLSearchParams(location.search).get('id')||0);
 const ROOM=Number(localStorage.mp_room||1);
-initSidebar({sections:[{title:'Books',id:'rbooks'}]});
+initSidebar({tabs:[{label:'Books',on:true}],sections:[{id:'rbooks'}]});
 
 let allEntries=[];
 async function load(){

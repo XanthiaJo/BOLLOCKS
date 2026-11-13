@@ -115,7 +115,9 @@ button.sec{background:var(--neutral)}
 button.imp{background:var(--violet)}
 #rsidebar>button{width:100%;margin-top:8px}
 #rsidebar>h3{margin-top:0}
+#rsidebar>.tabs:first-child{margin-top:0}
 #rsidebar .tabs{margin-bottom:10px}
+#rsidebar .tab:not([onclick]){cursor:default}
 #rsidebar>small{display:block;margin-top:10px;color:var(--dim)}
 #cardssec{margin-top:14px}
 small{color:var(--dim)}

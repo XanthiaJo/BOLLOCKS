@@ -6,8 +6,8 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let ROOM=Number(localStorage.mp_room||1);
 initSidebar({
-  tabs:[{id:'t_perm',label:'Permanent',onclick:"tab('user')"},{id:'t_auto',label:'Smart',onclick:"tab('smart')"}],
-  sections:[{id:'rchat'},{title:'Characters',id:'rcards',wrap:'cardssec'}],
+  tabs:[{id:'t_perm',label:'Permanent',on:true,onclick:"tab('user')"},{id:'t_auto',label:'Smart',onclick:"tab('smart')"}],
+  sections:[{title:'Rooms',id:'rchat'},{title:'Characters',id:'rcards',wrap:'cardssec'}],
   footer:'Smart-memory profiles live on the <a href="/memsettings.html" style="color:var(--muted)">Smart memory</a> page.',
 });
 let cardId=0,scopeName='',curTab=localStorage.mp_memtab||'user';if(!['user','smart'].includes(curTab))curTab='user';

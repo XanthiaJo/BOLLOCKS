@@ -8,8 +8,8 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 // model, key), 'inj' = injection profiles (prompt assembly). The tab swaps
 // which list the sidebar shows and which editor opens.
 initSidebar({
-  tabs:[{id:'t_api',label:'Connection',onclick:"connTab('api')"},{id:'t_inj',label:'Injection',onclick:"connTab('inj')"}],
-  sections:[{title:'Profiles',id:'list'}],
+  tabs:[{id:'t_api',label:'Connection',on:true,onclick:"connTab('api')"},{id:'t_inj',label:'Injection',onclick:"connTab('inj')"}],
+  sections:[{id:'list'}],
   buttons:[{label:'+ New profile',onclick:'newProf()'}],
 });
 let curTab=localStorage.mp_conntab||'api';
