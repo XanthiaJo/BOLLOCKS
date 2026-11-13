@@ -545,7 +545,7 @@ export function migrateProfiles() {
 export function seed() {
     // Test users — every account gets membership in room 1.
     const room = db.prepare('SELECT rooms_id_pk AS id FROM rooms ORDER BY rooms_id_pk LIMIT 1').get()?.id
-        || db.prepare(`INSERT INTO rooms (name,mem_profiles_id_fk) VALUES ('The House',(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1))`).lastInsertRowid;
+        || db.prepare(`INSERT INTO rooms (name,mem_profiles_id_fk) VALUES ('The House',(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1))`).run().lastInsertRowid;
     for (const h of ['creamms', 'karima', 'blake', 'entropy75']) {
         if (!db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get(h))
             createUser(h, 'changeme');
