@@ -76,6 +76,7 @@ nav a.on{background:var(--accent);color:var(--white)}
 #rsidebar{width:400px;flex:none;padding:24px 12px 12px;background:var(--surface);overflow-y:auto;border-left:1px solid var(--surface2)}
 #sidebar.hide,#rsidebar.hide{display:none}
 .navtoggle{color:var(--muted);text-decoration:none;padding:6px 10px;cursor:pointer;font-size:1.1em}
+#mpuserbtn{color:var(--ai)}
 .navtoggle:hover{color:var(--white)}
 .usermenu{position:relative}
 .userdrop{display:none;position:absolute;right:0;top:100%;min-width:150px;background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:4px 0;z-index:60;box-shadow:0 8px 24px var(--veil-soft)}
