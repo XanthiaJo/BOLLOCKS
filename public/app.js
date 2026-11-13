@@ -94,6 +94,7 @@ async function loadRoom() {
     get('rooms').then(({ rooms }) => {
         const r = (rooms || []).find(x => x.id === room);
         document.title = `BOLLOCKS · ${r?.name || `room ${room}`}`;
+        $('chatname').textContent = r?.name || `room ${room}`;
         roomIsOwner = !!r?.is_owner;
         applyOwnerUI();
         if (r) { $('trigsel').value = r.ai_trigger || 'manual'; $('ctxmax').value = r.max_context || 0; renderMProf(r); }

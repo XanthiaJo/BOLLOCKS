@@ -12,8 +12,9 @@
 <aside id="rsidebar"></aside>
 <div id="content">
 <main>
+  <div class="cvhead"><h2 id="cvtitle">Connection</h2></div>
   <div id="editor" class="panel settings" style="display:none">
-    <h3 id="edtitle">New profile</h3>
+    <div class="edhead" data-save="saveProf" data-cancel="cancelEd"><h3 id="edtitle">New profile</h3></div>
     <input type="hidden" id="ed_id">
     <div class="row"><span class="lbl">Profile name</span><span class="hint">A label for this connection.</span><input id="ed_name" placeholder="OpenRouter free" style="width:320px"></div>
     <div class="row"><span class="lbl">API URL</span><span class="hint">OpenAI-compatible endpoint — the /v1 base.</span><input id="ed_url" placeholder="https://openrouter.ai/api/v1" style="width:320px"></div>
@@ -50,12 +51,10 @@
       <input placeholder="Instruct template" disabled>
       <input placeholder="Custom request body (JSON)" disabled>
     </div>
-    <button onclick="saveProf()">Save</button>
-    <button class="sec" onclick="clearEd()">Clear</button>
   </div>
 
   <div id="injeditor" class="panel settings" style="display:none">
-    <h3 id="injtitle">New injection profile</h3>
+    <div class="edhead" data-save="saveProf" data-cancel="cancelEd"><h3 id="injtitle">New injection profile</h3></div>
     <input type="hidden" id="inj_id">
     <div class="row"><span class="lbl">Profile name</span><span class="hint">A label for this prompt-layout preset.</span><input id="inj_name" placeholder="e.g. Cache-friendly" style="width:320px"></div>
     <div class="lbl" title="Order the prompt sections are assembled in — earlier sections are more likely to stay in the provider's prompt cache.">Prompt order</div>
@@ -67,8 +66,6 @@
       <textarea placeholder="(default template)" disabled style="min-height:60px"></textarea>
       <div class="row"><span class="lbl" title="If set, this block only injects when a keyword appears in recent chat.">Trigger keywords (block-level)</span><span class="hint">If set, memory/world blocks only inject when a keyword appeared in recent chat — on top of each memory's own triggers.</span><input placeholder="comma-separated triggers" disabled></div>
     </div>
-    <button onclick="saveProf()">Save</button>
-    <button class="sec" onclick="clearEd()">Clear</button>
   </div>
   <small>Generation uses the <b>active</b> connection profile and the <b>active</b> injection profile — they switch independently.</small>
 </main>

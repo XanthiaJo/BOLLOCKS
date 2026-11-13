@@ -37,13 +37,26 @@ export default [
         // Defined in layout.js, used across page scripts.
         mpFlashSaved: "readonly",
         mpOpenEditor: "readonly",
+        mpScrollTo: "readonly",
         mpCloseEditor: "readonly",
+        initSidebar: "readonly",
+        initEdHeads: "readonly",
+        rprofRow: "readonly",
+        draftFields: "readonly",
+        fillFields: "readonly",
       },
     },
     rules: {
       // Browser page scripts expose top-level functions for inline handlers.
       "no-unused-vars": "off",
       "no-empty": ["error", { allowEmptyCatch: true }],
+    },
+  },
+  {
+    // layout.js defines the shared globals — allowed to declare them itself.
+    files: ["public/layout.js"],
+    rules: {
+      "no-redeclare": "off",
     },
   },
 ];
