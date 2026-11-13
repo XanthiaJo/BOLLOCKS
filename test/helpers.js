@@ -165,3 +165,17 @@ export async function until(fn, what = 'condition') {
     }
     throw new Error(`timed out waiting for ${what}`);
 }
+
+/** Unauthenticated client for the same server — never sends creds. */
+export const pub = s => ({
+    get: p => s.get(p, { creds: false }),
+    post: (p, b) => s.post(p, b, { creds: false }),
+    raw: (m, p, o) => s.raw(m, p, { ...o, creds: false }),
+});
+
+/** Run `fn` logged in as `handle`, then restore the previous session. */
+export const asUser = (s, handle) => async fn => {
+    const creds = [s.token, s.cookie];
+    await s.login(handle);
+    try { return await fn(); } finally { s.useCreds(...creds); }
+};

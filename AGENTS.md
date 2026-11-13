@@ -39,7 +39,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | `scripts/` | Node ESM maintenance scripts run manually: `backfill-triggers.mjs` (LLM-fill memory trigger keywords on a live server), `pull-st-connection.mjs` (import a SillyTavern host's API connection over ssh) |
 | `docs/memories.md` | Design doc for the memory system (kinds, ownership rules, extraction flow) |
 | `docs/tests.md` | Checklist of exactly what the test suite covers + known gaps it has surfaced |
-| `test/` | `node:test` suites run by `npm test`: `api-contract.test.js` (static frontend↔route checks), `upgrade.test.js` (migration/upgrade), `functional.test.js` (full API behavior), `pngcard.test.js` (card parser units), `helpers.js` (shared `boot()`/`mockLLM()` harness) |
+| `test/` | `node:test` suites run by `npm test`: `api-contract.test.js` (static frontend↔route checks), `upgrade.test.js` (migration/upgrade), one file per API domain (`auth`, `profile`, `rooms`, `access`, `cards`, `messages`, `world`, `memories`, `profiles`, `generate`, `users`), `pngcard.test.js` (card parser units), `helpers.js` (shared `boot()`/`mockLLM()`/`pub`/`asUser` harness) |
 | `.github/workflows/` | `pr-autofill.yml` (commit-list above PR body), `pr-checks.yml` (lint + `npm test`), `beta.yml`/`release.yml` (manual releases via `Box-of-Dragons/StructuredChaos`) |
 
 ## Request lifecycle (server.js)
@@ -130,7 +130,7 @@ Seeded dev users (fresh DB, `seed()`): `creamms`, `karima`, `blake`, `entropy75`
 - `npm run lint` for static checks; `npm test` (`node --test`, no extra deps) runs `test/`:
   - `api-contract.test.js` — every `api()`/`get()` call in `public/` must hit an existing route, and every field it sends must be read by that handler (`b.<field>`). Add a field to the handler or drop it from the page; don't send dead fields.
   - `upgrade.test.js` — populates a DB through the API using the base branch plus `origin/dev`/`beta`/`master` (override with `UPGRADE_FROM="ref ref"`), boots this checkout on it twice, and checks no rows/links were lost, `integrity_check`/`foreign_key_check` are clean, no FK points at a renamed column, and the second boot changes nothing. Run `git fetch origin dev beta master` first locally. When you add a table or link, extend `populate()` so it gets covered.
-  - `functional.test.js` — full API surface end-to-end against a real spawned server + a mock OpenAI endpoint: auth/session transports, request gating, rooms/members permissions, cards, memories, world, profiles, SSE fan-out, generation + trigger policies.
+  - One functional suite per API domain (`auth`, `profile`, `rooms`, `access`, `cards`, `messages`, `world`, `memories`, `profiles`, `generate`, `users`) — each boots its own real server + a mock OpenAI endpoint where needed: auth/session transports, request gating, rooms/members permissions, cards, memories, world, profiles, SSE fan-out, generation + trigger policies.
   - `pngcard.test.js` — unit tests for `extractCardJson`/`normalizeCard`.
-  - New tests should reuse the harness in `test/helpers.js` (`boot` a real server on an isolated `BOLLOCKS_DATA`, `mockLLM`, `pngCardBuffer`, `rawPath`, `until`). docs/tests.md lists what's covered and the known gaps found so far.
+  - New tests should reuse the harness in `test/helpers.js` (`boot` a real server on an isolated `BOLLOCKS_DATA`, `mockLLM`, `pngCardBuffer`, `rawPath`, `until`, `pub`, `asUser`). docs/tests.md lists what's covered and the known gaps found so far.
 - For behavior changes, manually verify the affected API/pages against a local server when feasible (e.g. `PORT=8123 node src/server.js` + `curl`; auth flows can be exercised with `-c`/`-b` cookie jars).

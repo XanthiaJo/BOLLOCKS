@@ -18,9 +18,11 @@ no mocking of the app itself, only of the external LLM endpoint.
 - [x] Migrations are idempotent — second boot changes neither schema nor row counts
 - [x] Post-upgrade data (rooms, memory links) is still reachable through the API
 
-## `test/functional.test.js` — API behavior end-to-end
+## Functional API suites — behavior end-to-end
 
-**Authentication & sessions**
+One file per domain; each boots its own isolated server (`test/helpers.js`):
+
+**`test/auth.test.js` — authentication & gating**
 
 - [x] Login rejects bad credentials (401) and returns a Bearer token + `mp_token` HttpOnly cookie
 - [x] All three token transports authenticate: Bearer header, cookie, `?token=` query param
@@ -38,13 +40,13 @@ no mocking of the app itself, only of the external LLM endpoint.
 - [x] `login`, `logout`, `version` stay public; unknown API routes 404 after auth
 - [x] Path traversal (`..`, `%2e%2e`) is refused both unauthenticated and authenticated
 
-**Profile**
+**`test/profile.test.js`**
 
 - [x] Email/handle updates persist; taken handles conflict (409, case-insensitive); empty handle 400
 - [x] Password change requires the current password; new password logs in; sessions survive
 - [x] Persona selection reflected in `GET /api/me`
 
-**Rooms & members**
+**`test/rooms.test.js` + `test/access.test.js` — rooms, members, cross-user control**
 
 - [x] Room creation seats the owner's persona; `is_owner` flag correct in listings
 - [x] Room lists only show rooms the user sits in
@@ -56,47 +58,47 @@ no mocking of the app itself, only of the external LLM endpoint.
 - [x] Talkativeness: members set their own, owners set any, values clamped to 0–100
 - [x] Room background upload/serve/remove round-trips
 
-**Cards & avatars**
+**`test/cards.test.js`**
 
 - [x] Card CRUD; updates/deletes by non-owners are silent no-ops (card untouched)
 - [x] Avatar fallback SVG; upload restricted to owner; uploaded PNG served
 - [x] `cards/import` handles ST JSON and PNG (tEXt chunk); malformed PNG 400
 
-**Messages & SSE**
+**`test/messages.test.js` — messages & SSE**
 
 - [x] `say` posts as the caller's persona (`kind:'say'`); messages appear in `/api/room`
 - [x] Message delete removes and broadcasts; re-delete 404s
 - [x] `/api/stream` requires auth, returns `text/event-stream`, and flushes headers on connect
 - [x] `message` and `delete` events fan out to connected streams
 
-**World / lorebook**
+**`test/world.test.js` — lorebook**
 
 - [x] Book and entry CRUD; CSV key strings split into primary/secondary keys
 - [x] Partial entry updates work (missing fields don't clobber); key lists replaced wholesale
 - [x] ST lorebook JSON import creates book + entries + keys; empty import 400
 - [x] Room linking is owner-only; book deletion cascades entries/keys/links
 
-**Memories**
+**`test/memories.test.js`**
 
 - [x] Create room-scoped and card-scoped memories; `card=-1`/`card=N` scoping
 - [x] Update content/type/triggers/origin; `/api/lastmem` returns latest `origin='smart'`
 - [x] `memories/move` toggles card↔room scope; delete unlinks and removes
 
-**Connection profiles**
+**`test/profiles.test.js` — connections & memory profiles**
 
 - [x] Profile CRUD; first profile auto-activates; activate switches exclusively
 - [x] API key is never exposed by `GET /api/profiles` (`has_key` boolean only)
 - [x] `/api/models` proxies the connection; bad URL → 502; missing URL → 400
 - [x] Memory profile CRUD; room assignment; deletion re-points rooms at another profile
 
-**Generation (mock OpenAI-compatible endpoint)**
+**`test/generate.test.js` — generation (mock OpenAI-compatible endpoint)**
 
 - [x] `/api/generate` assembles and posts the prompt: system message, `{{char}}` macro substitution, trailing `Name:` nudge
 - [x] Leading `Name:` tag stripped from the reply; message stored as `kind:'ai'`; `genstats` recorded
 - [x] No AI member → 404; owner with no connection → 500 with a clear error
 - [x] `ai_trigger: 'all'` fires replies after a say (talkativeness 100); `'named'` fires only when the character is mentioned
 
-**Users**
+**`test/users.test.js`**
 
 - [x] `GET /api/users` lists seeded users; self-delete and unknown-handle delete refused (400)
 - [x] `users/delete` and authenticated `register` are admin-only (first registered user); non-admin → 403
@@ -125,11 +127,12 @@ no mocking of the app itself, only of the external LLM endpoint.
 ## Running
 
 ```bash
-npm test                      # everything
-node --test test/functional.test.js   # one file
+npm test                      # everything (each file gets its own server)
+node --test test/auth.test.js # one suite
 UPGRADE_FROM=origin/beta npm test     # pin upgrade sources
 ```
 
 `test/helpers.js` provides the shared harness: `boot(dataDir, env)` (spawn
 server + session-keeping client), `mockLLM()`, `pngCardBuffer()`, `rawPath()`
-(unnormalized paths for traversal tests), `until()` (poll for async fan-out).
+(unnormalized paths for traversal tests), `until()` (poll for async fan-out),
+`pub(s)` (unauthenticated client), `asUser(s, handle)` (run as another user).
