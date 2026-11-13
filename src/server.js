@@ -230,9 +230,9 @@ const router = {
         db.prepare(`UPDATE world_entries SET
             comment=COALESCE(?,comment), content=COALESCE(?,content),
             constant=COALESCE(?,constant), enabled=COALESCE(?,enabled), ord=COALESCE(?,ord) WHERE world_entries_id_pk=?`)
-            .run(b.comment, b.content,
+            .run(b.comment ?? null, b.content ?? null,
                 b.constant === undefined ? null : (b.constant ? 1 : 0),
-                b.enabled === undefined ? null : (b.enabled ? 1 : 0), b.ord, id);
+                b.enabled === undefined ? null : (b.enabled ? 1 : 0), b.ord ?? null, id);
         send(res, 200, { ok: true });
     },
     'POST /api/world/delete': async (req, res, u) => {
