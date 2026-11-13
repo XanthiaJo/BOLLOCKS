@@ -39,9 +39,11 @@ async function load(){
     const mine=!b.owner||b.owner===me;
     return `
     <div class="rprof" onclick="location='/world-edit.html?id=${b.id}'">
-      <div class="n">${esc(b.name)}</div>
-      <div class="m">${b.cnt||0} entries · ${esc(b.owner||'shared')}${usedIn.length?' · in: '+esc(usedIn.join(', ')):''}
-        ${mine?` <a href="#" onclick="event.stopPropagation();delBook(${b.id});return false" style="color:var(--err)">✕</a>`:''}
+      <div class="txt">
+        <div class="n">${esc(b.name)}</div>
+        <div class="m">${b.cnt||0} entries · ${esc(b.owner||'shared')}${usedIn.length?' · in: '+esc(usedIn.join(', ')):''}
+          ${mine?` <a href="#" onclick="event.stopPropagation();delBook(${b.id});return false" style="color:var(--err)">✕</a>`:''}
+        </div>
       </div>
     </div>`;
   }).join('')||'<small>No books yet — create one above or import an ST export.</small>';

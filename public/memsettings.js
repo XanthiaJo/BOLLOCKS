@@ -17,7 +17,7 @@ async function load(){
   const followed=(rm?.mem_profiles_id_fk)&&(memProfiles.find(x=>x.mem_profiles_id_pk===rm.mem_profiles_id_fk))||null;
   effRow=followed||memProfiles[0]||null;
   $('plist').innerHTML=(memProfiles||[]).map(p=>
-    `<div class="mprofrow${p.mem_profiles_id_pk===selProf?' sel':''}" style="cursor:pointer" onclick="selectProf(${p.mem_profiles_id_pk})"><span class="n">${esc(p.name)}${p.auto_mem?' <small>smart on</small>':''}</span><button onclick="event.stopPropagation();delMP(${p.mem_profiles_id_pk})" class="del">Delete</button></div>`).join('')||'<small>No profiles yet — create one.</small>';
+    `<div class="rprof${p.mem_profiles_id_pk===followed?.mem_profiles_id_pk?' on':''}${p.mem_profiles_id_pk===selProf?' sel':''}" onclick="selectProf(${p.mem_profiles_id_pk})"><div class="txt"><div class="n">${esc(p.name)}${p.auto_mem?' <span class="badge">smart on</span>':''}</div></div><div class="btns" onclick="event.stopPropagation()"><button class="del" onclick="delMP(${p.mem_profiles_id_pk})">Delete</button></div></div>`).join('')||'<small>No profiles yet — create one.</small>';
   if(selProf&&!memProfiles.some(x=>x.mem_profiles_id_pk===selProf))setSelProf(0); // stale saved id
   const sp=selProf&&memProfiles.find(x=>x.mem_profiles_id_pk===selProf)||null;
   $('profpanel').style.display=sp?'block':'none';

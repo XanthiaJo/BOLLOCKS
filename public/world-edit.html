@@ -54,7 +54,7 @@ async function load(){
   const b=(books||[]).find(b=>b.id===BOOK);
   $('bookname').textContent=b?.name||('Book #'+BOOK);
   $('rbooks').innerHTML=(books||[]).map(x=>
-    `<div class="rprof${x.id===BOOK?' on':''}" onclick="location='/world-edit.html?id=${x.id}'"><div class="n">${esc(x.name)}</div><div class="m">${x.cnt||0} entries</div></div>`
+    `<div class="rprof${x.id===BOOK?' on':''}" onclick="location='/world-edit.html?id=${x.id}'"><div class="txt"><div class="n">${esc(x.name)}</div><div class="m">${x.cnt||0} entries</div></div></div>`
   ).join('')||'<small>No books</small>';
   $('list').innerHTML=allEntries.map((e,i)=>`
     <div class="card ent${e.enabled?'':' off'}">

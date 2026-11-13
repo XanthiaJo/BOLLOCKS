@@ -85,9 +85,9 @@ async function load(){
   $('smart_auto').disabled=!rm?.is_owner?true:!smartP;
   $('smart_mprof').disabled=!rm?.is_owner;
   $('rchat').innerHTML=
-    `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div>`;
+    `<div class="rprof${cardId===0?' on':''}" onclick="pick(0,'${esc(roomName)}')"><div class="txt"><div class="n">${esc(roomName)}</div><div class="m">shared memories</div></div></div>`;
   $('rcards').innerHTML=(cards||[]).map(c=>
-      `<div class="rprof${c.id===cardId?' on':''}" onclick="pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')"><div class="n">${esc(c.name)}</div></div>`
+      `<div class="rprof${c.id===cardId?' on':''}" onclick="pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')"><div class="txt"><div class="n">${esc(c.name)}</div></div></div>`
     ).join('')||'<small>None</small>';
   if(cardId<0)cardId=0;
   const {memories}=await get(`memories?card=${cardId}&room=${ROOM}`);

@@ -17,10 +17,10 @@ async function load(){
   if(curTab==='inj'){
     const r=await get('promptprofiles');injProfs=r?.profiles||[];promptBlocks=r?.promptBlocks||[];
     $('list').innerHTML=injProfs.map(p=>`
-      <div class="prof${p.active?' on':''}" style="cursor:pointer" onclick="editInj(${p.prompt_profiles_id_pk})">
-        <div>
-          <div class="name">${esc(p.name)}${p.active?'<span class="badge">active</span>':''}</div>
-          <div class="meta">${p.prompt_order?'custom order':'built-in order'}</div>
+      <div class="rprof${p.active?' on':''}" onclick="editInj(${p.prompt_profiles_id_pk})">
+        <div class="txt">
+          <div class="n">${esc(p.name)}${p.active?'<span class="badge">active</span>':''}</div>
+          <div class="m">${p.prompt_order?'custom order':'built-in order'}</div>
         </div>
         <div class="btns" onclick="event.stopPropagation()">
           ${p.active?'':`<button class="act" onclick="activate(${p.prompt_profiles_id_pk})">Make active</button>`}
@@ -30,11 +30,10 @@ async function load(){
   } else {
     const {profiles}=await get('profiles');allProfs=profiles||[];
     $('list').innerHTML=allProfs.map(p=>`
-      <div class="prof${p.active?' on':''}" style="cursor:pointer" onclick="edit(${p.id})">
-        <div>
-          <div class="name">${esc(p.name)}${p.active?'<span class="badge">active</span>':''}</div>
-          <div class="url">${esc(p.api_url)}</div>
-          <div class="meta">${esc(p.model)} · ${p.has_key?'key set':'no key'}</div>
+      <div class="rprof${p.active?' on':''}" onclick="edit(${p.id})">
+        <div class="txt">
+          <div class="n">${esc(p.name)}${p.active?'<span class="badge">active</span>':''}</div>
+          <div class="m">${esc(p.api_url)} · ${esc(p.model)} · ${p.has_key?'key set':'no key'}</div>
         </div>
         <div class="btns" onclick="event.stopPropagation()">
           ${p.active?'':`<button class="act" onclick="activate(${p.id})">Make active</button>`}

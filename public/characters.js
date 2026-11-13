@@ -22,15 +22,14 @@ async function load(){
   const [{cards},who]=await Promise.all([get('cards'),get('me')]);
   me=who.handle;allCards=cards||[];
   $('list').innerHTML=allCards.map((c,i)=>`
-    <div class="card" style="cursor:pointer" onclick="editIdx(${i})">
+    <div class="rprof" onclick="editIdx(${i})">
       <img src="/api/avatar?id=${c.id}" onerror="this.style.visibility='hidden'">
-      <div>
-        <div class="name">${esc(c.name)}</div>
-        <div class="desc">${esc(c.description)}</div>
-        <div class="meta">#${c.id} · owner ${esc(c.owner||'?')}${profName(c)}</div>
+      <div class="txt">
+        <div class="n">${esc(c.name)}</div>
+        <div class="m">#${c.id} · ${esc(c.owner||'?')}${profName(c)}</div>
       </div>
       <div class="btns" id="btns${c.id}" onclick="event.stopPropagation()">
-        ${c.owner===me?`<button style="background:${c.is_persona?'var(--ok)':'var(--olive)'}" onclick="api('persona',{cardId:${c.is_persona?'null':c.id}}).then(load)">★${c.is_persona?' persona':''}</button>`:''}
+        ${c.owner===me?`<button class="${c.is_persona?'act':'sec'}" onclick="api('persona',{cardId:${c.is_persona?'null':c.id}}).then(load)">★${c.is_persona?' persona':''}</button>`:''}
         ${c.owner===me?`<button class="del" onclick="del(${c.id})">Delete</button>`:''}
       </div>
     </div>`).join('');
