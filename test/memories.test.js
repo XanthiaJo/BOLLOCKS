@@ -2,6 +2,9 @@
 // card↔room moves, delete, and the lastmem shortcut.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import fs from 'node:fs';
+import path from 'node:path';
 import { boot, tmp } from './helpers.js';
 
 let s;
@@ -40,4 +43,33 @@ describe('memories', () => {
         await s.post('rooms/delete', { id: room });
         await s.post('cards/delete', { id: card });
     });
+});
+
+// Older builds re-add a `source` column to a migrated memories table (their
+// migrateSchema ALTERs it back when missing), leaving both source and origin.
+// The rebuild must keep an existing origin='smart' instead of re-deriving
+// everything from source — otherwise every smart row flattens to 'user'.
+test('memories rebuild preserves origin when source column is also present', async () => {
+    const dir = tmp('data');
+    fs.mkdirSync(path.join(dir), { recursive: true });
+    const db = new DatabaseSync(path.join(dir, 'app.db'));
+    db.exec(`CREATE TABLE memories (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')),
+        type TEXT DEFAULT 'fact', origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart')),
+        triggers TEXT DEFAULT '', source TEXT DEFAULT 'manual')`);
+    db.prepare("INSERT INTO memories (content,origin,source) VALUES ('smart fact','smart','manual'),('perm fact','user','manual'),('old auto','user','auto')").run();
+    db.close();
+
+    const srv = await boot(dir);
+    try {
+        const check = new DatabaseSync(path.join(dir, 'app.db'));
+        const rows = check.prepare('SELECT content,origin FROM memories').all();
+        check.close();
+        const by = Object.fromEntries(rows.map(r => [r.content, r.origin]));
+        assert.equal(by['smart fact'], 'smart');
+        assert.equal(by['perm fact'], 'user');
+        assert.equal(by['old auto'], 'smart');
+    } finally {
+        await srv.stop();
+    }
 });

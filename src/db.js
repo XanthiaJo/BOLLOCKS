@@ -507,6 +507,12 @@ export function migrateSchema() {
     }
     // Rebuild memories: drop cards_id_fk + rooms_id_fk, replace source with origin.
     if (hasCardsFk || hasRoomsFk || hasSource) {
+        // Older builds can re-add `source` alongside `origin` — prefer an
+        // existing origin so smart rows aren't flattened back to 'user'.
+        const hasOrigin = mecols2.includes('origin');
+        const smartCond = [hasOrigin && "origin='smart'", hasSource && "source='auto'"]
+            .filter(Boolean).join(' OR ') || '0';
+        const triggersExpr = mecols2.includes('triggers') ? 'triggers' : "''";
         db.exec(`BEGIN;
             CREATE TABLE memories_new (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
                 content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')),
@@ -514,8 +520,8 @@ export function migrateSchema() {
                 triggers TEXT DEFAULT '');
             INSERT INTO memories_new (memories_id_pk,content,created,type,origin,triggers)
                 SELECT memories_id_pk, content, created, type,
-                    CASE WHEN source='auto' THEN 'smart' ELSE 'user' END,
-                    triggers FROM memories;
+                    CASE WHEN ${smartCond} THEN 'smart' ELSE 'user' END,
+                    ${triggersExpr} FROM memories;
             DROP TABLE memories; ALTER TABLE memories_new RENAME TO memories; COMMIT;`);
     } else if (!mecols2.includes('origin')) {
         // Fresh-ish DB without origin column (shouldn't happen, but be safe).
