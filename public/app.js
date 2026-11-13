@@ -11,7 +11,7 @@ const api = (p, b, method = 'POST') => fetch(`/api/${p}`, {
     method,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     ...(method === 'POST' ? { body: JSON.stringify(b || {}) } : {}),
-}).then(r => r.json());
+}).then(r => r.status === 401 ? location = '/login.html' : r.json());
 const get = p => api(p, null, 'GET');
 
 // Minimal markdown for RP text: *i* **b** ***bi*** _i_ __b__ ~~s~~ `code` #..####

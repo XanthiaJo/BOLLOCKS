@@ -27,9 +27,12 @@ fs.mkdirSync(CARDS_DIR, { recursive: true });
 const BG_DIR = path.join(DATA_DIR, 'bg');
 fs.mkdirSync(BG_DIR, { recursive: true });
 const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
-// Local testing mode: no token → ?as=<handle> impersonation, else first user.
+// Session token may arrive as a Bearer header, the mp_token cookie (set at
+// login so plain page loads are authenticated), or the ?token= SSE param.
+const cookieToken = req =>
+    (req.headers.cookie || '').split(';').map(c => c.trim()).find(c => c.startsWith('mp_token='))?.slice(9);
 const auth = req =>
-    userForToken(req.headers.authorization?.replace(/^Bearer /, '') || new URL(req.url, 'http://x').searchParams.get('token'));
+    userForToken(req.headers.authorization?.replace(/^Bearer /, '') || cookieToken(req) || new URL(req.url, 'http://x').searchParams.get('token'));
 const roomOwner = id => db.prepare('SELECT owner_users_id_fk AS o FROM rooms WHERE rooms_id_pk=?').get(id)?.o;
 const roomOwnerOnly = (roomId, u) => roomOwner(roomId) === u.users_id_pk;
 
@@ -38,7 +41,14 @@ const router = {
         const b = await readBody(req);
         const s = login(b.handle, b.password);
         if (!s) return send(res, 401, { error: 'bad credentials' });
+        res.setHeader('Set-Cookie', `mp_token=${s.token}; Path=/; HttpOnly; SameSite=Lax`);
         send(res, 200, { token: s.token, handle: s.user.handle });
+    },
+    'GET /api/logout': (req, res) => {
+        const t = req.headers.authorization?.replace(/^Bearer /, '') || cookieToken(req) || new URL(req.url, 'http://x').searchParams.get('token');
+        if (t) db.prepare('DELETE FROM sessions WHERE sessions_token_pk=?').run(t);
+        res.writeHead(302, { Location: '/login.html', 'Set-Cookie': 'mp_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' });
+        res.end();
     },
     'POST /api/register': async (req, res) => {
         const b = await readBody(req);
@@ -667,18 +677,22 @@ http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
     const key = `${req.method} ${url.pathname}`;
     const user = auth(req);
-    // Unauthenticated: /api/* is off-limits except login; static files still
-    // serve so the login page (and its css/js) can load.
+    // Unauthenticated: /api/* is off-limits except login/logout; static files
+    // redirect to the login page below (the session cookie authenticates them).
     const firstUser = key === 'POST /api/register' && !db.prepare('SELECT 1 FROM users LIMIT 1').get();
-    if (!user && url.pathname.startsWith('/api/') && key !== 'POST /api/login' && key !== 'GET /api/version' && key !== 'GET /api/avatar' && key !== 'GET /api/roombg' && !firstUser)
+    if (!user && url.pathname.startsWith('/api/') && key !== 'POST /api/login' && key !== 'GET /api/logout' && key !== 'GET /api/version' && !firstUser)
         return send(res, 401, { error: 'auth required' });
     if (router[key]) {
         try { return await router[key](req, res, user); }
         catch (e) { console.error(`[${key}]`, e); return send(res, 500, { error: String(e?.message || e) }); }
     }
-    // static
+    // static — the login page is the only file served without a session
     const file = path.join(PUB, url.pathname === '/' ? 'index.html' : url.pathname);
-    if (fs.existsSync(file) && file.startsWith(PUB)) {
+    if (fs.existsSync(file) && file.startsWith(PUB + path.sep)) {
+        if (!user && path.basename(file) !== 'login.html') {
+            res.writeHead(302, { Location: '/login.html' });
+            return res.end();
+        }
         const ext = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }[path.extname(file)] || 'text/plain';
         res.writeHead(200, { 'Content-Type': ext });
         return fs.createReadStream(file).pipe(res);

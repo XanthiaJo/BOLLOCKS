@@ -87,8 +87,8 @@ button.del{background:#7c3a3a}
 <script src="layout.js"></script>
 <script>
 const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
-const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.json());
-const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.json());
+const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.status===401?location='/login.html':r.json());
+const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.status===401?location='/login.html':r.json());
 const $=id=>document.getElementById(id);
 // Crop-drag wiring
 document.addEventListener('DOMContentLoaded',()=>{
