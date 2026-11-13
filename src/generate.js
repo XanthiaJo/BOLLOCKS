@@ -31,13 +31,12 @@ export function memProfileFor(room) {
  * { apiUrl, model, key }) — read from DB, never reaches clients.
  */
 export async function generateReply(roomId, card) {
-    // Card's own profile wins; otherwise the card owner's active profile,
-    // else the room owner's (rooms.owner_users_id_fk — not a member's).
-    const ownerId = db.prepare('SELECT owner_users_id_fk FROM rooms WHERE rooms_id_pk=?').get(roomId)?.owner_users_id_fk;
+    // Card's own profile wins; otherwise the card owner's active profile.
+    // Everyone is responsible for their own API keys — never the room owner's.
     const p = card.api_profiles_id_fk
         ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(card.api_profiles_id_fk)
         : null;
-    const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(card.owner_users_id_fk || ownerId);
+    const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(card.owner_users_id_fk);
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(
