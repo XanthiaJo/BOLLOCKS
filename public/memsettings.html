@@ -91,18 +91,6 @@
       <div class="row"><span class="lbl" title="Token cap for open-threads context in prompts." title="Token cap for open-threads context in prompts.">Thread injection budget</span><input value="700" disabled style="width:80px"></div>
     </div>
 
-    <h4>Consolidation</h4>
-    <div class="ph">
-      <div class="row"><span class="lbl" title="Merge N pending fact-memories into one consolidated entry." title="Merge N pending fact-memories into one consolidated entry.">Consolidate [fact] after N unprocessed</span><input value="4" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for relationship-type memories." title="Same, for relationship-type memories.">Consolidate [relationship] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for preference-type memories." title="Same, for preference-type memories.">Consolidate [preference] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for event-type memories." title="Same, for event-type memories.">Consolidate [event] after N</span><input value="4" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for scene summaries." title="Same, for scene summaries.">Consolidate [scene] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for character revelations." title="Same, for character revelations.">Consolidate [revelation] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for character development notes." title="Same, for character development notes.">Consolidate [development] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for detail memories." title="Same, for detail memories.">Consolidate [detail] after N</span><input value="3" disabled style="width:80px"></div>
-    </div>
-
     <h4>Canon</h4>
     <div class="ph">
       <div class="row"><span class="lbl" title="Token cap for canon (always-true world facts) in prompts." title="Token cap for canon (always-true world facts) in prompts.">Canon injection budget</span><input value="800" disabled style="width:80px"></div>
@@ -140,14 +128,6 @@
       <label class="cb"><input type="checkbox" disabled> Auto-repair contradictions</label>
     </div>
 
-    <h4>Deduplication</h4>
-    <div class="ph">
-      <label class="cb"><input type="checkbox" disabled> Use semantic embeddings</label>
-      <div class="row"><span class="lbl" title="Service providing embeddings." title="Service providing embeddings.">Embedding source</span><input placeholder="ollama / openai" disabled></div>
-      <div class="row"><span class="lbl" title="Endpoint for the embeddings service." title="Endpoint for the embeddings service.">Embedding URL</span><input disabled></div>
-      <div class="row"><span class="lbl" title="Model used for embeddings, e.g. nomic-embed-text." title="Model used for embeddings, e.g. nomic-embed-text.">Embedding model</span><input placeholder="nomic-embed-text" disabled></div>
-      <label class="cb"><input type="checkbox" disabled> Keep model in memory</label>
-    </div>
 
     <button class="del" onclick="delMP(selProf)" style="margin-top:12px">Delete profile</button>
   </div>
