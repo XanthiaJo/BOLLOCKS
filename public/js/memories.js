@@ -92,8 +92,9 @@ async function load(){
   $('smart_auto').checked=rm?.is_owner?!!smartP?.auto_mem:!!rm?.mem_profile_auto;
   $('smart_auto').disabled=!rm?.is_owner?true:!smartP;
   $('smart_mprof').disabled=!rm?.is_owner;
-  $('rchat').innerHTML=
-    rprofRow({name:esc(roomName),meta:'shared memories',sel:cardId===0,onclick:`pick(0,'${esc(roomName)}')`});
+  $('rchat').innerHTML=(rooms||[]).map(r=>
+    rprofRow({name:esc(r.name),meta:'shared memories',sel:r.id===ROOM,onclick:`pickRoom(${r.id})`})
+    ).join('')||'<small>None</small>';
   $('rcards').innerHTML=(cards||[]).map(c=>
       rprofRow({img:`<img src="/api/avatar?id=${c.id}" onerror="this.style.visibility='hidden'">`,name:esc(c.name),meta:esc(c.owner||'?'),sel:c.id===cardId,onclick:`pick(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')`})
     ).join('')||'<small>None</small>';
@@ -104,6 +105,7 @@ async function load(){
   renderList();
 }
 function pick(id,name){cardId=id;scopeName=name;if(id!==0 && curTab==='smart') curTab='user';load()}
+function pickRoom(id){ROOM=id;localStorage.mp_room=ROOM;cardId=0;scopeName='';load()}
 async function toggleSmartAuto(on){const id=Number($('smart_mprof').value);if(!id)return;const p=memProfiles.find(x=>x.mem_profiles_id_pk===id);if(!p)return;await api('memprofiles/update',{...rowToProf(p),auto:on?1:0});load()}
 async function pickMProf(v){await api('room/memsettings',{room:ROOM,memProfile:Number(v)||0});load()}
 function newMem(){$('newbox').style.display='block';$('newmem').focus()}
