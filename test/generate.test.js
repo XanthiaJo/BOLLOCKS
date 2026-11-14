@@ -56,6 +56,20 @@ describe('generation (mock LLM)', () => {
         assert.equal(logs[0].request.messages.at(-1).content, 'Kira:');
     });
 
+    test('memory triggers phrase-match whole comma-separated keywords', async () => {
+        const mem = (await s.post('memories', { room, content: 'SECRET PHRASE FACT', type: 'fact', triggers: 'dr pepper' })).json.id;
+        const sysOf = async () => {
+            llm.requests.length = 0;
+            await s.post('generate', { room, card });
+            return JSON.parse(llm.requests.at(-1).body).messages[0].content;
+        };
+        await s.post('say', { room, text: 'pass the pepper please' });
+        assert.ok(!(await sysOf()).includes('SECRET PHRASE FACT')); // one word of the phrase doesn't fire it
+        await s.post('say', { room, text: 'cracking open a dr pepper' });
+        assert.ok((await sysOf()).includes('SECRET PHRASE FACT'));
+        await s.post('memories/delete', { id: mem });
+    });
+
     test('profile prompt_order reorders the system prompt', async () => {
         const mps = (await s.get('promptprofiles')).json;
         assert.equal(mps.promptBlocks.length, 11);

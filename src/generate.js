@@ -142,8 +142,8 @@ export async function generateReply(roomId, card) {
     const injectMem = refreshN <= 1 || refreshKey % refreshN === 0;
     const cap = (rows, acc) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= budget); };
     const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
-    const active = r => !r.triggers || r.triggers.split(/[\s,]+/).filter(Boolean)
-        .some(t => recentText.includes(t.toLowerCase()));
+    const active = r => !r.triggers || r.triggers.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
+        .some(t => recentText.includes(t));
     const roomMems = cap(db.prepare('SELECT m.content,m.triggers FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC').all(roomId).reverse().filter(active), 0);
     const mems = cap(db.prepare('SELECT m.content,m.triggers FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? ORDER BY m.memories_id_pk DESC')
         .all(roomId, card.id).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
