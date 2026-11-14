@@ -5,6 +5,7 @@ import path from 'node:path';
 import { db, MSG_SQL } from '../db.js';
 import { send, readBody } from '../lib/util.js';
 import { roomOwnerOnly, roomMember } from '../lib/access.js';
+import { deleteRoomCascade } from '../lib/cascade.js';
 import { BG_DIR } from '../lib/files.js';
 
 export default {
@@ -73,13 +74,7 @@ export default {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
         if (!roomOwnerOnly(id, u)) return send(res, 403, { error: 'room owner only' });
-        db.prepare('DELETE FROM messages WHERE rooms_id_fk=?').run(id);
-        db.prepare('DELETE FROM room_members WHERE rooms_id_fk=?').run(id);
-        db.prepare('DELETE FROM memory_cards WHERE memories_id_fk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(id);
-        db.prepare('DELETE FROM memories WHERE memories_id_pk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(id);
-        db.prepare('DELETE FROM room_memories WHERE rooms_id_fk=?').run(id);
-        db.prepare('DELETE FROM room_books WHERE rooms_id_fk=?').run(id);
-        db.prepare('DELETE FROM rooms WHERE rooms_id_pk=?').run(id);
+        deleteRoomCascade(id);
         send(res, 200, { ok: true });
     },
     'GET /api/room': async (req, res, u) => {

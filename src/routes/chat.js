@@ -72,6 +72,7 @@ export default {
         if (!m) return send(res, 404, { error: 'no message' });
         if (!roomMember(m.rooms_id_fk, u)) return send(res, 403, { error: 'not a room member' });
         const id = b.id || b.world_books_id_pk;
+        db.prepare('UPDATE messages SET supersedes=NULL WHERE supersedes=?').run(id);
         db.prepare('DELETE FROM messages WHERE messages_id_pk=?').run(id);
         push(m.rooms_id_fk, { type: 'delete', id });
         send(res, 200, { ok: true });

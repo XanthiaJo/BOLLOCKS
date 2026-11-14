@@ -5,6 +5,7 @@ import { db, DATA_DIR } from '../db.js';
 import { send, readBody } from '../lib/util.js';
 import { extractCardJson, normalizeCard } from '../lib/pngcard.js';
 import { CARDS_DIR } from '../lib/files.js';
+import { deleteCardCascade } from '../lib/cascade.js';
 
 export default {
     'POST /api/cards/avatar': async (req, res, u) => {
@@ -102,8 +103,8 @@ export default {
     'POST /api/cards/delete': async (req, res, u) => {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
-        db.prepare('DELETE FROM cards WHERE cards_id_pk=? AND owner_users_id_fk=?').run(id, u.users_id_pk);
-        db.prepare('DELETE FROM room_members WHERE cards_id_fk=?').run(id);
+        if (db.prepare('SELECT 1 FROM cards WHERE cards_id_pk=? AND owner_users_id_fk=?').get(id, u.users_id_pk))
+            deleteCardCascade(id);
         send(res, 200, { ok: true });
     },
 };

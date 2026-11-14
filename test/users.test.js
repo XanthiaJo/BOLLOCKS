@@ -16,4 +16,16 @@ describe('users', () => {
         assert.equal((await s.post('users/delete', { id: me.id })).status, 400);
         assert.equal((await s.post('users/delete', { handle: 'ghost' })).status, 400);
     });
+
+    test('deleting a user cascades their content', async () => {
+        // carol has a seeded persona card seated in The House — previously
+        // the delete 500ed on FOREIGN KEY constraints (cards, profiles…).
+        const carol = (await s.get('users')).json.users.find(u => u.handle === 'carol');
+        assert.ok(carol);
+        assert.equal((await s.post('users/delete', { id: carol.id })).status, 200);
+        const users = (await s.get('users')).json.users;
+        assert.ok(!users.some(u => u.handle === 'carol'));
+        const members = (await s.get('room?id=1')).json.members;
+        assert.ok(!members.some(m => m.handle === 'carol'));
+    });
 });
