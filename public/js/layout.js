@@ -31,7 +31,8 @@
     const rside = document.getElementById('rsidebar');
     const content = document.getElementById('content') || document.body;
     // Collapse toggles in the nav for each sidebar that exists.
-    const mob = () => window.innerWidth <= 700;
+    const MOB = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mob')) || 700;
+    const mob = () => window.innerWidth <= MOB;
     // Mobile sidebars are overlay drawers: dim scrim behind, one open at a
     // time, anchored just under the nav. closeDrawers() is the single exit.
     const scrim = document.createElement('div');

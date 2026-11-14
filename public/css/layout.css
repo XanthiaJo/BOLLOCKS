@@ -3,6 +3,9 @@
    NOTE: login.html must stay self-contained (served without auth) and
    keeps its own :root copy — update both if the palette changes. */
 :root{
+    /* mobile breakpoint (px). Canonical value — JS reads this; var() isn't
+       allowed inside @media so keep the query literals below in sync. */
+    --mob:700;
     /* surfaces */
     --bg:#1a1b1e;          /* page background */
     --bg-deep:#0d0e10;     /* darker backdrop (login) */
@@ -86,7 +89,7 @@ nav a.on{background:var(--accent);color:var(--white)}
 .userdrop hr{border:none;border-top:1px solid var(--edge);margin:4px 0}
 .mp-scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:35}
 .mp-scrim.on{display:block}
-@media (max-width:700px){
+@media (max-width:700px){ /* --mob */
   nav{gap:8px;padding:8px 10px;overflow-x:auto;scrollbar-width:none}
   nav::-webkit-scrollbar{display:none}
   nav a{white-space:nowrap}
