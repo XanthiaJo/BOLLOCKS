@@ -54,7 +54,10 @@ export default {
     },
     'POST /api/profiles/delete': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare('DELETE FROM api_profiles WHERE api_profiles_id_pk=? AND users_id_fk=?').run(b.id || b.world_books_id_pk, u.users_id_pk);
+        const id = b.id || b.world_books_id_pk;
+        db.prepare('UPDATE cards SET api_profiles_id_fk=NULL WHERE api_profiles_id_fk=?').run(id);
+        db.prepare('UPDATE mem_profiles SET mem_extraction_profile_id=0 WHERE mem_extraction_profile_id=?').run(id);
+        db.prepare('DELETE FROM api_profiles WHERE api_profiles_id_pk=? AND users_id_fk=?').run(id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
     // Smart-memory profiles: named presets of the mem_* room settings.
@@ -101,6 +104,9 @@ export default {
         // none remain). Only the owner's own rooms can legitimately follow.
         db.prepare(`UPDATE rooms SET mem_profiles_id_fk=COALESCE((SELECT mem_profiles_id_pk FROM mem_profiles WHERE mem_profiles_id_pk<>? AND users_id_fk=? ORDER BY mem_profiles_id_pk LIMIT 1),0)
             WHERE mem_profiles_id_fk=? AND owner_users_id_fk=?`).run(b.id, u.users_id_pk, b.id, u.users_id_pk);
+        // Any other room still pointing at the deleted profile (e.g. a
+        // legacy link) falls back to none rather than blocking the delete.
+        db.prepare('UPDATE rooms SET mem_profiles_id_fk=NULL WHERE mem_profiles_id_fk=?').run(b.id);
         db.prepare('DELETE FROM mem_profiles WHERE mem_profiles_id_pk=? AND users_id_fk=?').run(b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },

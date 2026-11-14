@@ -125,6 +125,16 @@ describe('rooms and members', () => {
         assert.equal((await s.post('room/background/remove', { room })).status, 200);
         assert.equal((await s.get(`roombg?id=${room}`)).status, 404);
     });
+
+    test('deleting a room cascades messages, members and memories', async () => {
+        const room2 = (await s.post('rooms', { name: 'Doomed' })).json.id;
+        const card = (await s.post('cards', { name: 'Doomed Bot' })).json.id;
+        await s.post('members', { room: room2, cardId: card });
+        await s.post('say', { room: room2, text: 'farewell' });
+        await s.post('memories', { room: room2, content: 'doomed memory' });
+        assert.equal((await s.post('rooms/delete', { id: room2 })).status, 200);
+        assert.ok(!(await s.get('rooms')).json.rooms.some(r => r.id === room2));
+    });
 });
 
 // Legacy schema: members wrapped one card each and room_members pointed at

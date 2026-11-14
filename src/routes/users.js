@@ -2,6 +2,7 @@
 import { db, hash, verify } from '../db.js';
 import { send, readBody } from '../lib/util.js';
 import { isAdmin } from '../lib/access.js';
+import { deleteUserCascade } from '../lib/cascade.js';
 
 export default {
     'GET /api/me': async (req, res, u) => {
@@ -43,9 +44,7 @@ export default {
             ? db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=? COLLATE NOCASE').get(b.handle)?.id
             : (b.id || b.world_books_id_pk);
         if (!target || target === u.users_id_pk) return send(res, 400, { error: 'no such user' });
-        db.prepare('DELETE FROM sessions WHERE users_id_fk=?').run(target);
-        db.prepare('DELETE FROM room_members WHERE cards_id_fk IN (SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=?)').run(target);
-        db.prepare('DELETE FROM users WHERE users_id_pk=?').run(target);
+        deleteUserCascade(target);
         send(res, 200, { ok: true });
     },
 };

@@ -52,4 +52,15 @@ describe('cards and avatars', () => {
         for (const name of ['JsonBot', 'PngBot'])
             await s.post('cards/delete', { id: (await s.get('cards')).json.cards.find(c => c.name === name).id });
     });
+
+    test('deleting a card with messages and scoped memories works', async () => {
+        // Wren is seated in The House, has a message, and a card-scoped
+        // memory — previously this 500ed on a FOREIGN KEY constraint.
+        const wren = (await s.get('cards')).json.cards.find(c => c.name === 'Wren');
+        assert.ok(wren);
+        assert.equal((await s.post('cards/delete', { id: wren.id })).status, 200);
+        assert.ok(!(await s.get('cards')).json.cards.some(c => c.name === 'Wren'));
+        const members = (await s.get('room?id=1')).json.members;
+        assert.ok(!members.some(m => m.card_name === 'Wren'));
+    });
 });
