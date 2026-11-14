@@ -4,8 +4,6 @@
 // goes via room_memories), and a partial chain just means a 500.
 import { db } from '../db.js';
 
-const hasTable = n => !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(n);
-
 export function deleteRoomCascade(rid) {
     const memIds = 'SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?';
     db.prepare('DELETE FROM prompt_logs WHERE rooms_id_fk=?').run(rid);
@@ -13,8 +11,7 @@ export function deleteRoomCascade(rid) {
     db.prepare('DELETE FROM messages WHERE rooms_id_fk=?').run(rid);
     db.prepare('DELETE FROM room_members WHERE rooms_id_fk=?').run(rid);
     db.prepare(`DELETE FROM memory_cards WHERE memories_id_fk IN (${memIds})`).run(rid);
-    if (hasTable('memory_triggers'))
-        db.prepare(`DELETE FROM memory_triggers WHERE memories_id_fk IN (${memIds})`).run(rid);
+    db.prepare(`DELETE FROM memory_triggers WHERE memories_id_fk IN (${memIds})`).run(rid);
     db.prepare(`DELETE FROM memories WHERE memories_id_pk IN (${memIds})`).run(rid);
     db.prepare('DELETE FROM room_memories WHERE rooms_id_fk=?').run(rid);
     db.prepare('DELETE FROM room_books WHERE rooms_id_fk=?').run(rid);

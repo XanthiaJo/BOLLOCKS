@@ -1,4 +1,12 @@
 // Memory routes: list/create/update/delete/triggers/move + lastmem.
+// Trigger keywords live in memory_triggers (one row per word); the API
+// keeps speaking comma-separated strings at the boundary.
+const TRIG_SQL = `(SELECT GROUP_CONCAT(mt.word,',') FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk)`;
+function setTriggers(id, str) {
+    db.prepare('DELETE FROM memory_triggers WHERE memories_id_fk=?').run(id);
+    const ins = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
+    for (const w of (str || '').split(',')) { const word = w.trim().toLowerCase(); if (word) ins.run(id, word); }
+}
 import { db } from '../db.js';
 import { send, readBody } from '../lib/util.js';
 import { roomMember, memoryShared } from '../lib/access.js';
@@ -14,7 +22,7 @@ export default {
         const card = Number(q.get('card') ?? -1);
         const room = Number(q.get('room') || 0);
         if (!roomMember(room, u)) return send(res, 403, { error: 'not a room member' });
-        const rows = db.prepare(`SELECT m.*, m.memories_id_pk AS id, c.name card_name, r.name room_name, mc.cards_id_fk AS cards_id_fk FROM memories m
+        const rows = db.prepare(`SELECT m.*, ${TRIG_SQL} AS triggers, m.memories_id_pk AS id, c.name card_name, r.name room_name, mc.cards_id_fk AS cards_id_fk FROM memories m
             JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
             LEFT JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk
             LEFT JOIN cards c ON c.cards_id_pk=mc.cards_id_fk JOIN rooms r ON r.rooms_id_pk=rm.rooms_id_fk
@@ -26,8 +34,9 @@ export default {
     'POST /api/memories': async (req, res, u) => {
         const b = await readBody(req);
         if (!roomMember(b.room || 1, u)) return send(res, 403, { error: 'not a room member' });
-        const id = db.prepare('INSERT INTO memories (content,type,origin,triggers) VALUES (?,?,?,?)')
-            .run(b.content || '', b.type || 'fact', 'user', b.triggers || '').lastInsertRowid;
+        const id = db.prepare('INSERT INTO memories (content,type,origin) VALUES (?,?,?)')
+            .run(b.content || '', b.type || 'fact', 'user').lastInsertRowid;
+        setTriggers(id, b.triggers);
         db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(b.room || 1, id);
         if (b.cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, b.cardId);
         send(res, 200, { id });
@@ -41,8 +50,9 @@ export default {
         // Card-scoped smart memories are not supported yet.
         if (origin === 'smart' && db.prepare('SELECT 1 FROM memory_cards WHERE memories_id_fk=?').get(id))
             return send(res, 400, { error: 'character smart memories not supported yet' });
-        db.prepare('UPDATE memories SET content=COALESCE(?,content), type=COALESCE(?,type), triggers=COALESCE(?,triggers), origin=COALESCE(?,origin) WHERE memories_id_pk=?')
-            .run(b.content ?? null, b.type ?? null, b.triggers ?? null, origin, id);
+        db.prepare('UPDATE memories SET content=COALESCE(?,content), type=COALESCE(?,type), origin=COALESCE(?,origin) WHERE memories_id_pk=?')
+            .run(b.content ?? null, b.type ?? null, origin, id);
+        if (b.triggers !== undefined) setTriggers(id, b.triggers);
         send(res, 200, { ok: true });
     },
     'POST /api/memories/delete': async (req, res, u) => {
@@ -51,6 +61,7 @@ export default {
         if (!memoryShared(id, u)) return send(res, 403, { error: 'not a room member' });
     db.prepare('DELETE FROM room_memories WHERE memories_id_fk=?').run(id);
     db.prepare('DELETE FROM memory_cards WHERE memories_id_fk=?').run(id);
+    db.prepare('DELETE FROM memory_triggers WHERE memories_id_fk=?').run(id);
     db.prepare('DELETE FROM memories WHERE memories_id_pk=?').run(id);
         send(res, 200, { ok: true });
     },
@@ -58,7 +69,7 @@ export default {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
         if (!memoryShared(id, u)) return send(res, 403, { error: 'not a room member' });
-    db.prepare('UPDATE memories SET triggers=? WHERE memories_id_pk=?').run(b.triggers || '', id);
+    setTriggers(id, b.triggers);
         send(res, 200, { ok: true });
     },
     'POST /api/memories/move': async (req, res, u) => {
