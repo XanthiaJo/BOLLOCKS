@@ -221,4 +221,35 @@ describe('generation (mock LLM)', () => {
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); await cons.close(); }
     });
+
+    test('scene-state pass writes a snapshot that replaces the previous one', async () => {
+        // One mock serves both calls: extraction parses these as facts, the
+        // state pass re-parses the same lines as a [state] snapshot.
+        const ext = await mockLLM('- Wren is in the kitchen.\n- The blue tin is on the counter.');
+        try {
+            const profId = (await s.post('profiles', { name: 'State', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'State', auto: true, every: 1,
+                dedup: 1, consolidate: 0, state: 1, stateEvery: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'State room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            const states = async () =>
+                ((await s.get(`memories?card=0&room=${mroom}`)).json.memories || []).filter(m => m.type === 'state');
+            await s.post('say', { room: mroom, text: 'scene one' });
+            const first = await until(async () => {
+                const st = await states();
+                return st.length === 2 ? st : null;
+            }, 'first snapshot');
+            const firstIds = new Set(first.map(m => m.memories_id_pk));
+            await s.post('say', { room: mroom, text: 'scene two' });
+            // Second run: the snapshot must stay 2 entries — run one's rows
+            // are superseded, not stacked (visible rows are all new ids).
+            const after = await until(async () => {
+                const st = await states();
+                return st.length === 2 && st.every(m => !firstIds.has(m.memories_id_pk)) ? st : null;
+            }, 'refreshed snapshot');
+            assert.ok(after.some(m => m.content === 'Wren is in the kitchen.'));
+            assert.ok(after.every(m => !m.triggers)); // state is never trigger-gated
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
 });

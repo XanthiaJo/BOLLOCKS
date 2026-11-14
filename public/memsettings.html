@@ -58,6 +58,18 @@
       <textarea id="set_consol_prompt" placeholder="(default consolidation prompt)" style="min-height:60px"></textarea>
     </div>
 
+    <h4>Scene state</h4>
+    <span class="hint">A rolling snapshot of what is true right now — where people and objects are. Replaces itself each run, unlike accumulated memories.</span>
+    <label class="row cbrow"><span class="lbl">Track scene state</span><span class="hint">After extraction, a second pass writes a fresh [state] snapshot and supersedes the previous one — the store always reflects NOW, not history.</span><input type="checkbox" id="set_state"></label>
+    <div class="row"><span class="lbl" title="Refresh the snapshot every N extraction runs.">Refresh every N extractions</span><span class="hint">1 = refresh on every extraction run. Higher = cheaper, staler. Default: 1.</span><input type="number" id="set_state_every" min="1" max="50" value="1" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl" title="Safety cap on live state entries; oldest are superseded.">Max state entries</span><span class="hint">Cap on the live snapshot size — a misbehaving model can't flood it. Default: 30.</span><input type="number" id="set_max_state" min="5" max="200" value="30" style="width:80px;display:inline-block"></div>
+    <div>
+      <div class="lbl" title="The instruction sent to the model when refreshing the snapshot. Leave blank for default.">State prompt template</div>
+      <span class="hint">Custom snapshot instructions. Leave blank for the built-in prompt — <a href="#" data-pre="def_state_prompt" onclick="toggleDefPrompt(this);return false" style="color:var(--muted)">show it</a>.</span>
+      <pre id="def_state_prompt" style="display:none;white-space:pre-wrap;font-size:.78em;color:var(--dim);background:var(--input);padding:8px;border-radius:4px;margin:2px 0 6px"></pre>
+      <textarea id="set_state_prompt" placeholder="(default state prompt)" style="min-height:60px"></textarea>
+    </div>
+
     <h4>Injection</h4>
     <span class="hint">How stored memories get put back into the AI's prompt.</span>
     <div class="row"><span class="lbl" title="Max tokens of memory content injected into each generation prompt.">Token budget</span><span class="hint">Max memory text added to each reply's prompt — beyond this, newer memories are left out (oldest are kept). Default: 800.</span><input type="number" id="set_budget" min="50" max="4000" style="width:80px;display:inline-block"></div>

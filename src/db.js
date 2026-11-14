@@ -328,6 +328,12 @@ export function migrateSchema() {
         ['mem_consolidate_every', 'INTEGER DEFAULT 10'],
         ['mem_consolidate_profile_id', 'INTEGER DEFAULT 0'],
         ['mem_consolidate_prompt', "TEXT DEFAULT ''"],
+        // Scene-state tracker — current-location/object snapshot, not
+        // cumulative memory: each pass supersedes the previous snapshot.
+        ['mem_state', 'INTEGER DEFAULT 0'],
+        ['mem_state_every', 'INTEGER DEFAULT 1'],
+        ['mem_max_state', 'INTEGER DEFAULT 30'],
+        ['mem_state_prompt', "TEXT DEFAULT ''"],
     ]) if (!mpcols.includes(col)) db.exec(`ALTER TABLE mem_profiles ADD COLUMN ${col} ${def}`);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='prompt_profiles'").get()) {
         db.exec(`CREATE TABLE prompt_profiles (

@@ -1,7 +1,7 @@
 // Connection routes: API profiles, memory profiles, /models proxy.
 import { db } from '../db.js';
 import { send, readBody } from '../lib/util.js';
-import { MEM_EXTRACT_PROMPT, MEM_CONSOLIDATE_PROMPT, PROMPT_BLOCKS } from '../generate.js';
+import { MEM_EXTRACT_PROMPT, MEM_CONSOLIDATE_PROMPT, MEM_STATE_PROMPT, PROMPT_BLOCKS } from '../generate.js';
 
 export default {
     'POST /api/models': async (req, res, u) => {
@@ -64,7 +64,7 @@ export default {
     // Smart-memory profiles: named presets of the mem_* room settings.
     'GET /api/memprofiles': async (req, res, u) => {
         const profiles = db.prepare('SELECT * FROM mem_profiles WHERE users_id_fk=? ORDER BY mem_profiles_id_pk').all(u.users_id_pk);
-        send(res, 200, { profiles, defaultPrompt: MEM_EXTRACT_PROMPT, defaultConsolPrompt: MEM_CONSOLIDATE_PROMPT });
+        send(res, 200, { profiles, defaultPrompt: MEM_EXTRACT_PROMPT, defaultConsolPrompt: MEM_CONSOLIDATE_PROMPT, defaultStatePrompt: MEM_STATE_PROMPT });
     },
     'POST /api/memprofiles': async (req, res, u) => {
         const b = await readBody(req);
@@ -75,13 +75,15 @@ export default {
             b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
             b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0,
             (b.dedup ?? 1) ? 1 : 0, b.consolidate ? 1 : 0, b.consolAt ?? 80,
-            b.consolEvery ?? 10, b.consolProfileId ?? 0, b.consolPrompt || ''];
+            b.consolEvery ?? 10, b.consolProfileId ?? 0, b.consolPrompt || '',
+            b.state ? 1 : 0, b.stateEvery ?? 1, b.maxState ?? 30, b.statePrompt || ''];
         const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,auto_mem,mem_every,mem_budget,mem_max,
             mem_max_fact,mem_max_event,mem_max_relationship,mem_max_preference,mem_extraction_prompt,
             mem_context_threshold,mem_response_length,mem_gen_budget,mem_unlimited,mem_unified,mem_triggers,
             mem_autotune,mem_refresh,mem_activity,mem_extraction_profile_id,
-            mem_dedup,mem_consolidate,mem_consolidate_at,mem_consolidate_every,mem_consolidate_profile_id,mem_consolidate_prompt)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+            mem_dedup,mem_consolidate,mem_consolidate_at,mem_consolidate_every,mem_consolidate_profile_id,mem_consolidate_prompt,
+            mem_state,mem_state_every,mem_max_state,mem_state_prompt)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
             .run(u.users_id_pk, b.name, ...vals).lastInsertRowid;
         send(res, 200, { id });
     },
@@ -93,7 +95,8 @@ export default {
             mem_gen_budget=?, mem_unlimited=?, mem_unified=?, mem_triggers=?,
             mem_autotune=?, mem_refresh=?, mem_activity=?, mem_extraction_profile_id=?,
             mem_dedup=?, mem_consolidate=?, mem_consolidate_at=?, mem_consolidate_every=?,
-            mem_consolidate_profile_id=?, mem_consolidate_prompt=?
+            mem_consolidate_profile_id=?, mem_consolidate_prompt=?,
+            mem_state=?, mem_state_every=?, mem_max_state=?, mem_state_prompt=?
             WHERE mem_profiles_id_pk=? AND users_id_fk=?`)
             .run(String(b.name ?? '').trim(), b.auto ? 1 : 0, b.every ?? 10, b.budget ?? 800, b.max ?? 50,
                 b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
@@ -102,6 +105,7 @@ export default {
                 b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0,
                 (b.dedup ?? 1) ? 1 : 0, b.consolidate ? 1 : 0, b.consolAt ?? 80,
                 b.consolEvery ?? 10, b.consolProfileId ?? 0, b.consolPrompt || '',
+                b.state ? 1 : 0, b.stateEvery ?? 1, b.maxState ?? 30, b.statePrompt || '',
                 b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
