@@ -53,20 +53,15 @@ CREATE TABLE memory_triggers (
   memories, split-on-comma`. Triggers are only ever whole-list replaced
   via `memories/update`, so no partial-update semantics to preserve.
 
-### 2b. Delete cascades via FK `ON DELETE`, not route code
+### ~~2b. Delete cascades~~ — resolved (PR pending)
 
-Today every delete route hand-runs a chain of `DELETE FROM …WHERE fk IN
-(subquery)` — cards.js, users.js, rooms.js each carry ~4 statements.
-Several junctions already declare `ON DELETE CASCADE` in their DDL but
-SQLite only honors it if `PRAGMA foreign_keys=ON` per connection (it is)
-— yet the routes still do it manually anyway.
-
-- Pick one: either let FK cascades do it (and delete the route-level
-  chains, keeping only cross-table ordering like `memory_cards` →
-  `memories`), or accept manual cascading as convention. Mixed state is
-  the smell, not either choice.
-- Risk: medium — cascade paths must be audited against current manual
-  behavior (e.g. `memories` card-scope rows vs room-scope rows differ).
+Went the route-owned direction: `lib/cascade.js` holds ordered,
+complete delete chains (`deleteRoomCascade`/`deleteCardCascade`/
+`deleteUserCascade`) — FK actions can't reach through junctions anyway,
+and the audit found the partial manual chains were actually *broken*:
+several deletes 500ed on `FOREIGN KEY constraint failed` under
+node:sqlite's `foreign_keys=ON` default. Declared cascades stay as
+safety nets.
 
 ## Stage 3 — optional / cosmetic
 
