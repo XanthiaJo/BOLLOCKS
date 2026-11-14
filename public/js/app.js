@@ -54,6 +54,16 @@ function addMsg(m, stick) {
     li.innerHTML = `<div class="who">${m.cards_id_fk ? `<img class="mav" src="/api/avatar?id=${m.cards_id_fk}" onerror="this.remove()">` : ''}<span class="n"></span></div><div class="body"><span class="t"></span></div>` +
         `<button class="delm" title="Delete" onclick="delMsg(${m.id},this)">✕</button>`;
     li.querySelector('.n').textContent = m.name;
+    if (m.send_date) {
+        const d = new Date(m.send_date.replace(' ', 'T') + 'Z'); // stored UTC
+        const hm = d.toTimeString().slice(0, 5);
+        const w = document.createElement('span');
+        w.className = 'when';
+        w.textContent = d.toDateString() === new Date().toDateString() ? hm
+            : `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${hm}`;
+        w.title = d.toLocaleString();
+        li.querySelector('.who').append(w);
+    }
     li.querySelector('.t').innerHTML = md(m.text);
     el.append(li);
     if (stick || (stick === undefined && nearBottom)) el.scrollTop = 1e9;
