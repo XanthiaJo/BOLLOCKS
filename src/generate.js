@@ -380,8 +380,12 @@ export async function maybeSummarize(roomId) {
         const type = tag ? tag[1].toLowerCase() : 'fact';
         if (tag) fact = fact.slice(tag[0].length);
         let triggers = '';
-        const tr = fact.match(/\(([^)]*)\)\s*$/);
-        if (tr) { triggers = tr[1].split(',').map(s => s.trim().toLowerCase()).filter(Boolean).join(','); fact = fact.slice(0, tr.index).trim(); }
+        // "(triggers: a, b)" anywhere in the line; else a bare trailing "(a, b)".
+        const tr = fact.match(/\(\s*triggers?\s*:\s*([^)]*)\)/i) || fact.match(/\(([^)]*)\)\s*$/);
+        if (tr) {
+            triggers = tr[1].split(',').map(s => s.trim().replace(/^triggers?\s*:/i, '').toLowerCase()).filter(Boolean).join(',');
+            fact = (fact.slice(0, tr.index) + fact.slice(tr.index + tr[0].length)).trim();
+        }
         if (fact.length > 10) { const mid = ins.run(fact, type, triggers).lastInsertRowid; linkRoom.run(roomId, mid); added++; }
     }
     // Only advance the watermark once extraction actually ran — a failed

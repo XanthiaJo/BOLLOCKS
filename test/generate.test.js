@@ -141,4 +141,22 @@ describe('generation (mock LLM)', () => {
         await s.post('say', { room, text: 'hey Kira, ping' });
         await until(async () => (await count()) === n + 1 ? true : null, 'named-trigger reply');
     });
+
+    test("extraction strips the '(triggers: …)' label — it's not a keyword", async () => {
+        const ext = await mockLLM('- [fact] Wren keeps biscuits in the blue tin. (triggers: Biscuits, Tin)');
+        try {
+            const profId = (await s.post('profiles', { name: 'Extract', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Ext', auto: true, every: 1, triggers: true, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Mem room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            await s.post('say', { room: mroom, text: 'Wren offered me tea.' });
+            const mems = await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                return m?.length ? m : null;
+            }, 'smart memory');
+            assert.equal(mems[0].triggers, 'biscuits,tin');
+            assert.doesNotMatch(mems[0].content, /triggers/i);
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
 });

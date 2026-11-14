@@ -302,7 +302,16 @@ export function migrateSchema() {
     // One-time: auto-tune is shelved (the UI control is disabled) — force it
     // off on every profile so it stops running server-side too.
     if (uv < 5) db.exec('UPDATE mem_profiles SET mem_autotune=0');
-    if (uv !== 5) db.exec('PRAGMA user_version=5');
+    // One-time: the extraction parser used to store the "(triggers: …)" label
+    // inside the triggers column itself — strip it so it isn't injected as a
+    // keyword or shown on memory cards.
+    if (uv < 6) {
+        for (const r of db.prepare("SELECT memories_id_pk AS id, triggers FROM memories WHERE triggers LIKE '%:%'").all()) {
+            const clean = r.triggers.split(',').map(s => s.trim().replace(/^triggers?\s*:/i, '').toLowerCase()).filter(Boolean).join(',');
+            if (clean !== r.triggers) db.prepare('UPDATE memories SET triggers=? WHERE memories_id_pk=?').run(clean, r.id);
+        }
+    }
+    if (uv !== 6) db.exec('PRAGMA user_version=6');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
     if (!mecols.includes('source')) db.exec("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'manual'");
