@@ -15,7 +15,7 @@ export default {
     'GET /api/lastmem': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room')) || 1;
         if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
-        send(res, 200, db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId) || null);
+        send(res, 200, db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.supersedes IS NULL ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId) || null);
     },
     'GET /api/memories': async (req, res, u) => {
         const q = new URL(req.url, 'http://x').searchParams;
@@ -26,7 +26,7 @@ export default {
             JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
             LEFT JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk
             LEFT JOIN cards c ON c.cards_id_pk=mc.cards_id_fk JOIN rooms r ON r.rooms_id_pk=rm.rooms_id_fk
-            WHERE (?<0 OR (?=0 AND mc.memories_id_fk IS NULL) OR mc.cards_id_fk=?)
+            WHERE m.supersedes IS NULL AND (?<0 OR (?=0 AND mc.memories_id_fk IS NULL) OR mc.cards_id_fk=?)
               AND (?=0 OR rm.rooms_id_fk=?) ORDER BY m.memories_id_pk`)
             .all(card, card, card, room, room);
         send(res, 200, { memories: rows });

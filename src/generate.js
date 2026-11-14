@@ -25,12 +25,38 @@ Example output:
 - [preference] Blake dislikes working through the review pile.`;
 const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords in parentheses, e.g. "- [fact] Blake has a pending review pile. (triggers: pending, review)"';
 
+export const MEM_CONSOLIDATE_PROMPT = `You are consolidating stored memories for a chat. Merge duplicates and near-duplicates into single memories, drop facts that newer ones supersede, and return only the consolidated list — one bullet per line in the same format as the input: "- [type] memory text (triggers: a, b)". Keep every surviving fact; never invent new information.`;
+
+export const MEM_STATE_PROMPT = `You track the current scene state of a roleplay chat. From the latest messages, describe what is true RIGHT NOW: where each person is, where important objects are and who holds them, ongoing activities or conditions. This is a snapshot — describe only the current state, not history or events. Output one entry per line in the format "- [state] current state fact". If the scene state is unchanged or nothing is trackable, reply with just "-".`;
+
+// One memory line, shared by the extraction and consolidation parsers:
+// "- [type] fact text (triggers: a, b)" → { fact, type, triggers }
+function parseMemLine(line) {
+    let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
+    // Type tag first — a leading [fact]/[event]/… IS the type contract,
+    // not a scope tag.
+    const tag = fact.match(/^\[(fact|event|relationship|preference|state)\]\s*/i);
+    const type = tag ? tag[1].toLowerCase() : 'fact';
+    if (tag) fact = fact.slice(tag[0].length);
+    fact = fact.replace(/^\[[^\]]+\]\s*/, ''); // then any leftover [Name]/[shared] scope tag
+    // "(triggers: a, b)" anywhere in the line; else a bare trailing "(a, b)".
+    const tr = fact.match(/\(\s*triggers?\s*:\s*([^)]*)\)/i) || fact.match(/\(([^)]*)\)\s*$/);
+    let triggers = '';
+    if (tr) {
+        triggers = tr[1].split(',').map(s => s.trim().replace(/^triggers?\s*:/i, '').toLowerCase()).filter(Boolean).join(',');
+        fact = (fact.slice(0, tr.index) + fact.slice(tr.index + tr[0].length)).trim();
+    }
+    return { fact, type, triggers };
+}
+
 // Fields a memory profile can override on a room's mem_* settings.
 const MEM_PROFILE_FIELDS = ['auto_mem', 'mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
     'mem_max_event', 'mem_max_relationship', 'mem_max_preference', 'mem_extraction_prompt',
     'mem_context_threshold', 'mem_response_length', 'mem_gen_budget', 'mem_unlimited',
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
-    'mem_extraction_profile_id'];
+    'mem_extraction_profile_id', 'mem_dedup', 'mem_consolidate', 'mem_consolidate_at',
+    'mem_consolidate_every', 'mem_consolidate_profile_id', 'mem_consolidate_prompt',
+    'mem_state', 'mem_state_every', 'mem_max_state', 'mem_state_prompt'];
 
 // Named system-prompt sections in cache-optimal order (stable content first —
 // see the assembly comment in generateReply). The user's active
@@ -145,8 +171,8 @@ export async function generateReply(roomId, card) {
     const active = r => !r.triggers || r.triggers.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
         .some(t => recentText.includes(t));
     const TRIG_SQL = `(SELECT GROUP_CONCAT(mt.word,',') FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk) AS triggers`;
-    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), 0);
-    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? ORDER BY m.memories_id_pk DESC`)
+    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.supersedes IS NULL AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), 0);
+    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? AND m.supersedes IS NULL ORDER BY m.memories_id_pk DESC`)
         .all(roomId, card.id).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
 
     const memText = (injectMem && (roomMems.length || mems.length))
@@ -376,18 +402,7 @@ export async function maybeSummarize(roomId) {
     const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
     for (const line of text.split('\n')) {
-        let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
-        fact = fact.replace(/^\[[^\]]+\]\s*/, ''); // strip leading [Name]/[shared] scope tag
-        const tag = fact.match(/^\[(fact|event|relationship|preference)\]\s*/i);
-        const type = tag ? tag[1].toLowerCase() : 'fact';
-        if (tag) fact = fact.slice(tag[0].length);
-        let triggers = '';
-        // "(triggers: a, b)" anywhere in the line; else a bare trailing "(a, b)".
-        const tr = fact.match(/\(\s*triggers?\s*:\s*([^)]*)\)/i) || fact.match(/\(([^)]*)\)\s*$/);
-        if (tr) {
-            triggers = tr[1].split(',').map(s => s.trim().replace(/^triggers?\s*:/i, '').toLowerCase()).filter(Boolean).join(',');
-            fact = (fact.slice(0, tr.index) + fact.slice(tr.index + tr[0].length)).trim();
-        }
+        const { fact, type, triggers } = parseMemLine(line);
         if (fact.length > 10) {
             const mid = ins.run(fact, type).lastInsertRowid;
             for (const w of triggers.split(',')) { const word = w.trim(); if (word) insTrig.run(mid, word); }
@@ -396,21 +411,24 @@ export async function maybeSummarize(roomId) {
     }
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
-    db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
+    db.prepare('UPDATE rooms SET mem_last_messages_id=?, mem_extract_count=mem_extract_count+1 WHERE rooms_id_pk=?').run(lastId, roomId);
+    // Free dedup first — literal/contained duplicates get superseded before
+    // the caps below count what's left.
+    if (mem.mem_dedup) dedupRoomMemories(roomId);
     if (mem.mem_activity) {
         console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
         push(roomId, { type: 'mem', phase: 'done', count: added });
     }
     // Cap stored smart memories per type — oldest entries of each type drop off.
-    for (const [type, col] of [['fact','mem_max_fact'],['event','mem_max_event'],['relationship','mem_max_relationship'],['preference','mem_max_preference']]) {
+    for (const [type, col] of [['fact','mem_max_fact'],['event','mem_max_event'],['relationship','mem_max_relationship'],['preference','mem_max_preference'],['state','mem_max_state']]) {
         const cap = mem[col] || 0;
         if (cap <= 0) continue;
         db.prepare(`DELETE FROM memories WHERE origin='smart' AND type=? AND memories_id_pk IN
             (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type=?
+             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type=? AND m.supersedes IS NULL
              AND m.memories_id_pk NOT IN
                 (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
-                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type=? ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
+                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type=? AND m2.supersedes IS NULL ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
             .run(type, roomId, type, roomId, type, cap);
     }
     // Global cap (mem_max) as a safety net across all types.
@@ -418,10 +436,10 @@ export async function maybeSummarize(roomId) {
     if (totalCap > 0) {
         db.prepare(`DELETE FROM memories WHERE origin='smart' AND memories_id_pk IN
             (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-             WHERE rm.rooms_id_fk=? AND m.origin='smart'
+             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.supersedes IS NULL
              AND m.memories_id_pk NOT IN
                 (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
-                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
+                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.supersedes IS NULL ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
             .run(roomId, roomId, totalCap);
     }
     // Auto-tune: when enabled, raise the injection budget so stored smart
@@ -431,5 +449,184 @@ export async function maybeSummarize(roomId) {
         const used = db.prepare(`SELECT COALESCE(SUM(LENGTH(m.content)/4.0),0) AS s FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart'`).get(roomId)?.s || 0;
         const b = mem.mem_budget || 800;
         if (used > b && b < 8000) db.prepare('UPDATE mem_profiles SET mem_budget=? WHERE mem_profiles_id_pk=?').run(Math.ceil(used), mem.mem_profiles_id_pk);
+    }
+    if (mem.mem_consolidate) await maybeConsolidate(roomId, mem);
+    if (mem.mem_state) await maybeUpdateState(roomId, mem, conn);
+}
+
+/* Deterministic dedup — free pass after each extraction run. Within each
+   (scope, type) bucket, supersede memories whose normalized text is an exact
+   duplicate of or contained in a newer/richer one. Marks supersedes — never
+   deletes — so the lineage stays inspectable. */
+const normMem = s => String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+function dedupRoomMemories(roomId) {
+    const rows = db.prepare(`SELECT m.memories_id_pk AS id, m.content, m.type, mc.cards_id_fk AS scope
+        FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+        LEFT JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk
+        WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.supersedes IS NULL
+        ORDER BY m.memories_id_pk`).all(roomId);
+    const mark = db.prepare('UPDATE memories SET supersedes=? WHERE memories_id_pk=?');
+    const buckets = new Map(); // `${scope}|${type}` → [{id,norm}]
+    for (const r of rows) {
+        const key = `${r.scope || 0}|${r.type || 'fact'}`;
+        const norm = normMem(r.content);
+        if (!norm) continue;
+        const bucket = buckets.get(key) || [];
+        let skip = false;
+        for (let i = bucket.length - 1; i >= 0; i--) {
+            const k = bucket[i];
+            // r contains k (or is identical) → k is the weaker dupe; r is
+            // newer so it wins the tie. A k that strictly contains r wins
+            // over r (richer beats newer only when strictly richer).
+            if (k.norm === norm || norm.includes(k.norm)) { mark.run(r.id, k.id); bucket.splice(i, 1); }
+            else if (k.norm.includes(norm)) { mark.run(k.id, r.id); skip = true; }
+        }
+        if (!skip) { bucket.push({ id: r.id, norm }); buckets.set(key, bucket); }
+    }
+}
+
+/* LLM consolidation — merges a scope×type bucket when it nears its cap (or
+   every mem_consolidate_every extraction runs). Dedicated connection when
+   mem_consolidate_profile_id is set, else the extraction profile. */
+async function maybeConsolidate(roomId, mem) {
+    const room = db.prepare('SELECT *, rooms_id_pk AS id FROM rooms WHERE rooms_id_pk=?').get(roomId);
+    const every = mem.mem_consolidate_every || 0;
+    const runAll = every > 0 && (room.mem_extract_count || 0) % every === 0 && (room.mem_extract_count || 0) > 0;
+    const pct = Math.min(100, Math.max(1, mem.mem_consolidate_at ?? 80));
+    const caps = { fact: mem.mem_max_fact, event: mem.mem_max_event, relationship: mem.mem_max_relationship, preference: mem.mem_max_preference };
+    const rows = db.prepare(`SELECT m.memories_id_pk AS id, m.content, m.type, mc.cards_id_fk AS scope
+        FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+        LEFT JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk
+        WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.supersedes IS NULL
+        ORDER BY m.memories_id_pk`).all(roomId);
+    const buckets = new Map();
+    for (const r of rows) {
+        // 'state' rows are a snapshot with their own lifecycle — the state
+        // pass supersedes them, not consolidation.
+        if ((r.type || 'fact') === 'state') continue;
+        const key = `${r.scope || 0}|${r.type || 'fact'}`;
+        (buckets.get(key) || buckets.set(key, []).get(key)).push(r);
+    }
+    const due = [...buckets.values()].filter(b =>
+        b.length > 2 && (runAll || (caps[b[0].type || 'fact'] > 0 && b.length >= Math.ceil(caps[b[0].type || 'fact'] * pct / 100))));
+    if (!due.length) return;
+    // Consolidation uses the owner's dedicated profile when set, else the
+    // extraction connection — a slow local model is fine for a background pass.
+    const pid = mem.mem_consolidate_profile_id || mem.mem_extraction_profile_id;
+    const ext = pid ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(pid) : null;
+    if (!ext?.api_url || ext.users_id_fk !== room.owner_users_id_fk) {
+        if (mem.mem_activity) console.log(`[mem] activity: consolidation skipped for room ${roomId} (no owner-configured profile)`);
+        return;
+    }
+    const conn = { ...ext, apiUrl: ext.api_url };
+    const prompt = mem.mem_consolidate_prompt?.trim() || MEM_CONSOLIDATE_PROMPT;
+    for (const bucket of due) {
+        const scope = bucket[0].scope || 0;
+        const list = bucket.map(m => `- [${m.type || 'fact'}] ${m.content}`).join('\n');
+        const reqBody = {
+            model: conn.model || 'local',
+            messages: [{ role: 'system', content: prompt }, { role: 'user', content: list }],
+            temperature: 0.2,
+            max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
+        };
+        try {
+            const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
+                    ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })() },
+                body: JSON.stringify(reqBody),
+            });
+            if (!resp.ok) continue;
+            const data = await resp.json();
+            const text = data?.choices?.[0]?.message?.content?.trim() || '';
+            logPrompt(roomId, null, 'consolidate', reqBody, text, data?.usage);
+            const merged = text.split('\n').map(parseMemLine).filter(m => m.fact.length > 10);
+            if (!merged.length) continue; // never let a bad pass wipe a bucket
+            db.exec('BEGIN');
+            try {
+                const ins = db.prepare("INSERT INTO memories (content,type,origin) VALUES (?,?, 'smart')");
+                const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
+                const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
+                const linkCard = db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)');
+                const mark = db.prepare('UPDATE memories SET supersedes=? WHERE memories_id_pk=?');
+                let first = null;
+                for (const m of merged) {
+                    const mid = ins.run(m.fact, m.type).lastInsertRowid;
+                    if (!first) first = mid;
+                    for (const w of m.triggers.split(',')) { const word = w.trim(); if (word) insTrig.run(mid, word); }
+                    linkRoom.run(roomId, mid);
+                    if (scope) linkCard.run(mid, scope);
+                }
+                for (const old of bucket) mark.run(first, old.id);
+                db.exec('COMMIT');
+                if (mem.mem_activity) console.log(`[mem] activity: consolidation merged ${bucket.length} → ${merged.length} in room ${roomId} (scope ${scope || 'shared'})`);
+            } catch (e) { db.exec('ROLLBACK'); throw e; }
+        } catch (e) {
+            if (mem.mem_activity) console.log(`[mem] activity: consolidation failed for room ${roomId} (${e.message})`);
+        }
+    }
+}
+
+/* Scene-state snapshot — answers "what is true right now" (locations,
+   held objects, ongoing conditions). Unlike accumulated memories, a state
+   snapshot REPLACES the previous one: every pass supersedes the room's
+   unsuperseded [state] rows and writes a fresh set. Runs on the extraction
+   connection, every mem_state_every extraction runs. */
+async function maybeUpdateState(roomId, mem, conn) {
+    const room = db.prepare('SELECT mem_extract_count FROM rooms WHERE rooms_id_pk=?').get(roomId);
+    const every = Math.max(1, mem.mem_state_every || 1);
+    if ((room.mem_extract_count || 0) % every !== 0) return;
+    // State describes NOW — take the tail of the conversation, not the
+    // extraction watermark window.
+    const excerpt = db.prepare(MSG_SQL + ' WHERE m.rooms_id_fk=? ORDER BY m.messages_id_pk DESC LIMIT 30')
+        .all(roomId).reverse();
+    if (!excerpt.length) return;
+    const reqBody = {
+        model: conn.model || 'local',
+        messages: [
+            { role: 'system', content: mem.mem_state_prompt?.trim() || MEM_STATE_PROMPT },
+            { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
+        ],
+        temperature: 0.2,
+        max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
+    };
+    try {
+        const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
+                ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })() },
+            body: JSON.stringify(reqBody),
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const text = data?.choices?.[0]?.message?.content?.trim() || '';
+        logPrompt(roomId, null, 'state', reqBody, text, data?.usage);
+        // State lines: strip bullet + any type tag, keep the text as-is —
+        // parens stay content (state never stores triggers; it's always
+        // injected, so trigger-gating would wrongly hide it).
+        const fresh = text.split('\n')
+            .map(l => l.replace(/^\s*[-*•]\s*/, '').replace(/^\[(fact|event|relationship|preference|state)\]\s*/i, '').trim())
+            .filter(f => f.length > 5 && f !== '-');
+        if (!fresh.length) return; // keep the last good snapshot rather than wipe
+        db.exec('BEGIN');
+        try {
+            const ins = db.prepare("INSERT INTO memories (content,type,origin) VALUES (?, 'state', 'smart')");
+            const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
+            const mark = db.prepare(`UPDATE memories SET supersedes=? WHERE memories_id_pk IN
+                (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+                 WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type='state' AND m.supersedes IS NULL
+                 AND m.memories_id_pk<?)`);
+            let first = null;
+            for (const fact of fresh) {
+                const mid = ins.run(fact).lastInsertRowid;
+                if (!first) first = mid;
+                linkRoom.run(roomId, mid);
+            }
+            mark.run(first, roomId, first);
+            db.exec('COMMIT');
+            if (mem.mem_activity) console.log(`[mem] activity: state snapshot refreshed for room ${roomId} (${fresh.length} entries)`);
+        } catch (e) { db.exec('ROLLBACK'); throw e; }
+    } catch (e) {
+        if (mem.mem_activity) console.log(`[mem] activity: state snapshot failed for room ${roomId} (${e.message})`);
     }
 }

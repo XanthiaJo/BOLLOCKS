@@ -173,4 +173,83 @@ describe('generation (mock LLM)', () => {
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
+
+    test('dedup supersedes contained duplicate extractions', async () => {
+        const ext = await mockLLM('- [fact] Wren likes tea.\n- [fact] Wren likes tea very much indeed.\n- [event] Wren baked a cake for the fair.');
+        try {
+            const profId = (await s.post('profiles', { name: 'Dedup', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Dedup', auto: true, every: 1, dedup: 1, consolidate: 0, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Dedup room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            await s.post('say', { room: mroom, text: 'Tea?' });
+            const mems = await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                return m?.length >= 2 ? m : null;
+            }, 'deduped memories');
+            // The richer phrasing survives; the shorter dupe is superseded
+            // (kept in the DB for audit, hidden from lists + injection).
+            assert.equal(mems.length, 2);
+            assert.ok(mems.some(m => m.content === 'Wren likes tea very much indeed.'));
+            assert.ok(mems.some(m => m.content === 'Wren baked a cake for the fair.'));
+            // Type tags parsed — the event didn't collapse into 'fact'.
+            assert.ok(mems.some(m => m.type === 'event'));
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
+
+    test('consolidation merges a bucket via its own profile and supersedes sources', async () => {
+        const ext = await mockLLM('- [fact] Wren likes tea.\n- [fact] Wren brews it strong.\n- [fact] Wren takes two sugars.\n- [fact] Wren collects teapots.');
+        const cons = await mockLLM('- [fact] Wren likes strong tea with two sugars. (triggers: tea)\n- [fact] Wren collects teapots.');
+        try {
+            const profId = (await s.post('profiles', { name: 'Ext2', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const consId = (await s.post('profiles', { name: 'Cons', apiUrl: `${cons.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Cons', auto: true, every: 1, maxFact: 50,
+                dedup: 1, consolidate: 1, consolEvery: 1, consolProfileId: consId, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Cons room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            await s.post('say', { room: mroom, text: 'More tea?' });
+            const mems = await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                return m?.length === 2 ? m : null;
+            }, 'consolidated memories');
+            assert.ok(mems.some(m => m.content === 'Wren likes strong tea with two sugars.'));
+            assert.ok(mems.some(m => m.content === 'Wren collects teapots.'));
+            // The dedicated consolidation connection got the merge call.
+            assert.ok(cons.requests.length > 0);
+            const creq = JSON.parse(cons.requests.at(-1).body);
+            assert.match(creq.messages[0].content, /consolidating stored memories/i);
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); await cons.close(); }
+    });
+
+    test('scene-state pass writes a snapshot that replaces the previous one', async () => {
+        // One mock serves both calls: extraction parses these as facts, the
+        // state pass re-parses the same lines as a [state] snapshot.
+        const ext = await mockLLM('- Wren is in the kitchen.\n- The blue tin is on the counter.');
+        try {
+            const profId = (await s.post('profiles', { name: 'State', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'State', auto: true, every: 1,
+                dedup: 1, consolidate: 0, state: 1, stateEvery: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'State room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            const states = async () =>
+                ((await s.get(`memories?card=0&room=${mroom}`)).json.memories || []).filter(m => m.type === 'state');
+            await s.post('say', { room: mroom, text: 'scene one' });
+            const first = await until(async () => {
+                const st = await states();
+                return st.length === 2 ? st : null;
+            }, 'first snapshot');
+            const firstIds = new Set(first.map(m => m.memories_id_pk));
+            await s.post('say', { room: mroom, text: 'scene two' });
+            // Second run: the snapshot must stay 2 entries — run one's rows
+            // are superseded, not stacked (visible rows are all new ids).
+            const after = await until(async () => {
+                const st = await states();
+                return st.length === 2 && st.every(m => !firstIds.has(m.memories_id_pk)) ? st : null;
+            }, 'refreshed snapshot');
+            assert.ok(after.some(m => m.content === 'Wren is in the kitchen.'));
+            assert.ok(after.every(m => !m.triggers)); // state is never trigger-gated
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
 });

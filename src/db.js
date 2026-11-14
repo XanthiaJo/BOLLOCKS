@@ -225,6 +225,8 @@ export function migrateSchema() {
     if (!rcols.includes('mem_last_messages_id')) db.exec('ALTER TABLE rooms ADD COLUMN mem_last_messages_id INTEGER DEFAULT 0');
     if (!rcols.includes('mem_refresh_count')) db.exec('ALTER TABLE rooms ADD COLUMN mem_refresh_count INTEGER DEFAULT 0');
     if (!rcols.includes('mem_profiles_id_fk')) db.exec('ALTER TABLE rooms ADD COLUMN mem_profiles_id_fk INTEGER DEFAULT 0');
+    // Extraction-run counter — paces the LLM consolidation pass ("every N runs").
+    if (!rcols.includes('mem_extract_count')) db.exec('ALTER TABLE rooms ADD COLUMN mem_extract_count INTEGER DEFAULT 0');
     if (!rcols.includes('max_context')) db.exec('ALTER TABLE rooms ADD COLUMN max_context INTEGER DEFAULT 0');
     // One-time: sensible memory defaults — unified injection on by default,
     // and a tighter extraction generation budget (extraction only emits a
@@ -309,11 +311,30 @@ export function migrateSchema() {
     if (uv !== 6) db.exec('PRAGMA user_version=6');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
+    // Pruned/merged-away smart memories link to their replacement (same idea
+    // as messages.supersedes) — stays in the DB, out of lists and injection.
+    if (!mecols.includes('supersedes')) db.exec('ALTER TABLE memories ADD COLUMN supersedes INTEGER');
     // prompt_profiles: injection/prompt-assembly presets. prompt order moved
     // off mem_profiles — it positions card/world blocks too, so it was never
     // memory-scoped. The user's active profile applies to all their
     // generations regardless of which API connection is used.
     const mpcols = db.prepare('PRAGMA table_info(mem_profiles)').all().map(c => c.name);
+    // Consolidation/dedup settings — one group on the Smart memory page.
+    // consolidate_profile_id=0 falls back to the extraction connection.
+    for (const [col, def] of [
+        ['mem_dedup', 'INTEGER DEFAULT 1'],
+        ['mem_consolidate', 'INTEGER DEFAULT 0'],
+        ['mem_consolidate_at', 'INTEGER DEFAULT 80'],
+        ['mem_consolidate_every', 'INTEGER DEFAULT 10'],
+        ['mem_consolidate_profile_id', 'INTEGER DEFAULT 0'],
+        ['mem_consolidate_prompt', "TEXT DEFAULT ''"],
+        // Scene-state tracker — current-location/object snapshot, not
+        // cumulative memory: each pass supersedes the previous snapshot.
+        ['mem_state', 'INTEGER DEFAULT 0'],
+        ['mem_state_every', 'INTEGER DEFAULT 1'],
+        ['mem_max_state', 'INTEGER DEFAULT 30'],
+        ['mem_state_prompt', "TEXT DEFAULT ''"],
+    ]) if (!mpcols.includes(col)) db.exec(`ALTER TABLE mem_profiles ADD COLUMN ${col} ${def}`);
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='prompt_profiles'").get()) {
         db.exec(`CREATE TABLE prompt_profiles (
             prompt_profiles_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
