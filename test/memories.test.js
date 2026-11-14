@@ -73,3 +73,35 @@ test('memories rebuild preserves origin when source column is also present', asy
         await srv.stop();
     }
 });
+
+// The triggers comma-list column becomes memory_triggers rows (one per
+// keyword). The harvest must split, trim, lowercase, and drop the column.
+test('migration splits memories.triggers into memory_triggers rows', async () => {
+    const dir = tmp('data');
+    fs.mkdirSync(dir, { recursive: true });
+    const db = new DatabaseSync(path.join(dir, 'app.db'));
+    db.exec(`CREATE TABLE memories (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')), type TEXT DEFAULT 'fact',
+        origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart')),
+        triggers TEXT DEFAULT '')`);
+    db.exec(`INSERT INTO memories (content,triggers) VALUES
+        ('tea memory','Tea, Dr Pepper ,WEB SEARCH'),
+        ('quiet memory',''),
+        ('solo memory','bedtime')`);
+    db.close();
+
+    const srv = await boot(dir);
+    try {
+        const check = new DatabaseSync(path.join(dir, 'app.db'));
+        const rows = check.prepare(`SELECT memories_id_fk AS id, word FROM memory_triggers WHERE memories_id_fk<=3 ORDER BY memories_id_fk, word`).all();
+        const cols = check.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
+        check.close();
+        assert.deepEqual(rows.map(r => ({ ...r })), [
+            { id: 1, word: 'dr pepper' }, { id: 1, word: 'tea' }, { id: 1, word: 'web search' },
+            { id: 3, word: 'bedtime' },
+        ]);
+        assert.ok(!cols.includes('triggers'));
+    } finally {
+        await srv.stop();
+    }
+});

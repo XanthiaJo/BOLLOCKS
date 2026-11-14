@@ -76,6 +76,7 @@ export default {
         db.prepare('DELETE FROM messages WHERE rooms_id_fk=?').run(id);
         db.prepare('DELETE FROM room_members WHERE rooms_id_fk=?').run(id);
         db.prepare('DELETE FROM memory_cards WHERE memories_id_fk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(id);
+        db.prepare('DELETE FROM memory_triggers WHERE memories_id_fk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(id);
         db.prepare('DELETE FROM memories WHERE memories_id_pk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)').run(id);
         db.prepare('DELETE FROM room_memories WHERE rooms_id_fk=?').run(id);
         db.prepare('DELETE FROM room_books WHERE rooms_id_fk=?').run(id);
