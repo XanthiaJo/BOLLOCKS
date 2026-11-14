@@ -44,8 +44,8 @@ export default {
         // AI trigger policy for this room.
         const roomRow = db.prepare('SELECT ai_trigger FROM rooms WHERE rooms_id_pk=?').get(msg.rooms_id_fk);
         if (roomRow?.ai_trigger && roomRow.ai_trigger !== 'manual') {
-            const ais = db.prepare(`SELECT c.*, c.cards_id_pk AS id, m.talkativeness FROM members m JOIN room_members rm ON rm.members_id_fk=m.members_id_pk JOIN cards c ON c.cards_id_pk=m.cards_id_fk
-                WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 ORDER BY m.cards_id_fk`).all(msg.rooms_id_fk);
+            const ais = db.prepare(`SELECT c.*, c.cards_id_pk AS id, rm.talkativeness FROM room_members rm JOIN cards c ON c.cards_id_pk=rm.cards_id_fk
+                WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 ORDER BY rm.cards_id_fk`).all(msg.rooms_id_fk);
             // Talkativeness: per-member 0–100% chance to reply (named always fires).
             const roll = c => Math.random() * 100 < (c.talkativeness ?? 50);
             let picks = [];
@@ -80,8 +80,8 @@ export default {
         const b = await readBody(req);
         const roomId = b.room || 1;
         if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
-        const npc = db.prepare(`SELECT c.*, c.cards_id_pk AS id FROM members m JOIN room_members rm ON rm.members_id_fk=m.members_id_pk JOIN cards c ON c.cards_id_pk=m.cards_id_fk
-            WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 ${b.card ? 'AND c.cards_id_pk=?' : ''} ORDER BY m.cards_id_fk`).all(roomId, ...(b.card ? [b.card] : []))[0];
+        const npc = db.prepare(`SELECT c.*, c.cards_id_pk AS id FROM room_members rm JOIN cards c ON c.cards_id_pk=rm.cards_id_fk
+            WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 ${b.card ? 'AND c.cards_id_pk=?' : ''} ORDER BY rm.cards_id_fk`).all(roomId, ...(b.card ? [b.card] : []))[0];
         if (!npc) return send(res, 404, { error: 'no AI member' });
         try {
             const text = await generateReply(roomId, npc);

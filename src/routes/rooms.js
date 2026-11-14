@@ -15,9 +15,7 @@ export default {
             if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
             const pc = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(b.userId)?.cards_id_pk;
             if (!pc) return send(res, 400, { error: 'user has no persona card' });
-            let mid = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc)?.members_id_pk;
-            if (!mid) mid = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(pc).lastInsertRowid;
-            db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(rid, mid);
+            db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,cards_id_fk) VALUES (?,?)').run(rid, pc);
             return send(res, 200, { ok: true });
         }
         // Members may seat a card they own; the room owner may seat any card.
@@ -27,9 +25,7 @@ export default {
             if (!roomMember(rid, u)) return send(res, 403, { error: 'not a room member' });
             if (card.owner_users_id_fk !== u.users_id_pk) return send(res, 403, { error: 'not your character' });
         }
-        let mid2 = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(b.cardId)?.members_id_pk;
-        if (!mid2) mid2 = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(b.cardId).lastInsertRowid;
-        db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(rid, mid2);
+        db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,cards_id_fk) VALUES (?,?)').run(rid, b.cardId);
         send(res, 200, { ok: true });
     },
     'POST /api/members/remove': async (req, res, u) => {
@@ -41,10 +37,10 @@ export default {
             const ownPersona = !b.cardId && b.userId === u.users_id_pk;
             if (!ownCard && !ownPersona) return send(res, 403, { error: 'room owner only' });
         }
-        if (b.cardId) db.prepare('DELETE FROM room_members WHERE rooms_id_fk=? AND members_id_fk IN (SELECT members_id_pk FROM members WHERE cards_id_fk=?)').run(b.room || 1, b.cardId);
+        if (b.cardId) db.prepare('DELETE FROM room_members WHERE rooms_id_fk=? AND cards_id_fk=?').run(b.room || 1, b.cardId);
         else if (b.userId) {
             const pc = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(b.userId)?.cards_id_pk;
-            if (pc) db.prepare('DELETE FROM room_members WHERE rooms_id_fk=? AND members_id_fk IN (SELECT members_id_pk FROM members WHERE cards_id_fk=?)').run(b.room || 1, pc);
+            if (pc) db.prepare('DELETE FROM room_members WHERE rooms_id_fk=? AND cards_id_fk=?').run(b.room || 1, pc);
         }
         send(res, 200, { ok: true });
     },
@@ -55,7 +51,7 @@ export default {
             (SELECT auto_mem FROM mem_profiles WHERE mem_profiles_id_pk=r.mem_profiles_id_fk) AS mem_profile_auto,
             (r.owner_users_id_fk=?) AS is_owner,
             (SELECT COUNT(*) FROM room_members rm2 WHERE rm2.rooms_id_fk=r.rooms_id_pk) AS members, r.bg FROM rooms r
-            JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE c.owner_users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk, u.users_id_pk);
+            JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN cards c ON c.cards_id_pk=rm.cards_id_fk WHERE c.owner_users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk, u.users_id_pk);
         send(res, 200, { rooms });
     },
     'POST /api/rooms': async (req, res, u) => {
@@ -63,11 +59,7 @@ export default {
         if (!b.name) return send(res, 400, { error: 'name required' });
         const id = db.prepare(`INSERT INTO rooms (name,mem_profiles_id_fk,owner_users_id_fk) VALUES (?,(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1),?)`).run(b.name, u.users_id_pk).lastInsertRowid;
         const pc0 = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk)?.cards_id_pk;
-        if (pc0) {
-            const mid3 = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc0)?.members_id_pk
-                ?? db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(pc0).lastInsertRowid;
-            db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(id, mid3);
-        }
+        if (pc0) db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,cards_id_fk) VALUES (?,?)').run(id, pc0);
         send(res, 200, { id, name: b.name });
     },
     'POST /api/rooms/update': async (req, res, u) => {
@@ -94,12 +86,12 @@ export default {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('id') || 1);
         if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
         const msgs = db.prepare(MSG_SQL + ' WHERE m.rooms_id_fk=? ORDER BY m.messages_id_pk').all(roomId);
-        const members = db.prepare(`SELECT m.*, c.name card_name, c.avatar card_avatar, u.handle, pc.name persona_name, pc.avatar persona_avatar, pc.cards_id_pk persona_id,
+        const members = db.prepare(`SELECT rm.*, c.name card_name, c.avatar card_avatar, u.handle, pc.name persona_name, pc.avatar persona_avatar, pc.cards_id_pk persona_id,
             CASE WHEN IFNULL(c.is_persona,0)=1 THEN 'human' ELSE 'ai' END kind,
             CASE WHEN IFNULL(c.is_persona,0)=1 THEN c.owner_users_id_fk END users_id_fk,
             (c.owner_users_id_fk=?) AS mine
-            FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
-            LEFT JOIN cards c ON c.cards_id_pk=m.cards_id_fk LEFT JOIN users u ON u.users_id_pk=c.owner_users_id_fk
+            FROM room_members rm
+            LEFT JOIN cards c ON c.cards_id_pk=rm.cards_id_fk LEFT JOIN users u ON u.users_id_pk=c.owner_users_id_fk
             LEFT JOIN cards pc ON pc.owner_users_id_fk=u.users_id_pk AND pc.is_persona=1 WHERE rm.rooms_id_fk=?`).all(u.users_id_pk, roomId);
         const lastMem = db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId);
         send(res, 200, { messages: msgs, members, lastMem });
@@ -167,7 +159,7 @@ export default {
         // Room owner sets anyone's; a member sets their own characters.
         const ownCard = b.cardId && db.prepare('SELECT 1 FROM cards WHERE cards_id_pk=? AND owner_users_id_fk=?').get(b.cardId, u.users_id_pk);
         if (!roomOwnerOnly(rid, u) && !ownCard) return send(res, 403, { error: 'room owner only' });
-        db.prepare(`UPDATE members SET talkativeness=? WHERE cards_id_fk=? AND members_id_pk IN (SELECT members_id_fk FROM room_members WHERE rooms_id_fk=?)`)
+        db.prepare(`UPDATE room_members SET talkativeness=? WHERE cards_id_fk=? AND rooms_id_fk=?`)
             .run(Math.max(0, Math.min(100, Number(b.value) || 0)), b.cardId, rid);
         send(res, 200, { ok: true });
     },
