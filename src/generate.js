@@ -1,8 +1,79 @@
 import { db, activeProfile, MSG_SQL } from './db.js';
+import { push } from './lib/sse.js';
 
 // Latest prompt composition per room — exposed for the chat sidebar.
 export const genStats = {};
+
+// Persist each LLM call for later inspection — genStats only keeps the last
+// request in memory, and prod has no DB access. Newest 50 rows per room.
+function logPrompt(roomId, cardId, kind, reqBody, text, usage) {
+    db.prepare('INSERT INTO prompt_logs (rooms_id_fk,cards_id_fk,kind,request,response,prompt_tokens,completion_tokens) VALUES (?,?,?,?,?,?,?)')
+        .run(roomId, cardId, kind, JSON.stringify(reqBody), text || '', usage?.prompt_tokens ?? null, usage?.completion_tokens ?? null);
+    db.prepare('DELETE FROM prompt_logs WHERE rooms_id_fk=? AND prompt_logs_id_pk NOT IN (SELECT prompt_logs_id_pk FROM prompt_logs WHERE rooms_id_fk=? ORDER BY prompt_logs_id_pk DESC LIMIT 50)')
+        .run(roomId, roomId);
+}
 const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
+
+// Built-in extraction prompt, used when a profile leaves its template
+// blank. The triggers suffix is appended only to the built-in prompt.
+export const MEM_EXTRACT_PROMPT = `You extract lasting memories from roleplay chat logs. All memories are shared with the whole chat.
+Output ONLY bullet points, one per line, "- " prefix. Each starts with a type tag: [fact] (true things), [event] (things that happened), [relationship] (how characters feel about each other) or [preference] (likes/dislikes). Write complete sentences that name the subject — no pronouns, no narration.
+Example input: "Blake: the Venice API review pile is killing me\\nCreamms: I'll take half of it tomorrow"
+Example output:
+- [fact] Blake has a pending review pile for the Venice API.
+- [event] Creamms offered to take half of Blake's review pile tomorrow.
+- [preference] Blake dislikes working through the review pile.`;
+const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords in parentheses, e.g. "- [fact] Blake has a pending review pile. (triggers: pending, review)"';
+
+// Fields a memory profile can override on a room's mem_* settings.
+const MEM_PROFILE_FIELDS = ['auto_mem', 'mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
+    'mem_max_event', 'mem_max_relationship', 'mem_max_preference', 'mem_extraction_prompt',
+    'mem_context_threshold', 'mem_response_length', 'mem_gen_budget', 'mem_unlimited',
+    'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
+    'mem_extraction_profile_id'];
+
+// Named system-prompt sections in cache-optimal order (stable content first —
+// see the assembly comment in generateReply). The user's active
+// prompt_profiles row can reorder them via prompt_order (JSON array of
+// keys); NULL means this order. 'history' is a position marker, not text.
+export const PROMPT_BLOCKS = [
+    { key: 'main', label: 'Main prompt',
+        example: 'You are Aria.' },
+    { key: 'description', label: 'Card description',
+        example: 'Description:\nAria is a wandering cartographer with a stolen map case.' },
+    { key: 'personality', label: 'Card personality',
+        example: 'Personality:\ncurious, blunt, secretly kind' },
+    { key: 'scenario', label: 'Scenario',
+        example: 'Scenario:\nThe party camps at the edge of the drowned forest.' },
+    { key: 'examples', label: 'Example dialogue',
+        example: 'Example dialogue:\nAria: We were never here.\n{{user}}: Says who?' },
+    { key: 'roster', label: 'Other characters',
+        example: 'Also present in the scene:\nBlake: a retired knight who owes Aria money' },
+    { key: 'world', label: 'World info',
+        example: 'World info:\nThe drowned forest floods every new moon.' },
+    { key: 'memories', label: 'Memories',
+        example: 'Memories:\n- [fact] Aria distrusts the harbor guild.\n- [event] Blake offered to carry the map case.' },
+    { key: 'instructions', label: 'Instructions',
+        example: "You are Aria and ONLY Aria — an NPC in a shared roleplay. The other characters listed are separate people speaking for themselves; do NOT speak for them or imitate them. Write ONLY Aria's next message." },
+    { key: 'history', label: 'Chat history',
+        example: 'Alice: We should leave before dawn.\nAria: The tide says otherwise.' },
+    { key: 'time', label: 'Current time',
+        example: 'Current time: Friday 13 November 2026, 21:49. Last message: 3 minutes ago.' },
+];
+
+/** Effective memory settings for a room: always the memory profile it follows
+ *  via mem_profiles_id_fk. No link → the room's own columns, which default to
+ *  auto_mem=0: smart memories are simply off. Room columns only carry per-room
+ *  bits like the injection-refresh counter. */
+export function memProfileFor(room) {
+    const p = room?.mem_profiles_id_fk
+        ? db.prepare('SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=?').get(room.mem_profiles_id_fk)
+        : null;
+    if (!p) return room;
+    const out = { ...room };
+    for (const k of MEM_PROFILE_FIELDS) if (k in p) out[k] = p[k];
+    return out;
+}
 
 /**
  * Server-side generation — the server owns the prompt AND the API call.
@@ -11,14 +82,12 @@ const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
  * { apiUrl, model, key }) — read from DB, never reaches clients.
  */
 export async function generateReply(roomId, card) {
-    const owner = db.prepare(`SELECT u.users_id_pk FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
-        JOIN cards c ON c.cards_id_pk=m.cards_id_fk JOIN users u ON u.users_id_pk=c.owner_users_id_fk
-        WHERE rm.rooms_id_fk=? AND c.is_persona=1 ORDER BY c.owner_users_id_fk LIMIT 1`).get(roomId);
     // Card's own profile wins; otherwise the card owner's active profile.
+    // Everyone is responsible for their own API keys — never the room owner's.
     const p = card.api_profiles_id_fk
         ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(card.api_profiles_id_fk)
         : null;
-    const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(card.owner_users_id_fk || owner?.id);
+    const conn = p ? { ...p, apiUrl: p.api_url } : activeProfile(card.owner_users_id_fk);
     if (!conn?.apiUrl) throw new Error('no API connection configured — set one on the Connection page');
 
     const history = db.prepare(
@@ -38,8 +107,8 @@ export async function generateReply(roomId, card) {
 
     // Other characters in the scene — ST injects member context so NPCs
     // know who's present. Descriptions only; no full cards.
-    const others = db.prepare(`SELECT c.name, c.description FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
-        JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 AND c.cards_id_pk!=?`)
+    const others = db.prepare(`SELECT c.name, c.description FROM room_members rm
+        JOIN cards c ON c.cards_id_pk=rm.cards_id_fk WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 AND c.cards_id_pk!=?`)
         .all(roomId, card.id);
 
     // Keyword-triggered world entries: constant entries always in; keyed
@@ -63,37 +132,87 @@ export async function generateReply(roomId, card) {
         : null;
 
     // Long-term memories: shared room facts + this character's own.
-    // Capped at the room's injection token budget (chars/4 estimate).
-    const budget = db.prepare('SELECT mem_budget FROM rooms WHERE rooms_id_pk=?').get(roomId)?.mem_budget ?? 500;
+    // Capped at the injection token budget (chars/4 estimate); a room may
+    // follow a memory profile, which overrides the per-chat mem_* settings.
+    const room = db.prepare('SELECT *, rooms_id_pk AS id FROM rooms WHERE rooms_id_pk=?').get(roomId);
+    const mem = memProfileFor(room);
+    const budget = mem?.mem_budget ?? 800;
+    const refreshN = mem?.mem_refresh || 1;
+    const refreshKey = room?.mem_refresh_count || 0;
+    const injectMem = refreshN <= 1 || refreshKey % refreshN === 0;
     const cap = (rows, acc) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= budget); };
     const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
-    const active = r => !r.triggers || r.triggers.split(/[\s,]+/).filter(Boolean)
-        .some(t => recentText.includes(t.toLowerCase()));
-    const roomMems = cap(db.prepare('SELECT content,triggers FROM memories WHERE rooms_id_fk=? AND cards_id_fk IS NULL ORDER BY rooms_id_pk DESC').all(roomId).reverse().filter(active), 0);
-    const mems = cap(db.prepare('SELECT content,triggers FROM memories WHERE cards_id_fk=? AND rooms_id_fk=? ORDER BY rooms_id_pk DESC')
-        .all(card.id, roomId).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
-    const memText = (roomMems.length || mems.length)
-        ? [
-            roomMems.length && 'What happened here:\n' + roomMems.map(m => '- ' + m.content).join('\n'),
-            mems.length && `Things ${card.name} remembers:\n` + mems.map(m => '- ' + m.content).join('\n'),
-        ].filter(Boolean).join('\n\n')
+    const active = r => !r.triggers || r.triggers.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
+        .some(t => recentText.includes(t));
+    const TRIG_SQL = `(SELECT GROUP_CONCAT(mt.word,',') FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk) AS triggers`;
+    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), 0);
+    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? ORDER BY m.memories_id_pk DESC`)
+        .all(roomId, card.id).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
+
+    const memText = (injectMem && (roomMems.length || mems.length))
+        ? (mem?.mem_unified
+            ? ['Memories:\n' + [...roomMems.map(m => '- ' + m.content), ...mems.map(m => '- ' + m.content)].join('\n')].join('')
+            : [
+                roomMems.length && 'What happened here:\n' + roomMems.map(m => '- ' + m.content).join('\n'),
+                mems.length && `Things ${card.name} remembers:\n` + mems.map(m => '- ' + m.content).join('\n'),
+            ].filter(Boolean).join('\n\n'))
         : null;
 
-    const system = [
-        card.system_prompt || `You are ${card.name}.`,
-        worldText,
-        memText,
-        card.description && `Description:\n${card.description}`,
-        card.personality && `Personality:\n${card.personality}`,
-        card.scenario && `Scenario:\n${card.scenario}`,
-        card.mes_example && `Example dialogue:\n${card.mes_example}`,
-        others.length && `Also present in the scene:\n` +
+    // Prompt sections assemble in PROMPT_BLOCKS order — stable -> volatile for
+    // prefix caching: card sheet fields and the member roster rarely change;
+    // keyword-triggered world entries and freshly-extracted memories change
+    // often, so they go last. Anything after a changed block re-bills, so
+    // volatility decides position. A profile's mem_prompt_order overrides.
+    const blocks = {
+        main: card.system_prompt || `You are ${card.name}.`,
+        description: card.description && `Description:\n${card.description}`,
+        personality: card.personality && `Personality:\n${card.personality}`,
+        scenario: card.scenario && `Scenario:\n${card.scenario}`,
+        examples: card.mes_example && `Example dialogue:\n${card.mes_example}`,
+        roster: others.length && `Also present in the scene:\n` +
             others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
-        `You are ${card.name} and ONLY ${card.name} — an NPC in a shared roleplay. ` +
+        world: worldText,
+        memories: memText,
+        instructions: `You are ${card.name} and ONLY ${card.name} — an NPC in a shared roleplay. ` +
             `The other characters listed are separate people speaking for themselves; ` +
             `do NOT speak for them or imitate them. Write ONLY ${card.name}'s next message.` +
             (card.post_history_instructions ? ` ${card.post_history_instructions}` : ''),
-    ].filter(Boolean).join('\n\n');
+    };
+    // The card owner's active injection profile decides section order —
+    // prompt layout follows the user, not whichever API profile generated.
+    const inj = db.prepare('SELECT * FROM prompt_profiles WHERE users_id_fk=? AND active=1').get(card.owner_users_id_fk)
+        || db.prepare('SELECT * FROM prompt_profiles WHERE users_id_fk=? ORDER BY prompt_profiles_id_pk LIMIT 1').get(card.owner_users_id_fk);
+    // Current-time block — only when the active injection profile asks for
+    // it. Most volatile block, so the default order puts it below 'history',
+    // right before the reply nudge.
+    let timeText = null;
+    if (inj?.include_time) {
+        const now = new Date();
+        const fmt = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+            + ', ' + now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const lastAt = Date.parse((history.at(-1)?.send_date || '').replace(' ', 'T') + 'Z');
+        const d = Number.isFinite(lastAt) ? Math.max(0, Date.now() - lastAt) : null;
+        let ago = '';
+        if (d != null) {
+            ago = 'just now';
+            for (const [ms, unit] of [[864e5, 'day'], [36e5, 'hour'], [6e4, 'minute']])
+                if (d >= ms) { const n = Math.round(d / ms); ago = `${n} ${unit}${n === 1 ? '' : 's'} ago`; break; }
+        }
+        timeText = `Current time: ${fmt}.` + (ago ? ` Last message: ${ago}.` : '');
+        blocks.time = timeText;
+    }
+    let order;
+    try { order = JSON.parse(inj?.prompt_order || ''); } catch { order = null; }
+    if (!Array.isArray(order)) order = [];
+    const known = new Set(PROMPT_BLOCKS.map(b => b.key));
+    order = order.filter(k => known.has(k));
+    for (const b of PROMPT_BLOCKS) if (!order.includes(b.key)) order.push(b.key);
+    // 'history' is a position marker, not a text block: everything above it
+    // joins the system prompt; everything below is appended as a second
+    // system message after the chat history, right before the reply nudge.
+    const hi = order.indexOf('history');
+    const system = order.slice(0, hi < 0 ? order.length : hi).map(k => blocks[k]).filter(Boolean).join('\n\n');
+    const postSys = hi < 0 ? '' : order.slice(hi + 1).map(k => blocks[k]).filter(Boolean).join('\n\n');
 
     const parts = {
         'Main Prompt': tok(card.system_prompt || `You are ${card.name}.`),
@@ -107,6 +226,22 @@ export async function generateReply(roomId, card) {
         'Chat History': history.reduce((n, m) => n + tok(m.name + ' ' + m.text), 0),
     };
     parts.Memories = tok(memText);
+    parts['Current Time'] = tok(timeText);
+
+    // Section texts for the chat sidebar's click-to-view prompt inspector.
+    const texts = {
+        'Main Prompt': card.system_prompt || `You are ${card.name}.`,
+        'World Info': worldText,
+        'Char Description': card.description,
+        'Char Personality': card.personality,
+        'Scenario': card.scenario,
+        'Chat Examples': card.mes_example,
+        'Other Characters': others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
+        'Post-History Instructions': card.post_history_instructions,
+        'Memories': memText,
+        'Current Time': timeText,
+        'Chat History': history.map(m => `${m.name}: ${m.text}`).join('\n'),
+    };
 
     // Context cap: drop oldest history lines until the prompt fits.
     const roomCtx = db.prepare('SELECT max_context FROM rooms WHERE rooms_id_pk=?').get(roomId)?.max_context || 0;
@@ -116,16 +251,41 @@ export async function generateReply(roomId, card) {
         const overhead = Object.entries(parts).filter(([k]) => k !== 'Chat History')
             .reduce((a, [, v]) => a + v, 0);
         let histTok = parts['Chat History'];
+        const histStart = histTok;
+        const dropped = [];
         // ST-style: keep the opening message (greeting anchors the scene),
         // trim the middle, keep the recent tail.
         while (history.length > 2 && overhead + histTok > maxCtx) {
             const m = history.splice(1, 1)[0];
             histTok -= tok(m.name + ' ' + m.text);
+            dropped.push(`${m.name}: ${m.text}`);
         }
         parts['Chat History'] = histTok;
         parts['(capped)'] = maxCtx;
+        if (dropped.length) {
+            parts['(cut from history)'] = histStart - histTok;
+            texts['(cut from history)'] = dropped.join('\n\n');
+        }
     }
 
+    const reqBody = {
+        model: conn.model || 'local',
+        messages: [
+            ...(system ? [{ role: 'system', content: system }] : []),
+            // The card's own past lines are its voice (assistant);
+            // everyone else's lines are tagged context (user).
+            ...history.map(m => m.cards_id_fk === card.id
+                ? { role: 'assistant', content: m.text }
+                : { role: 'user', content: `${m.name}: ${m.text}` }),
+            // Blocks ordered below 'history' land here — recent context the
+            // model reads right before replying.
+            ...(postSys ? [{ role: 'system', content: postSys }] : []),
+            // Final nudge — primes the model to continue as this character.
+            { role: 'user', content: `${card.name}:` },
+        ],
+        temperature: 0.8,
+        max_tokens: conn.max_response || 2048,
+    };
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -133,21 +293,7 @@ export async function generateReply(roomId, card) {
             ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
             ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })(),
         },
-        body: JSON.stringify({
-            model: conn.model || 'local',
-            messages: [
-                { role: 'system', content: system },
-                // The card's own past lines are its voice (assistant);
-                // everyone else's lines are tagged context (user).
-                ...history.map(m => m.cards_id_fk === card.id
-                    ? { role: 'assistant', content: m.text }
-                    : { role: 'user', content: `${m.name}: ${m.text}` }),
-                // Final nudge — primes the model to continue as this character.
-                { role: 'user', content: `${card.name}:` },
-            ],
-            temperature: 0.8,
-            max_tokens: conn.max_response || 2048,
-        }),
+        body: JSON.stringify(reqBody),
     });
     if (!resp.ok) throw new Error(`AI ${resp.status}: ${await resp.text()}`);
     const data = await resp.json();
@@ -155,17 +301,21 @@ export async function generateReply(roomId, card) {
     if (!text) { console.log('[gen] empty — raw:', JSON.stringify(data).slice(0, 600)); throw new Error('empty AI response'); }
     genStats[roomId] = {
         at: Date.now(), card: card.name,
-        est: Object.values(parts).reduce((a, b) => a + b, 0),
+        est: Object.entries(parts).filter(([k]) => !k.startsWith('(')).reduce((a, [, b]) => a + b, 0),
         prompt_tokens: data?.usage?.prompt_tokens ?? null,
         completion_tokens: data?.usage?.completion_tokens ?? null,
         parts,
+        texts,
+        request: reqBody,
     };
+    logPrompt(roomId, card.id, 'reply', reqBody, text, data?.usage);
     // Always drop a leading "Name:" / "**Name:**" / "[Name]" speaker tag —
     // the UI already labels messages; the tag only exists for steering.
     {
         const esc = card.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         text = text.replace(new RegExp(`^\\**\\[?${esc}\\]?\\**\\s*:\\s*`, 'i'), '').trimStart();
     }
+    if (refreshN > 1) db.prepare('UPDATE rooms SET mem_refresh_count=? WHERE rooms_id_pk=?').run(refreshKey + 1, roomId);
     return text;
 }
 
@@ -175,55 +325,111 @@ export async function generateReply(roomId, card) {
  */
 export async function maybeSummarize(roomId) {
     const room = db.prepare('SELECT *, rooms_id_pk AS id FROM rooms WHERE rooms_id_pk=?').get(roomId);
-    if (!room?.auto_mem) return;
-    const lastId = db.prepare('SELECT MAX(id) m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
-    if (lastId - room.mem_last_messages_id < (room.mem_every || 10)) return;
-    const owner = db.prepare(`SELECT u.users_id_pk FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
-        JOIN cards c ON c.cards_id_pk=m.cards_id_fk JOIN users u ON u.users_id_pk=c.owner_users_id_fk
-        WHERE rm.rooms_id_fk=? AND c.is_persona=1 ORDER BY c.owner_users_id_fk LIMIT 1`).get(roomId);
-    const conn = activeProfile(owner?.id);
-    if (!conn?.apiUrl) return;
+    const mem = memProfileFor(room);
+    if (!mem?.auto_mem) return;
+    const lastId = db.prepare('SELECT MAX(messages_id_pk) m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
+    const interval = mem.mem_every || 10;
+    const threshold = mem.mem_context_threshold || 80;
+    const maxCtx = room.max_context || 6400;
+    // Messages since last extraction.
+    const since = db.prepare('SELECT text FROM messages WHERE rooms_id_fk=? AND messages_id_pk>?').all(roomId, room.mem_last_messages_id);
+    const sinceTokens = since.reduce((a, m) => a + tok(m.text), 0);
+    const contextPct = maxCtx > 0 ? (sinceTokens / maxCtx) * 100 : 0;
+    const intervalMet = lastId - room.mem_last_messages_id >= interval;
+    const thresholdMet = contextPct >= threshold;
+    if (!intervalMet && !thresholdMet) return;
+    // Memory extraction uses only the profile the room owner configured —
+    // no fallback. Unset, missing, or owned by someone else: skip.
+    const ext = mem.mem_extraction_profile_id
+        ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(mem.mem_extraction_profile_id)
+        : null;
+    if (!ext?.api_url || ext.users_id_fk !== room.owner_users_id_fk) {
+        if (mem.mem_activity) console.log(`[mem] activity: extraction skipped for room ${roomId} (no owner-configured extraction profile)`);
+        return;
+    }
+    const conn = { ...ext, apiUrl: ext.api_url };
     const excerpt = db.prepare(
         MSG_SQL + ' WHERE m.rooms_id_fk=? AND m.messages_id_pk>? ORDER BY m.messages_id_pk LIMIT 30')
         .all(roomId, room.mem_last_messages_id);
     if (!excerpt.length) return;
-    const roomCards = [
-        ...db.prepare(`SELECT c.cards_id_pk,c.name FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk JOIN cards c ON c.cards_id_pk=m.cards_id_fk
-            WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0`).all(roomId),
-        // Human members' persona cards — facts about players belong to them too.
-        ...db.prepare(`SELECT c.cards_id_pk AS id,c.name FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
-            JOIN cards c ON c.cards_id_pk=m.cards_id_fk
-            WHERE rm.rooms_id_fk=? AND c.is_persona=1`).all(roomId),
-    ];
+    if (mem.mem_activity) push(roomId, { type: 'mem', phase: 'start' });
+    const reqBody = {
+        model: conn.model || 'local',
+        messages: [
+            { role: 'system', content: mem.mem_extraction_prompt?.trim() || (MEM_EXTRACT_PROMPT + (mem.mem_triggers ? MEM_TRIGGERS_SUFFIX : '')) },
+            { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
+        ],
+        temperature: 0.3, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
+    };
     const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
             ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })() },
-        body: JSON.stringify({
-            model: conn.model || 'local',
-            messages: [
-                { role: 'system', content: `You extract lasting facts from roleplay logs. Output ONLY bullet points (one per line, "- " prefix). Start each with the character it belongs to: [${roomCards.map(c => c.name).join('] [')}] or [shared] if room-wide. Then a type tag [fact], [event], [relationship] or [preference]. No narration.` },
-                { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
-            ],
-            temperature: 0.3, max_tokens: 2048,
-        }),
+        body: JSON.stringify(reqBody),
     });
     if (!resp.ok) return;
-    const text = (await resp.json())?.choices?.[0]?.message?.content?.trim() || '';
-    const ins = db.prepare("INSERT INTO memories (cards_id_fk,rooms_id_fk,content,type,source) VALUES (NULL,?,?,?,'auto')");
+    const data = await resp.json();
+    const text = data?.choices?.[0]?.message?.content?.trim() || '';
+    logPrompt(roomId, null, 'extract', reqBody, text, data?.usage);
+    let added = 0;
+    const ins = db.prepare("INSERT INTO memories (content,type,origin) VALUES (?,?, 'smart')");
+    const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
+    const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
     for (const line of text.split('\n')) {
         let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
-        fact = fact.replace(/^\[[^\]]+\]\s*/, ''); // strip any [Name] prefix — shared scope only
+        fact = fact.replace(/^\[[^\]]+\]\s*/, ''); // strip leading [Name]/[shared] scope tag
         const tag = fact.match(/^\[(fact|event|relationship|preference)\]\s*/i);
         const type = tag ? tag[1].toLowerCase() : 'fact';
         if (tag) fact = fact.slice(tag[0].length);
-        if (fact.length > 10) ins.run(roomId, fact, type);
+        let triggers = '';
+        // "(triggers: a, b)" anywhere in the line; else a bare trailing "(a, b)".
+        const tr = fact.match(/\(\s*triggers?\s*:\s*([^)]*)\)/i) || fact.match(/\(([^)]*)\)\s*$/);
+        if (tr) {
+            triggers = tr[1].split(',').map(s => s.trim().replace(/^triggers?\s*:/i, '').toLowerCase()).filter(Boolean).join(',');
+            fact = (fact.slice(0, tr.index) + fact.slice(tr.index + tr[0].length)).trim();
+        }
+        if (fact.length > 10) {
+            const mid = ins.run(fact, type).lastInsertRowid;
+            for (const w of triggers.split(',')) { const word = w.trim(); if (word) insTrig.run(mid, word); }
+            linkRoom.run(roomId, mid); added++;
+        }
     }
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
     db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
-    // Cap stored smart memories — oldest auto entries drop off.
-    db.prepare(`DELETE FROM memories WHERE rooms_id_fk=? AND source='auto' AND id NOT IN
-        (SELECT id FROM memories WHERE rooms_id_fk=? AND source='auto' ORDER BY rooms_id_pk  DESC LIMIT ?)`)
-        .run(roomId, roomId, room.mem_max || 50);
+    if (mem.mem_activity) {
+        console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
+        push(roomId, { type: 'mem', phase: 'done', count: added });
+    }
+    // Cap stored smart memories per type — oldest entries of each type drop off.
+    for (const [type, col] of [['fact','mem_max_fact'],['event','mem_max_event'],['relationship','mem_max_relationship'],['preference','mem_max_preference']]) {
+        const cap = mem[col] || 0;
+        if (cap <= 0) continue;
+        db.prepare(`DELETE FROM memories WHERE origin='smart' AND type=? AND memories_id_pk IN
+            (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type=?
+             AND m.memories_id_pk NOT IN
+                (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
+                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type=? ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
+            .run(type, roomId, type, roomId, type, cap);
+    }
+    // Global cap (mem_max) as a safety net across all types.
+    const totalCap = mem.mem_max || 0;
+    if (totalCap > 0) {
+        db.prepare(`DELETE FROM memories WHERE origin='smart' AND memories_id_pk IN
+            (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+             WHERE rm.rooms_id_fk=? AND m.origin='smart'
+             AND m.memories_id_pk NOT IN
+                (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
+                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
+            .run(roomId, roomId, totalCap);
+    }
+    // Auto-tune: when enabled, raise the injection budget so stored smart
+    // memories aren't dropped purely for exceeding the current budget.
+    // (Budgets live on the memory profile now — rooms only carry the FK.)
+    if (mem.mem_autotune && mem.mem_profiles_id_pk) {
+        const used = db.prepare(`SELECT COALESCE(SUM(LENGTH(m.content)/4.0),0) AS s FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart'`).get(roomId)?.s || 0;
+        const b = mem.mem_budget || 800;
+        if (used > b && b < 8000) db.prepare('UPDATE mem_profiles SET mem_budget=? WHERE mem_profiles_id_pk=?').run(Math.ceil(used), mem.mem_profiles_id_pk);
+    }
 }

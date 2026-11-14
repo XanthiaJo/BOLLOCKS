@@ -1,0 +1,20 @@
+services:
+  bollocks:
+    build:
+      context: .
+      args:
+        GIT_SHA: ${GIT_SHA:-}
+    image: bollocks:latest
+    container_name: bollocks
+    restart: unless-stopped
+    ports:
+      - "8100:8100"
+    environment:
+      - PORT=8100
+      - BOLLOCKS_SEED=0
+      - GIT_SHA=${GIT_SHA:-}
+    volumes:
+      - bollocks-data:/app/data
+
+volumes:
+  bollocks-data:

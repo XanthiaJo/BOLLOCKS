@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BOLLOCKS · Profile</title>
+<link rel="stylesheet" href="css/layout.css">
+<style>
+main{max-width:520px}
+.panel input{width:100%}
+</style>
+</head>
+<body>
+<div id="content">
+<main>
+  <div class="panel">
+    <h3>Profile Settings</h3>
+    <label class="cap">Username</label>
+    <input id="p_handle" autocomplete="username">
+    <label class="cap">Email</label>
+    <input id="p_email" type="email" autocomplete="email">
+    <button onclick="saveProfile()" style="margin-top:12px">Save</button>
+  </div>
+  <div class="panel">
+    <h3>Change password</h3>
+    <label class="cap">Current password</label>
+    <input id="pw_cur" type="password" autocomplete="current-password">
+    <label class="cap">New password</label>
+    <input id="pw_new" type="password" autocomplete="new-password">
+    <label class="cap">Confirm new password</label>
+    <input id="pw_new2" type="password" autocomplete="new-password">
+    <button onclick="savePw()" style="margin-top:12px">Change password</button>
+  </div>
+</main>
+</div>
+<script src="js/layout.js"></script>
+<script>
+const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
+const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.status===401?location='/login.html':r.json());
+const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.status===401?location='/login.html':r.json());
+const $=id=>document.getElementById(id);
+
+async function load(){
+  const m=await get('me');
+  $('p_handle').value=m.handle||'';
+  $('p_email').value=m.email||'';
+}
+async function saveProfile(){
+  const r=await api('me/update',{handle:$('p_handle').value.trim(),email:$('p_email').value.trim()});
+  if(r.error)return alert(r.error);
+  mpFlashSaved();
+}
+async function savePw(){
+  if(!$('pw_new').value)return alert('new password required');
+  if($('pw_new').value!==$('pw_new2').value)return alert('passwords do not match');
+  const r=await api('me/password',{current:$('pw_cur').value,password:$('pw_new').value});
+  if(r.error)return alert(r.error);
+  $('pw_cur').value=$('pw_new').value=$('pw_new2').value='';
+  mpFlashSaved('Password changed');
+}
+load();
+</script>
+</body>
+</html>

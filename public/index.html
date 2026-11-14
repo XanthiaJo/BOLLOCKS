@@ -1,56 +1,69 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8"><title>RP · Chat</title>
-<link rel="stylesheet" href="layout.css">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BOLLOCKS · Chat</title>
+<link rel="stylesheet" href="css/layout.css">
 <style>
-#chat{display:flex;flex-direction:column;min-height:0;flex:1}
+#chat{display:flex;flex-direction:column;min-height:0;flex:1;position:relative}
+#chat::before{content:'';position:absolute;inset:0;background:var(--bg,none) center/cover no-repeat;opacity:.18;pointer-events:none;z-index:0}
+#chat>*{position:relative;z-index:1}
 #msgs{list-style:none;padding:8px 16px;margin:0;flex:1;overflow-y:auto}
-.mes{padding:12px 4px;border-bottom:1px solid #232426;display:flex;align-items:flex-start;gap:14px;min-height:66px;position:relative}
-.mes .mav{width:60px;height:60px;border-radius:50%;object-fit:cover;background:#232426;flex:none}
+#newmsgs{display:none;position:absolute;top:64px;right:22px;z-index:2;padding:5px 12px;border-radius:12px;border:1px solid var(--edge);background:var(--panel);color:var(--text);cursor:pointer;box-shadow:0 4px 14px var(--veil-soft);font-size:.82em}
+#newmsgs.on{display:block}
+.mes{padding:12px 4px;border-bottom:1px solid var(--surface2);display:flex;align-items:flex-start;gap:14px;min-height:66px;position:relative}
+.mes .mav{width:60px;height:60px;border-radius:50%;object-fit:cover;background:var(--surface2);flex:none}
 .mes .body{flex:1;min-width:0;align-self:center}
-.mes .delm{display:none;position:absolute;right:6px;top:8px;background:none;border:none;color:#8a6a6a;cursor:pointer;font-size:12px;padding:2px 6px}
+.mes .delm{display:none;position:absolute;right:6px;top:8px;background:none;border:none;color:var(--delm);cursor:pointer;font-size:12px;padding:2px 6px}
 .mes:hover .delm{display:block}
-.mes .delm:hover{color:#e88}
+.mes .delm:hover{color:var(--err-hi)}
 .mes .who{width:60px;flex:none;text-align:center}
-.mes .n{font-weight:600;color:#9ab;font-size:.75em;display:block;margin-top:4px;word-break:break-word;line-height:1.1}
+.mes .n{font-weight:600;color:var(--muted);font-size:.75em;display:block;margin-top:4px;word-break:break-word;line-height:1.1}
+.mes .when{display:block;font-size:.62em;color:var(--dim);margin-top:2px;line-height:1.2}
 .mes .t{white-space:pre-wrap;margin-top:2px}
-.mes .t i{color:#b8c9e8}
+.mes .t i{color:var(--it)}
 .mes .t h2,.mes .t h3,.mes .t h4,.mes .t h5{margin:.3em 0}
-.mes .t code{background:#232426;padding:1px 5px;border-radius:3px;font-size:.92em}
-.mes.ai .n{color:#7ac}
-.mes.sys .t{color:#789;font-style:italic}
-#composer{padding:10px 16px;display:flex;gap:8px;border-top:1px solid #2a2b2e;flex:none}
+.mes .t code{background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:.92em}
+.mes.ai .n{color:var(--ai)}
+.mes.sys .t{color:var(--dim);font-style:italic}
+#composer{padding:10px 16px;display:flex;gap:8px;border-top:1px solid var(--line);flex:none}
 #composer input{flex:1;margin:0}
 #composer button{width:auto;margin:0;white-space:nowrap}
-button.gen{background:#4a7c3a}
+button.gen{background:var(--ok)}
 .room{padding:7px 8px;border-radius:5px;cursor:pointer;margin-bottom:3px}
-.room:hover{background:#232426}
-.room.on{background:#2b3a5e}
+.room:hover{background:var(--surface2)}
+.room.on{background:var(--accent)}
 .room .n{font-weight:600}
-.member{padding:4px 8px;font-size:.9em;color:#abc;display:flex;align-items:center;gap:6px}
-.cap{display:block;font-size:.78em;color:#789;margin:6px 0 2px;text-transform:uppercase;letter-spacing:.04em}
-.mav{width:36px;height:36px;border-radius:50%;object-fit:cover;background:#232426;flex:none}
+.member{padding:4px 8px;font-size:.9em;color:var(--desc);display:flex;align-items:center;gap:6px}
+.mav{width:36px;height:36px;border-radius:50%;object-fit:cover;background:var(--surface2);flex:none}
 .room{display:flex;align-items:center;gap:6px}
 .room .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .room .rbtns{display:none;flex:none;font-size:.8em}
 .room:hover .rbtns{display:inline}
-.room .rbtns a{color:#789;text-decoration:none;margin-left:6px}
-.room .rbtns a:hover{color:#fff}
-.member .fgen{margin:0;width:22px;height:22px;padding:0;font-size:10px;line-height:20px;text-align:center;flex:none;background:transparent;border:1px solid #3a4a3e;border-radius:4px;cursor:pointer;color:#6a8a6e}
-.member .fgen:hover{background:#4a7c3a;color:#fff;border-color:#4a7c3a}
+.room .rbtns a{color:var(--dim);text-decoration:none;margin-left:6px}
+.room .rbtns a:hover{color:var(--white)}
+.member .fgen{margin:0;width:22px;height:22px;padding:0;font-size:10px;line-height:20px;text-align:center;flex:none;background:transparent;border:1px solid var(--ok-deep);border-radius:4px;cursor:pointer;color:var(--gen)}
+.member .fgen:hover{background:var(--ok);color:var(--white);border-color:var(--ok)}
 .member .fgen:disabled{opacity:.3;cursor:default}
-.member .frem{margin:0;width:22px;height:22px;padding:0;font-size:10px;line-height:20px;text-align:center;flex:none;background:transparent;border:1px solid #4a3a3a;border-radius:4px;cursor:pointer;color:#8a6a6a}
-.member .frem:hover{background:#7c3a3a;color:#fff;border-color:#7c3a3a}
+.member .frem{margin:0;width:22px;height:22px;padding:0;font-size:10px;line-height:20px;text-align:center;flex:none;background:transparent;border:1px solid var(--del-line);border-radius:4px;cursor:pointer;color:var(--delm)}
+.member .frem:hover{background:var(--danger);color:var(--white);border-color:var(--danger)}
 .member .frem:disabled{opacity:.3;cursor:default}
-.member .mname{color:#abc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.member input.talk{appearance:none;-webkit-appearance:none;flex:1;min-width:30px;margin:0;padding:0;height:4px;background:#333;border:none;border-radius:2px}
-.member input.talk::-webkit-slider-thumb{-webkit-appearance:none;width:9px;height:9px;border-radius:50%;background:#4a7c3a;cursor:pointer}
-.member input.talk::-moz-range-thumb{width:9px;height:9px;border-radius:50%;background:#4a7c3a;border:none;cursor:pointer}
-.member input.talk::-moz-range-track{background:#333;height:4px;border-radius:2px}
-.member .tv{font-size:.7em;color:#789;width:30px;text-align:right;flex:none}
+.member .mname{color:var(--desc);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.member input.talk{appearance:none;-webkit-appearance:none;flex:1;min-width:30px;margin:0;padding:0;height:4px;background:var(--track);border:none;border-radius:2px}
+.member input.talk::-webkit-slider-thumb{-webkit-appearance:none;width:9px;height:9px;border-radius:50%;background:var(--ok);cursor:pointer}
+.member input.talk::-moz-range-thumb{width:9px;height:9px;border-radius:50%;background:var(--ok);border:none;cursor:pointer}
+.member input.talk::-moz-range-track{background:var(--track);height:4px;border-radius:2px}
+.member .tv{font-size:.7em;color:var(--dim);width:30px;text-align:right;flex:none}
 #sidebar input{width:100%}
 #sidebar button:not(.fgen){width:100%}
+@media (max-width:700px){ /* keep in sync with --mob in layout.css */
+  #msgs{padding:8px 10px}
+  .mes{padding:10px 2px;gap:10px;min-height:52px}
+  .mes .mav{width:44px;height:44px}
+  .mes .who{width:44px}
+  .mes .delm{display:block}
+  .room .rbtns{display:inline}
+  #composer{padding:8px;gap:6px}
+}
 </style>
 </head>
 <body>
@@ -73,8 +86,17 @@ button.gen{background:#4a7c3a}
   <h3 style="margin-top:16px">Chat settings</h3>
   <div class="cap">World</div>
   <select id="worldsel" onchange="setWorld(this.value)" style="width:100%"></select>
-  <div style="font-size:.8em;color:#789;margin-top:8px" title="Cap on total prompt size — oldest history is dropped when exceeded">Max prompt tokens (0 = unlimited)</div>
+  <div class="cap">Smart memory</div>
+  <select id="mprofsel" onchange="setMProf(this.value)" style="width:100%"></select>
+  <div style="font-size:.8em;color:var(--dim);margin-top:8px" title="Cap on total prompt size — oldest history is dropped when exceeded">Max prompt tokens (0 = unlimited)</div>
   <input type="number" id="ctxmax" min="0" step="500" onchange="setCtx(this.value)" style="width:100%">
+  <div class="cap">Chat background</div>
+  <div style="display:flex;gap:6px">
+    <input type="file" id="bgfile" accept="image/*" onchange="uploadBg(this)" style="flex:1;font-size:.8em;min-width:0">
+    <button onclick="clearBg()" style="width:auto;margin:0">✕</button>
+  </div>
+  <div class="cap">Composer</div>
+  <label class="cb"><input type="checkbox" id="entersend" onchange="localStorage.mp_entersend=this.checked?'1':'0'"> Enter key sends</label>
   <h3 style="margin-top:16px">Last saved memory</h3>
   <div id="lastmem"></div>
   <h3 style="margin-top:16px">Prompt use</h3>
@@ -83,15 +105,17 @@ button.gen{background:#4a7c3a}
 
 <div id="content">
   <div id="chat">
+    <div class="cvhead"><h2 id="chatname">Chat</h2></div>
     <ul id="msgs"></ul>
+    <button id="newmsgs" onclick="jumpLatest()">↓ new</button>
     <div id="composer">
-      <textarea id="in" placeholder="Type a message" autofocus rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();say()}" style="resize:none;overflow:hidden;padding:10px;background:#2a2b2e;border:1px solid #444;color:#ddd;border-radius:6px;flex:1;font:inherit" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
+      <textarea id="in" placeholder="Type a message" autofocus rows="1" onkeydown="inKey(event)" style="resize:none;overflow:hidden;padding:10px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;flex:1;font:inherit" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
       <button onclick="say()">Send</button>
       <button class="gen" onclick="gen()">NPC ▸</button>
     </div>
   </div>
 </div>
-<script src="layout.js"></script>
-<script src="app.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
