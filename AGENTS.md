@@ -124,6 +124,7 @@ Seeded dev users (fresh DB, `seed()`): `admin`, `alice`, `bob`, `carol` — all 
 ## Code conventions
 
 - Keep changes consistent with surrounding code (module style, naming, routing patterns, SQL style).
+- **DRY where possible.** Before adding markup, styles, or helpers, check for a shared version (`layout.js`/`layout.css`, `src/lib/`, existing helpers) and extend it rather than forking a copy. When you spot duplication you aren't fixing, flag it in your reply and suggest where a shared abstraction could live — don't silently leave copies to drift.
 - Use Node built-in modules via `node:` imports where practical.
 - Backend routes follow the existing pattern in `src/server.js` (`router` map of `"METHOD /path"` handlers returning JSON via `send()`).
 - Database changes should fit the existing migration approach in `src/db.js` (additive/evolving schema handled in code) and preserve established column naming patterns where applicable.
