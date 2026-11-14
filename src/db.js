@@ -61,8 +61,7 @@ CREATE TABLE IF NOT EXISTS memories (
     content TEXT NOT NULL,
     created TEXT DEFAULT (datetime('now')),
     type TEXT DEFAULT 'fact',
-    origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart')),
-    triggers TEXT DEFAULT ''
+    origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart'))
 );
 CREATE TABLE IF NOT EXISTS api_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -301,7 +300,7 @@ export function migrateSchema() {
     // One-time: the extraction parser used to store the "(triggers: …)" label
     // inside the triggers column itself — strip it so it isn't injected as a
     // keyword or shown on memory cards.
-    if (uv < 6) {
+    if (uv < 6 && db.prepare('PRAGMA table_info(memories)').all().some(c => c.name === 'triggers')) {
         for (const r of db.prepare("SELECT memories_id_pk AS id, triggers FROM memories WHERE triggers LIKE '%:%'").all()) {
             const clean = r.triggers.split(',').map(s => s.trim().replace(/^triggers?\s*:/i, '').toLowerCase()).filter(Boolean).join(',');
             if (clean !== r.triggers) db.prepare('UPDATE memories SET triggers=? WHERE memories_id_pk=?').run(clean, r.id);
@@ -310,7 +309,6 @@ export function migrateSchema() {
     if (uv !== 6) db.exec('PRAGMA user_version=6');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
-    if (!mecols.includes('source')) db.exec("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'manual'");
     // prompt_profiles: injection/prompt-assembly presets. prompt order moved
     // off mem_profiles — it positions card/world blocks too, so it was never
     // memory-scoped. The user's active profile applies to all their
@@ -349,7 +347,6 @@ export function migrateSchema() {
             SELECT members_id_pk,users_id_fk,cards_id_fk,kind,talkativeness FROM members`);
         db.exec('DROP TABLE members; ALTER TABLE members_new RENAME TO members');
     }
-        if (!mecols.includes('triggers')) db.exec("ALTER TABLE memories ADD COLUMN triggers TEXT DEFAULT ''");
     // members = a card in a room; kind/users_id_fk derive from the card.
     if (db.prepare('PRAGMA table_info(members)').all().some(c => c.name === 'users_id_fk')) {
         // human members get their owner's persona card (create one if needed)
@@ -587,6 +584,21 @@ export function migrateSchema() {
             DROP TABLE members; COMMIT;`);
         db.exec('PRAGMA foreign_keys=ON');
     }
+    // memory_triggers junction: the comma-separated triggers column becomes
+    // one row per keyword (mirrors world_entry_keys).
+    db.exec(`CREATE TABLE IF NOT EXISTS memory_triggers (
+        memories_id_fk INTEGER NOT NULL REFERENCES memories(memories_id_pk) ON DELETE CASCADE,
+        word TEXT NOT NULL,
+        PRIMARY KEY (memories_id_fk, word))`);
+    if (db.prepare('PRAGMA table_info(memories)').all().some(c => c.name === 'triggers')) {
+        const ins = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
+        for (const r of db.prepare("SELECT memories_id_pk, triggers FROM memories WHERE triggers IS NOT NULL AND triggers != ''").all())
+            for (const w of r.triggers.split(',')) {
+                const word = w.trim().toLowerCase();
+                if (word) ins.run(r.memories_id_pk, word);
+            }
+        db.exec('ALTER TABLE memories DROP COLUMN triggers');
+    }
     // Room owner: the user whose persona sits in the room (lowest user id,
     // matching the convention generation uses for memory extraction).
     const rcolsEnd = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);
@@ -718,8 +730,10 @@ function seedExamples(room) {
     db.prepare('INSERT INTO room_books (rooms_id_fk,world_books_id_fk) VALUES (?,?)').run(room, book);
 
     const mem = (content, type, origin, triggers, cardId) => {
-        const id = db.prepare('INSERT INTO memories (content,type,origin,triggers) VALUES (?,?,?,?)')
-            .run(content, type, origin, triggers).lastInsertRowid;
+        const id = db.prepare('INSERT INTO memories (content,type,origin) VALUES (?,?,?)')
+            .run(content, type, origin).lastInsertRowid;
+        const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
+        for (const w of (triggers || '').split(',')) { const word = w.trim().toLowerCase(); if (word) insTrig.run(id, word); }
         db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(room, id);
         if (cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, cardId);
     };

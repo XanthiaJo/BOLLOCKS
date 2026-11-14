@@ -17,7 +17,7 @@ There are two kinds of memory, distinguished by `origin`:
 
 - Created explicitly by a user through the Memories UI or API.
 - `type` defaults to `fact`; user can set `fact` / `event` / `relationship` / `preference`.
-- `triggers` empty = always inject; otherwise keyword-gated.
+- Trigger keywords live as `memory_triggers` rows (one per word, lowercase); no rows = always inject, otherwise keyword-gated. The API speaks comma-separated strings at the boundary.
 - **Ownership / edit rights:**
   - A user may edit/delete **character memories** for cards they **own** (`cards.owner_users_id_fk === user`).
   - A user may edit/delete **room (shared) memories** for any room they are a **member of**.

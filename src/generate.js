@@ -144,8 +144,9 @@ export async function generateReply(roomId, card) {
     const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
     const active = r => !r.triggers || r.triggers.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
         .some(t => recentText.includes(t));
-    const roomMems = cap(db.prepare('SELECT m.content,m.triggers FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC').all(roomId).reverse().filter(active), 0);
-    const mems = cap(db.prepare('SELECT m.content,m.triggers FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? ORDER BY m.memories_id_pk DESC')
+    const TRIG_SQL = `(SELECT GROUP_CONCAT(mt.word,',') FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk) AS triggers`;
+    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), 0);
+    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? ORDER BY m.memories_id_pk DESC`)
         .all(roomId, card.id).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
 
     const memText = (injectMem && (roomMems.length || mems.length))
@@ -371,7 +372,8 @@ export async function maybeSummarize(roomId) {
     const text = data?.choices?.[0]?.message?.content?.trim() || '';
     logPrompt(roomId, null, 'extract', reqBody, text, data?.usage);
     let added = 0;
-    const ins = db.prepare("INSERT INTO memories (content,type,origin,triggers) VALUES (?,?, 'smart', ?)");
+    const ins = db.prepare("INSERT INTO memories (content,type,origin) VALUES (?,?, 'smart')");
+    const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
     for (const line of text.split('\n')) {
         let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
@@ -386,7 +388,11 @@ export async function maybeSummarize(roomId) {
             triggers = tr[1].split(',').map(s => s.trim().replace(/^triggers?\s*:/i, '').toLowerCase()).filter(Boolean).join(',');
             fact = (fact.slice(0, tr.index) + fact.slice(tr.index + tr[0].length)).trim();
         }
-        if (fact.length > 10) { const mid = ins.run(fact, type, triggers).lastInsertRowid; linkRoom.run(roomId, mid); added++; }
+        if (fact.length > 10) {
+            const mid = ins.run(fact, type).lastInsertRowid;
+            for (const w of triggers.split(',')) { const word = w.trim(); if (word) insTrig.run(mid, word); }
+            linkRoom.run(roomId, mid); added++;
+        }
     }
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
