@@ -224,10 +224,17 @@ async function newRoom() {
 }
 
 let persona = null;
+// Enter-sends is a per-device pref (mp_entersend): default off on touch
+// devices where Enter is for newlines, on for pointer devices.
+const enterSend = () => $('entersend')?.checked ?? true;
+function inKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey && enterSend()) { e.preventDefault(); say(); }
+}
 async function say() {
     const text = $('in').value.trim();
     if (!text) return;
     $('in').value = '';
+    $('in').style.height = 'auto';
     const m = await api('say', { room, cardId: persona?.id || null, text });
     if (m?.id) addMsg(m, true); // own message always snaps — SSE may be a dead socket
 }
@@ -302,6 +309,9 @@ async function renderToks() {
 }
 
 async function start() {
+    $('entersend').checked = localStorage.mp_entersend === undefined
+        ? !matchMedia('(pointer:coarse)').matches
+        : localStorage.mp_entersend === '1';
     $('msgs').addEventListener('scroll', () => {
         const el = $('msgs');
         if (newBelow && el.scrollHeight - el.scrollTop - el.clientHeight < 80) {
