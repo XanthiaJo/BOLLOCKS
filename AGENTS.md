@@ -65,7 +65,7 @@ Core tables:
 - `users` / `sessions` — accounts; `sessions.sessions_token_pk` is the bearer/cookie token.
 - `rooms` — chats; carries `ai_trigger` (manual/all/named/roundrobin), `bg`, `max_context`, `mem_profiles_id_fk`, `owner_users_id_fk`, `mem_last_messages_id`, `mem_refresh_count`.
 - `cards` — character sheets (ST v2 field parity); `is_persona=1` marks a user's human persona; `owner_users_id_fk` owns it; `api_profiles_id_fk` may pin a generation profile.
-- `members` + `room_members` — a `members` row wraps one card (adds `talkativeness`); `room_members` joins members into rooms. Humans sit in rooms via their persona card.
+- `room_members` — junction joining cards into rooms; holds per-room `talkativeness`. Humans sit in rooms via their persona card.
 - `messages` — chat log per room (`cards_id_fk` NULL = system line); use `MSG_SQL` for the standard SELECT (adds `id`, `name`, `kind` ∈ say/ai/sys).
 - `world_books` → `book_entries` → `world_entries` → `world_entry_keys` (primary/secondary keyword rows); `room_books` links at most one book to a room.
 - `memories` (+`room_memories`, +`memory_cards`) — `origin='user'` permanent vs `origin='smart'` auto-extracted; `triggers` keyword-gate injection; `type` ∈ fact/event/relationship/preference.
