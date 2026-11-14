@@ -5,8 +5,8 @@ export const roomOwner = id => db.prepare('SELECT owner_users_id_fk AS o FROM ro
 export const roomOwnerOnly = (roomId, u) => roomOwner(roomId) === u.users_id_pk;
 // u sits in the room (any of their cards is seated) or owns it.
 export const roomMember = (roomId, u) => !!u && (roomOwnerOnly(roomId, u) ||
-    !!db.prepare(`SELECT 1 FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
-        JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE rm.rooms_id_fk=? AND c.owner_users_id_fk=?`)
+    !!db.prepare(`SELECT 1 FROM room_members rm JOIN cards c ON c.cards_id_pk=rm.cards_id_fk
+        WHERE rm.rooms_id_fk=? AND c.owner_users_id_fk=?`)
         .get(roomId, u.users_id_pk));
 // Memory lives in at least one room u sits in.
 export const memoryShared = (id, u) => db.prepare('SELECT rooms_id_fk AS r FROM room_memories WHERE memories_id_fk=?')

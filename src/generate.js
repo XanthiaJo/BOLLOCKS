@@ -107,8 +107,8 @@ export async function generateReply(roomId, card) {
 
     // Other characters in the scene — ST injects member context so NPCs
     // know who's present. Descriptions only; no full cards.
-    const others = db.prepare(`SELECT c.name, c.description FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk
-        JOIN cards c ON c.cards_id_pk=m.cards_id_fk WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 AND c.cards_id_pk!=?`)
+    const others = db.prepare(`SELECT c.name, c.description FROM room_members rm
+        JOIN cards c ON c.cards_id_pk=rm.cards_id_fk WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 AND c.cards_id_pk!=?`)
         .all(roomId, card.id);
 
     // Keyword-triggered world entries: constant entries always in; keyed

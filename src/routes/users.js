@@ -44,8 +44,7 @@ export default {
             : (b.id || b.world_books_id_pk);
         if (!target || target === u.users_id_pk) return send(res, 400, { error: 'no such user' });
         db.prepare('DELETE FROM sessions WHERE users_id_fk=?').run(target);
-        db.prepare('DELETE FROM room_members WHERE members_id_fk IN (SELECT members_id_pk FROM members WHERE cards_id_fk IN (SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=?))').run(target);
-            db.prepare('DELETE FROM members WHERE cards_id_fk IN (SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=?)').run(target);
+        db.prepare('DELETE FROM room_members WHERE cards_id_fk IN (SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=?)').run(target);
         db.prepare('DELETE FROM users WHERE users_id_pk=?').run(target);
         send(res, 200, { ok: true });
     },

@@ -22,15 +22,11 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS rooms (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS members (
-    members_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-    cards_id_fk INTEGER NOT NULL REFERENCES cards(cards_id_pk),
-    talkativeness INTEGER DEFAULT 50
-);
 CREATE TABLE IF NOT EXISTS room_members (
     rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
-    members_id_fk INTEGER NOT NULL REFERENCES members(members_id_pk),
-    UNIQUE (rooms_id_fk, members_id_fk)
+    cards_id_fk INTEGER NOT NULL REFERENCES cards(cards_id_pk),
+    talkativeness INTEGER DEFAULT 50,
+    UNIQUE (rooms_id_fk, cards_id_fk)
 );
 CREATE TABLE IF NOT EXISTS cards (
     id INTEGER PRIMARY KEY, owner_users_id_fk INTEGER REFERENCES users(id),
@@ -470,7 +466,7 @@ export function migrateSchema() {
     // Legacy room-keyed entry backfill removed — entries now belong to books
     // only; rooms link via room_books junction.
     const mcols = db.prepare('PRAGMA table_info(members)').all().map(c => c.name);
-    if (!mcols.includes('talkativeness')) db.exec('ALTER TABLE members ADD COLUMN talkativeness INTEGER DEFAULT 50');
+    if (mcols.length && !mcols.includes('talkativeness')) db.exec('ALTER TABLE members ADD COLUMN talkativeness INTEGER DEFAULT 50');
     // memories.cards_id_fk must be nullable — NULL = shared room memory.
     const mecols2 = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     const hasCardsFk = mecols2.includes('cards_id_fk');
@@ -566,14 +562,29 @@ export function migrateSchema() {
     for (const r of existingCardLinks) insCard.run(r.memory_id_fk, r.cards_id_fk);
     // Duplicate-member dedupe removed — membership lives in room_members
     // junction (UNIQUE on room+member) so dupes can't form.
+    // Collapse members into room_members: talkativeness becomes per-room.
+    if (db.prepare('PRAGMA table_info(room_members)').all().some(c => c.name === 'members_id_fk')) {
+        db.exec('PRAGMA foreign_keys=OFF');
+        db.exec(`BEGIN;
+            CREATE TABLE room_members_new (
+                rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+                cards_id_fk INTEGER NOT NULL REFERENCES cards(cards_id_pk),
+                talkativeness INTEGER DEFAULT 50,
+                PRIMARY KEY (rooms_id_fk, cards_id_fk));
+            INSERT INTO room_members_new (rooms_id_fk,cards_id_fk,talkativeness)
+                SELECT rm.rooms_id_fk, m.cards_id_fk, m.talkativeness
+                FROM room_members rm JOIN members m ON m.members_id_pk=rm.members_id_fk;
+            DROP TABLE room_members; ALTER TABLE room_members_new RENAME TO room_members;
+            DROP TABLE members; COMMIT;`);
+        db.exec('PRAGMA foreign_keys=ON');
+    }
     // Room owner: the user whose persona sits in the room (lowest user id,
     // matching the convention generation uses for memory extraction).
     const rcolsEnd = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);
     if (!rcolsEnd.includes('owner_users_id_fk')) db.exec('ALTER TABLE rooms ADD COLUMN owner_users_id_fk INTEGER');
     db.exec(`UPDATE rooms SET owner_users_id_fk=COALESCE((
         SELECT MIN(c.owner_users_id_fk) FROM room_members rm
-        JOIN members m ON m.members_id_pk=rm.members_id_fk
-        JOIN cards c ON c.cards_id_pk=m.cards_id_fk
+        JOIN cards c ON c.cards_id_pk=rm.cards_id_fk
         WHERE rm.rooms_id_fk=rooms.rooms_id_pk AND c.is_persona=1),
         (SELECT users_id_pk FROM users ORDER BY users_id_pk LIMIT 1))
         WHERE owner_users_id_fk IS NULL`);
@@ -628,14 +639,12 @@ export function seed() {
             pc = db.prepare('INSERT INTO cards (owner_users_id_fk,name,is_persona) VALUES (?,?,1)').run(uid, handle).lastInsertRowid;
             seedAvatar(pc, handle);
         }
-        let mid = db.prepare('SELECT members_id_pk FROM members WHERE cards_id_fk=?').get(pc)?.members_id_pk;
-        if (!mid) mid = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(pc).lastInsertRowid;
-        return mid;
+        return pc;
     };
-    if (!db.prepare('SELECT 1 FROM members LIMIT 1').get()) {
+    if (!db.prepare('SELECT 1 FROM room_members LIMIT 1').get()) {
         for (const h of ['admin', 'alice', 'bob', 'carol']) {
             const uid = db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get(h).id;
-            db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)')
+            db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,cards_id_fk) VALUES (?,?)')
                 .run(room, memberFor(uid, h));
         }
     }
@@ -680,8 +689,7 @@ function seedExamples(room) {
         "<START>\n{{user}}: Do you ever sleep, Wren?\n{{char}}: \"The House sleeps. I keep it.\" She folds a tea towel with surgical precision. \"But if it makes you feel better, I'll close my eyes on Tuesdays.\"\n<START>\n{{user}}: What's behind the locked door upstairs?\n{{char}}: \"Storage.\" A pause that lands exactly one beat too long. \"And the previous caretaker's dignity.\"",
         '["demo"]', 'seed').lastInsertRowid;
     seedAvatar(wren, 'wren');
-    const wmid = db.prepare('INSERT INTO members (cards_id_fk) VALUES (?)').run(wren).lastInsertRowid;
-    db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,members_id_fk) VALUES (?,?)').run(room, wmid);
+    db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,cards_id_fk) VALUES (?,?)').run(room, wren);
 
     const book = db.prepare('INSERT INTO world_books (owner_users_id_fk,name) VALUES (?,?)')
         .run(uid, 'The House — notes').lastInsertRowid;

@@ -23,17 +23,13 @@ export default {
         const cards = db.prepare(`SELECT c.*, c.cards_id_pk AS id, u.handle owner FROM cards c
             LEFT JOIN users u ON u.users_id_pk=c.owner_users_id_fk
             WHERE c.owner_users_id_fk = ? OR c.cards_id_pk IN (
-                SELECT m2.cards_id_fk FROM members m2
-                JOIN room_members r2 ON r2.members_id_fk=m2.members_id_pk
+                SELECT r2.cards_id_fk FROM room_members r2
                 JOIN room_members re ON re.rooms_id_fk = r2.rooms_id_fk
-                JOIN members me ON me.members_id_pk=re.members_id_fk JOIN cards cc ON cc.cards_id_pk=me.cards_id_fk AND cc.owner_users_id_fk = ?
-                WHERE m2.cards_id_fk IS NOT NULL
+                JOIN cards cc ON cc.cards_id_pk=re.cards_id_fk AND cc.owner_users_id_fk = ?
             ) OR (c.is_persona=1 AND c.owner_users_id_fk IN (
-                SELECT c3.owner_users_id_fk FROM members m3 JOIN cards c3 ON c3.cards_id_pk=m3.cards_id_fk
-                JOIN room_members r3 ON r3.members_id_fk=m3.members_id_pk
+                SELECT c3.owner_users_id_fk FROM room_members r3 JOIN cards c3 ON c3.cards_id_pk=r3.cards_id_fk
                 JOIN room_members re2 ON re2.rooms_id_fk = r3.rooms_id_fk
-                JOIN members me2 ON me2.members_id_pk=re2.members_id_fk
-                JOIN cards cc2 ON cc2.cards_id_pk=me2.cards_id_fk AND cc2.owner_users_id_fk = ?
+                JOIN cards cc2 ON cc2.cards_id_pk=re2.cards_id_fk AND cc2.owner_users_id_fk = ?
                 WHERE c3.owner_users_id_fk IS NOT NULL
             )) ORDER BY c.name`).all(u.users_id_pk, u.users_id_pk, u.users_id_pk);
         send(res, 200, { cards });
@@ -107,8 +103,7 @@ export default {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
         db.prepare('DELETE FROM cards WHERE cards_id_pk=? AND owner_users_id_fk=?').run(id, u.users_id_pk);
-        db.prepare('DELETE FROM room_members WHERE members_id_fk IN (SELECT members_id_pk FROM members WHERE cards_id_fk=?)').run(id);
-            db.prepare('DELETE FROM members WHERE cards_id_fk=?').run(id);
+        db.prepare('DELETE FROM room_members WHERE cards_id_fk=?').run(id);
         send(res, 200, { ok: true });
     },
 };
