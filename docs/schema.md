@@ -25,10 +25,14 @@ the DB has ever had. Proposals below are staged by value-vs-risk.
 - [x] **`members` collapsed into `room_members`** (PR #90). It wrapped one
   card + `talkativeness`, making talkativeness card-global. Now the
   junction holds `(rooms_id_fk, cards_id_fk, talkativeness)` directly.
+- [x] **`memories.triggers` → `memory_triggers` rows** (PR #92). The
+  comma-separated column became one row per keyword. Bonus fix: the
+  legacy `ADD COLUMN source` re-add was removed — it forced a full
+  `memories` rebuild (FK-cascade-wiping junction rows) on every boot.
 
 ## Stage 2 — worth doing
 
-### 2a. `memories.triggers` → trigger rows
+### ~~2a. `memories.triggers` → trigger rows~~ — done (PR #92)
 
 Now a comma-separated TEXT column — a 1NF nit, and the reason trigger
 matching is substring-based string surgery. Proposed:
