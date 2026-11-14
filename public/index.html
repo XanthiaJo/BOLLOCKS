@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8"><title>BOLLOCKS · Chat</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BOLLOCKS · Chat</title>
 <link rel="stylesheet" href="css/layout.css">
 <style>
 #chat{display:flex;flex-direction:column;min-height:0;flex:1;position:relative}
@@ -54,6 +54,15 @@ button.gen{background:var(--ok)}
 .member .tv{font-size:.7em;color:var(--dim);width:30px;text-align:right;flex:none}
 #sidebar input{width:100%}
 #sidebar button:not(.fgen){width:100%}
+@media (max-width:700px){
+  #msgs{padding:8px 10px}
+  .mes{padding:10px 2px;gap:10px;min-height:52px}
+  .mes .mav{width:44px;height:44px}
+  .mes .who{width:44px}
+  .mes .delm{display:block}
+  .room .rbtns{display:inline}
+  #composer{padding:8px;gap:6px}
+}
 </style>
 </head>
 <body>
@@ -85,6 +94,8 @@ button.gen{background:var(--ok)}
     <input type="file" id="bgfile" accept="image/*" onchange="uploadBg(this)" style="flex:1;font-size:.8em;min-width:0">
     <button onclick="clearBg()" style="width:auto;margin:0">✕</button>
   </div>
+  <div class="cap">Composer</div>
+  <label class="cb"><input type="checkbox" id="entersend" onchange="localStorage.mp_entersend=this.checked?'1':'0'"> Enter key sends</label>
   <h3 style="margin-top:16px">Last saved memory</h3>
   <div id="lastmem"></div>
   <h3 style="margin-top:16px">Prompt use</h3>
@@ -97,7 +108,7 @@ button.gen{background:var(--ok)}
     <ul id="msgs"></ul>
     <button id="newmsgs" onclick="jumpLatest()">↓ new</button>
     <div id="composer">
-      <textarea id="in" placeholder="Type a message" autofocus rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();say()}" style="resize:none;overflow:hidden;padding:10px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;flex:1;font:inherit" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
+      <textarea id="in" placeholder="Type a message" autofocus rows="1" onkeydown="inKey(event)" style="resize:none;overflow:hidden;padding:10px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;flex:1;font:inherit" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
       <button onclick="say()">Send</button>
       <button class="gen" onclick="gen()">NPC ▸</button>
     </div>

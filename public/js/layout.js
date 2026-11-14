@@ -32,12 +32,30 @@
     const content = document.getElementById('content') || document.body;
     // Collapse toggles in the nav for each sidebar that exists.
     const mob = () => window.innerWidth <= 700;
+    // Mobile sidebars are overlay drawers: dim scrim behind, one open at a
+    // time, anchored just under the nav. closeDrawers() is the single exit.
+    const scrim = document.createElement('div');
+    scrim.className = 'mp-scrim';
+    const closeDrawers = () => {
+        for (const el of [side, rside]) el?.classList.remove('open');
+        scrim.classList.remove('on');
+    };
+    scrim.onclick = closeDrawers;
     const mk = (el, side) => {
         const b = document.createElement('a');
         b.className = 'navtoggle';
         b.textContent = side === 'l' ? '☰' : '⚙';
         b.title = (side === 'l' ? 'Toggle left panel' : 'Toggle right panel');
-        b.onclick = () => el.classList.toggle(mob() ? 'open' : 'hide');
+        b.onclick = () => {
+            if (!mob()) { el.classList.toggle('hide'); return; }
+            const open = !el.classList.contains('open');
+            closeDrawers(); // one open, never both
+            if (open) {
+                el.style.top = nav.offsetHeight + 'px';
+                el.classList.add('open');
+                scrim.classList.add('on');
+            }
+        };
         return b;
     };
     if (side) nav.prepend(mk(side, 'l'));
@@ -48,6 +66,13 @@
     shell.appendChild(content);
     if (rside) shell.appendChild(rside);
     document.body.prepend(nav, shell);
+    document.body.appendChild(scrim);
+    // Picking a row (.room/.rprof, not its buttons) closes the drawer on mobile.
+    for (const el of [side, rside]) el?.addEventListener('click', e => {
+        if (mob() && e.target.closest('.room,.rprof') && !e.target.closest('.btns')) closeDrawers();
+    });
+    addEventListener('resize', () => { if (!mob()) closeDrawers(); });
+    addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawers(); });
     const ubtn = document.getElementById('mpuserbtn');
     const udrop = document.getElementById('mpuserdrop');
     ubtn.onclick = e => { e.stopPropagation(); udrop.classList.toggle('open'); };
