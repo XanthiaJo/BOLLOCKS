@@ -173,4 +173,23 @@ describe('generation (mock LLM)', () => {
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
+
+    test('extraction stores only one memory per run even when the model returns several', async () => {
+        const ext = await mockLLM('- [fact] Wren keeps biscuits in the blue tin.\n- [event] Wren offered tea.\n- [preference] Wren prefers black tea.');
+        try {
+            const profId = (await s.post('profiles', { name: 'Extract1', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Ext1', auto: true, every: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Mem one room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            await s.post('say', { room: mroom, text: 'Wren offered me tea.' });
+            const mems = await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                return m?.length ? m : null;
+            }, 'smart memory');
+            await new Promise(r => setTimeout(r, 200)); // let any extra inserts land
+            assert.equal((await s.get(`memories?card=0&room=${mroom}`)).json.memories.length, 1);
+            assert.equal(mems[0].content, 'Wren keeps biscuits in the blue tin.');
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
 });
