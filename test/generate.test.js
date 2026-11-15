@@ -163,14 +163,20 @@ describe('generation (mock LLM)', () => {
             const mp = (await s.post('memprofiles', { name: 'Ext', auto: true, every: 1, triggers: true, profileId: profId })).json.id;
             const mroom = (await s.post('rooms', { name: 'Mem room' })).json.id;
             await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            const wren = (await s.post('cards', { name: 'Wren', description: 'Wren is a kettle-bodied robot.' })).json.id;
+            await s.post('members', { room: mroom, cardId: wren });
             await s.post('say', { room: mroom, text: 'Wren offered me tea.' });
             const mems = await until(async () => {
                 const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
                 return m?.length ? m : null;
             }, 'smart memory');
+            // Extraction sees member card sheets as authoritative context.
+            const extReq = JSON.parse(ext.requests.at(-1).body);
+            assert.match(extReq.messages.at(-1).content, /Wren is a kettle-bodied robot\./);
             assert.equal(mems[0].triggers, 'biscuits,tin');
             assert.doesNotMatch(mems[0].content, /triggers/i);
             await s.post('rooms/delete', { id: mroom });
+            await s.post('cards/delete', { id: wren });
         } finally { await ext.close(); }
     });
 

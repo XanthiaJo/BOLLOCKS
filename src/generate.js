@@ -17,6 +17,7 @@ const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
 // Built-in extraction prompt, used when a profile leaves its template
 // blank. The triggers suffix is appended only to the built-in prompt.
 export const MEM_EXTRACT_PROMPT = `You extract lasting memories from roleplay chat logs. All memories are shared with the whole chat.
+Character sheets included in the input are the AUTHORITATIVE current state for each character — trust them over older chat claims. If the excerpt shows a character's state changing (something fixed, removed, acquired, moved), record the NEW state, not the old.
 Output exactly ONE bullet point — the single most important lasting memory from this excerpt. "- " prefix, one line, starting with exactly one type tag — pick the most specific that fits:
 - [event] — something that HAPPENED (an action, occurrence, scene beat). "Karima opened the fridge" is an event.
 - [relationship] — how characters FEEL about each other or a thing. "Ellie adores teasing SirRackington" is a relationship.
@@ -356,11 +357,20 @@ export async function maybeSummarize(roomId) {
         .all(roomId, room.mem_last_messages_id);
     if (!excerpt.length) return;
     if (mem.mem_activity) push(roomId, { type: 'mem', phase: 'start' });
+    // Grounding: the cards in the room are the authoritative current state,
+    // so extraction can record NEW states instead of re-asserting stale chat.
+    const roster = db.prepare(`SELECT c.name, c.description FROM room_members rm
+        JOIN cards c ON c.cards_id_pk=rm.cards_id_fk WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0`)
+        .all(roomId);
+    const sheet = roster.length
+        ? 'Character sheets (authoritative current state):\n'
+            + roster.map(c => `${c.name}: ${c.description || c.name}`).join('\n') + '\n\n'
+        : '';
     const reqBody = {
         model: conn.model || 'local',
         messages: [
             { role: 'system', content: mem.mem_extraction_prompt?.trim() || (MEM_EXTRACT_PROMPT + (mem.mem_triggers ? MEM_TRIGGERS_SUFFIX : '')) },
-            { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
+            { role: 'user', content: sheet + 'Recent chat:\n' + excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
         ],
         temperature: 0.3, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
     };
