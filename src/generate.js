@@ -17,18 +17,15 @@ const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
 // Built-in extraction prompt, used when a profile leaves its template
 // blank. The triggers suffix is appended only to the built-in prompt.
 export const MEM_EXTRACT_PROMPT = `You extract lasting memories from roleplay chat logs. All memories are shared with the whole chat.
-Output ONLY bullet points, one per line, "- " prefix. Every line MUST start with exactly one type tag — pick the most specific that fits:
+Output exactly ONE bullet point — the single most important lasting memory from this excerpt. "- " prefix, one line, starting with exactly one type tag — pick the most specific that fits:
 - [event] — something that HAPPENED (an action, occurrence, scene beat). "Karima opened the fridge" is an event.
 - [relationship] — how characters FEEL about each other or a thing. "Ellie adores teasing SirRackington" is a relationship.
 - [preference] — a like/dislike/want. "Blake hates green" is a preference.
 - [fact] — LAST RESORT: only static truths that aren't events, feelings or preferences — identity, possessions, rules, ongoing states. "SirRackington is a server rack" is a fact.
-Do NOT default to [fact] — if a line describes something that occurred or a feeling, it is NOT a fact. Write complete sentences that name the subject — no pronouns, no narration.
+Do NOT default to [fact] — if the memory describes something that occurred or a feeling, it is NOT a fact. Write a complete sentence that names the subject — no pronouns, no narration.
 Example input: "Blake: the Venice API review pile is killing me\\nCreamms: I'll take half of it tomorrow"
 Example output:
-- [fact] Blake has a pending review pile for the Venice API.
-- [event] Creamms offered to take half of Blake's review pile tomorrow.
-- [preference] Blake dislikes working through the review pile.
-- [relationship] Creamms is willing to help Blake with his workload.`;
+- [event] Creamms offered to take half of Blake's review pile tomorrow.`;
 const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords in parentheses, e.g. "- [fact] Blake has a pending review pile. (triggers: pending, review)"';
 
 // Fields a memory profile can override on a room's mem_* settings.
@@ -398,6 +395,7 @@ export async function maybeSummarize(roomId) {
             const mid = ins.run(fact, type).lastInsertRowid;
             for (const w of triggers.split(',')) { const word = w.trim(); if (word) insTrig.run(mid, word); }
             linkRoom.run(roomId, mid); added++;
+            break; // one memory per extraction run
         }
     }
     // Only advance the watermark once extraction actually ran — a failed
