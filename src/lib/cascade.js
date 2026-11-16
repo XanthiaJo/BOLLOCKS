@@ -15,6 +15,7 @@ export function deleteRoomCascade(rid) {
     db.prepare(`DELETE FROM memories WHERE memories_id_pk IN (${memIds})`).run(rid);
     db.prepare('DELETE FROM room_memories WHERE rooms_id_fk=?').run(rid);
     db.prepare('DELETE FROM room_books WHERE rooms_id_fk=?').run(rid);
+    db.prepare('DELETE FROM room_arcs WHERE rooms_id_fk=?').run(rid);
     db.prepare('DELETE FROM rooms WHERE rooms_id_pk=?').run(rid);
 }
 
@@ -42,6 +43,7 @@ export function deleteUserCascade(uid) {
     db.prepare('UPDATE rooms SET mem_profiles_id_fk=NULL WHERE mem_profiles_id_fk IN (SELECT mem_profiles_id_pk FROM mem_profiles WHERE users_id_fk=?)').run(uid);
     db.prepare('UPDATE cards SET api_profiles_id_fk=NULL WHERE api_profiles_id_fk IN (SELECT api_profiles_id_pk FROM api_profiles WHERE users_id_fk=?)').run(uid);
     db.prepare('UPDATE mem_profiles SET mem_extraction_profile_id=0 WHERE mem_extraction_profile_id IN (SELECT api_profiles_id_pk FROM api_profiles WHERE users_id_fk=?)').run(uid);
+    db.prepare('UPDATE mem_profiles SET mem_arc_profile_id=0 WHERE mem_arc_profile_id IN (SELECT api_profiles_id_pk FROM api_profiles WHERE users_id_fk=?)').run(uid);
     db.prepare('DELETE FROM prompt_profiles WHERE users_id_fk=?').run(uid);
     db.prepare('DELETE FROM mem_profiles WHERE users_id_fk=?').run(uid);
     db.prepare('DELETE FROM api_profiles WHERE users_id_fk=?').run(uid);

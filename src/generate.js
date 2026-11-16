@@ -28,13 +28,18 @@ Example input: "Blake: the Venice API review pile is killing me\\nCreamms: I'll 
 Example output:
 - [event] Creamms offered to take half of Blake's review pile tomorrow.`;
 const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords in parentheses, e.g. "- [fact] Blake has a pending review pile. (triggers: pending, review)"';
+// Arc-tracking addendum for the built-in extraction prompt, appended when the
+// profile tracks arcs (mem_max_arcs > 0). Arc lines may appear alongside the
+// single memory bullet; [arc] advances and [arc-close] resolves a thread.
+const MEM_ARCS_SUFFIX = ' If the excerpt opens, advances, or resolves an ongoing storyline, additionally output "- [arc-open] Title — what is underway", "- [arc] Title — new development", or "- [arc-close] Title". Reuse an open thread\'s title exactly when updating or closing it.';
 
 // Fields a memory profile can override on a room's mem_* settings.
 const MEM_PROFILE_FIELDS = ['auto_mem', 'mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
     'mem_max_event', 'mem_max_relationship', 'mem_max_preference', 'mem_extraction_prompt',
     'mem_context_threshold', 'mem_response_length', 'mem_gen_budget', 'mem_unlimited',
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
-    'mem_extraction_profile_id'];
+    'mem_extraction_profile_id', 'mem_canon_budget', 'mem_max_arcs', 'mem_arc_budget',
+    'mem_arc_profile_id'];
 
 // Named system-prompt sections in cache-optimal order (stable content first —
 // see the assembly comment in generateReply). The user's active
@@ -53,10 +58,14 @@ export const PROMPT_BLOCKS = [
         example: 'Example dialogue:\nAria: We were never here.\n{{user}}: Says who?' },
     { key: 'roster', label: 'Other characters',
         example: 'Also present in the scene:\nBlake: a retired knight who owes Aria money' },
+    { key: 'canon', label: 'Canon',
+        example: 'Canon:\n- The drowned forest was destroyed in the war.' },
     { key: 'world', label: 'World info',
         example: 'World info:\nThe drowned forest floods every new moon.' },
     { key: 'memories', label: 'Memories',
         example: 'Memories:\n- [fact] Aria distrusts the harbor guild.\n- [event] Blake offered to carry the map case.' },
+    { key: 'arcs', label: 'Open threads',
+        example: 'Open threads:\n- The stolen map — Aria suspects the harbor guild took it' },
     { key: 'instructions', label: 'Instructions',
         example: "You are Aria and ONLY Aria — an NPC in a shared roleplay. The other characters listed are separate people speaking for themselves; do NOT speak for them or imitate them. Write ONLY Aria's next message." },
     { key: 'history', label: 'Chat history',
@@ -144,14 +153,28 @@ export async function generateReply(roomId, card) {
     const refreshN = mem?.mem_refresh || 1;
     const refreshKey = room?.mem_refresh_count || 0;
     const injectMem = refreshN <= 1 || refreshKey % refreshN === 0;
-    const cap = (rows, acc) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= budget); };
+    const cap = (rows, max, acc = 0) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= max); };
     const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
     const active = r => !r.triggers || r.triggers.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
         .some(t => recentText.includes(t));
     const TRIG_SQL = `(SELECT GROUP_CONCAT(mt.word,',') FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk) AS triggers`;
-    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), 0);
-    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? ORDER BY m.memories_id_pk DESC`)
-        .all(roomId, card.id).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
+    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND IFNULL(m.canon,0)=0 AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), budget, 0);
+    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? AND IFNULL(m.canon,0)=0 ORDER BY m.memories_id_pk DESC`)
+        .all(roomId, card.id).reverse().filter(active), budget, roomMems.reduce((a, r) => a + tok(r.content), 0));
+
+    // Canon: curated always-true memories — injected every generation,
+    // bypassing triggers and the refresh counter, capped by their own
+    // budget. Shared canon + this card's canon both apply.
+    const canonRows = cap(db.prepare(`SELECT m.content FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+        WHERE rm.rooms_id_fk=? AND m.canon=1 AND (NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk)
+            OR EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk AND mc.cards_id_fk=?))
+        ORDER BY m.memories_id_pk`).all(roomId, card.id), mem?.mem_canon_budget ?? 800);
+    const canonText = canonRows.length ? 'Canon:\n' + canonRows.map(m => '- ' + m.content).join('\n') : null;
+
+    // Open story arcs: tracked threads the AI should keep advancing.
+    const arcRows = cap(db.prepare(`SELECT title || CASE WHEN summary!='' THEN ' — ' || summary ELSE '' END AS content
+        FROM room_arcs WHERE rooms_id_fk=? AND status='open' ORDER BY updated`).all(roomId), mem?.mem_arc_budget ?? 700);
+    const arcText = arcRows.length ? 'Open threads:\n' + arcRows.map(a => '- ' + a.content).join('\n') : null;
 
     const memText = (injectMem && (roomMems.length || mems.length))
         ? (mem?.mem_unified
@@ -175,8 +198,10 @@ export async function generateReply(roomId, card) {
         examples: card.mes_example && `Example dialogue:\n${card.mes_example}`,
         roster: others.length && `Also present in the scene:\n` +
             others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
+        canon: canonText,
         world: worldText,
         memories: memText,
+        arcs: arcText,
         instructions: `You are ${card.name} and ONLY ${card.name} — an NPC in a shared roleplay. ` +
             `The other characters listed are separate people speaking for themselves; ` +
             `do NOT speak for them or imitate them. Write ONLY ${card.name}'s next message.` +
@@ -230,6 +255,8 @@ export async function generateReply(roomId, card) {
         'Chat History': history.reduce((n, m) => n + tok(m.name + ' ' + m.text), 0),
     };
     parts.Memories = tok(memText);
+    parts.Canon = tok(canonText);
+    parts['Open Threads'] = tok(arcText);
     parts['Current Time'] = tok(timeText);
 
     // Section texts for the chat sidebar's click-to-view prompt inspector.
@@ -243,6 +270,8 @@ export async function generateReply(roomId, card) {
         'Other Characters': others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
         'Post-History Instructions': card.post_history_instructions,
         'Memories': memText,
+        'Canon': canonText,
+        'Open Threads': arcText,
         'Current Time': timeText,
         'Chat History': history.map(m => `${m.name}: ${m.text}`).join('\n'),
     };
@@ -366,10 +395,16 @@ export async function maybeSummarize(roomId) {
         ? 'Character sheets (authoritative current state):\n'
             + roster.map(c => `${c.name}: ${c.description || c.name}`).join('\n') + '\n\n'
         : '';
+    // Open thread titles go into the prompt so the writer can advance or
+    // close them by name instead of spawning near-duplicate threads.
+    const openArcs = db.prepare("SELECT title FROM room_arcs WHERE rooms_id_fk=? AND status='open' ORDER BY updated").all(roomId).map(a => a.title);
+    const arcsSuffix = (mem.mem_max_arcs ?? 10) > 0
+        ? MEM_ARCS_SUFFIX + (openArcs.length ? ` Currently open threads: ${openArcs.join('; ')}.` : '')
+        : '';
     const reqBody = {
         model: conn.model || 'local',
         messages: [
-            { role: 'system', content: mem.mem_extraction_prompt?.trim() || (MEM_EXTRACT_PROMPT + (mem.mem_triggers ? MEM_TRIGGERS_SUFFIX : '')) },
+            { role: 'system', content: mem.mem_extraction_prompt?.trim() || (MEM_EXTRACT_PROMPT + (mem.mem_triggers ? MEM_TRIGGERS_SUFFIX : '') + arcsSuffix) },
             { role: 'user', content: sheet + 'Recent chat:\n' + excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
         ],
         temperature: 0.3, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
@@ -388,12 +423,36 @@ export async function maybeSummarize(roomId) {
     const ins = db.prepare("INSERT INTO memories (content,type,origin) VALUES (?,?, 'smart')");
     const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
+    const findArc = db.prepare("SELECT room_arcs_id_pk AS id FROM room_arcs WHERE rooms_id_fk=? AND status='open' AND LOWER(title)=LOWER(?)");
+    const insArc = db.prepare('INSERT INTO room_arcs (rooms_id_fk,title,summary,opened_messages_id_fk) VALUES (?,?,?,?)');
+    const upArc = db.prepare("UPDATE room_arcs SET summary=?, status='open', updated=datetime('now') WHERE room_arcs_id_pk=?");
+    const closeArc = db.prepare("UPDATE room_arcs SET status='resolved', closed_messages_id_fk=?, updated=datetime('now') WHERE room_arcs_id_pk=?");
     for (const line of text.split('\n')) {
         let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
-        fact = fact.replace(/^\[[^\]]+\]\s*/, ''); // strip leading [Name]/[shared] scope tag
-        const tag = fact.match(/^\[(fact|event|relationship|preference)\]\s*/i);
-        const type = tag ? tag[1].toLowerCase() : 'fact';
-        if (tag) fact = fact.slice(tag[0].length);
+        // Leading [tag]s: memory-type tags set the stored type, [arc*] tags
+        // drive room_arcs, anything else ([Name]/[shared] scope tags) is
+        // stripped. The old single-strip order silently flattened every
+        // [event]/[preference]/[relationship] line to 'fact'.
+        let type = 'fact', arc = null;
+        for (let i = 0; i < 3; i++) {
+            const t = fact.match(/^\[([^\]]+)\]\s*/);
+            if (!t) break;
+            const w = t[1].trim().toLowerCase();
+            if (['fact', 'event', 'relationship', 'preference'].includes(w)) type = w;
+            else if (['arc', 'arc-open', 'arc-close'].includes(w)) arc = w;
+            fact = fact.slice(t[0].length).trimStart();
+        }
+        if (arc) {
+            const m = fact.match(/^(.*?)(?:\s+[—–]\s+|:\s+)(.*)$/s);
+            const title = (m ? m[1] : fact).trim().replace(/[.\s]+$/, '');
+            const summary = (m ? m[2] : '').trim();
+            if (!title || (mem.mem_max_arcs ?? 10) <= 0) continue;
+            const ex = findArc.get(roomId, title);
+            if (arc === 'arc-close') { if (ex) closeArc.run(lastId, ex.id); }
+            else if (ex) { if (summary) upArc.run(summary, ex.id); }
+            else insArc.run(roomId, title, summary, lastId);
+            continue;
+        }
         let triggers = '';
         // "(triggers: a, b)" anywhere in the line; else a bare trailing "(a, b)".
         const tr = fact.match(/\(\s*triggers?\s*:\s*([^)]*)\)/i) || fact.match(/\(([^)]*)\)\s*$/);
@@ -401,11 +460,12 @@ export async function maybeSummarize(roomId) {
             triggers = tr[1].split(',').map(s => s.trim().replace(/^triggers?\s*:/i, '').toLowerCase()).filter(Boolean).join(',');
             fact = (fact.slice(0, tr.index) + fact.slice(tr.index + tr[0].length)).trim();
         }
-        if (fact.length > 10) {
+        if (fact.length > 10 && !added) {
             const mid = ins.run(fact, type).lastInsertRowid;
             for (const w of triggers.split(',')) { const word = w.trim(); if (word) insTrig.run(mid, word); }
             linkRoom.run(roomId, mid); added++;
-            break; // one memory per extraction run
+            // One memory per extraction run — but keep scanning the rest of
+            // the output for [arc*] lines.
         }
     }
     // Only advance the watermark once extraction actually ran — a failed
@@ -439,6 +499,13 @@ export async function maybeSummarize(roomId) {
                 (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
                  WHERE rm2.rooms_id_fk=? AND m2.origin='smart' ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
             .run(roomId, roomId, totalCap);
+    }
+    // Cap open arcs — oldest-touched threads are dropped first.
+    const arcMax = mem.mem_max_arcs ?? 10;
+    if (arcMax > 0) {
+        db.prepare(`UPDATE room_arcs SET status='dropped', updated=datetime('now') WHERE rooms_id_fk=? AND status='open'
+            AND room_arcs_id_pk NOT IN (SELECT room_arcs_id_pk FROM room_arcs WHERE rooms_id_fk=? AND status='open' ORDER BY updated DESC LIMIT ?)`)
+            .run(roomId, roomId, arcMax);
     }
     // Auto-tune: when enabled, raise the injection budget so stored smart
     // memories aren't dropped purely for exceeding the current budget.

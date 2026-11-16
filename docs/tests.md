@@ -81,7 +81,7 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 **`test/memories.test.js`**
 
 - [x] Create room-scoped and card-scoped memories; `card=-1`/`card=N` scoping
-- [x] Update content/type/triggers/origin; `/api/lastmem` returns latest `origin='smart'`
+- [x] Update content/type/triggers/origin/canon; `/api/lastmem` returns latest `origin='smart'`
 - [x] `memories/move` toggles card↔room scope; delete unlinks and removes
 
 **`test/profiles.test.js` — connections & memory profiles**
@@ -97,6 +97,9 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 - [x] Leading `Name:` tag stripped from the reply; message stored as `kind:'ai'`; `genstats` recorded
 - [x] No AI member → 404; owner with no connection → 500 with a clear error
 - [x] `ai_trigger: 'all'` fires replies after a say (talkativeness 100); `'named'` fires only when the character is mentioned
+- [x] Smart-memory extraction (mock endpoint): typed tags land (`[event]` ≠ flattened to `fact`), one memory per run, trigger keywords parse
+- [x] Canon memories bypass triggers, inject under their own `Canon:` block, never double-inject
+- [x] Arcs: API create/resolve/delete lifecycle; open threads inject under `Open threads:`; `[arc-open]`/`[arc]`/`[arc-close]` extraction tags drive `room_arcs`
 
 **`test/users.test.js`**
 
@@ -127,7 +130,7 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 ## Deliberately not covered
 
 - [ ] Real LLM output — the mock endpoint covers the request/response contract deterministically; a real-model check belongs in a manual smoke script, not CI
-- [ ] `maybeSummarize` smart-memory extraction (requires `auto_mem`; same mock could drive it if desired)
+- [ ] `maybeSummarize` cadence edge cases (context-threshold trigger, per-type caps, watermark retry on failure) — extraction itself is covered; the gating branches aren't
 - [ ] Browser-side behavior (401→login redirects, localStorage) — needs a DOM; asserted indirectly via contract tests
 - [ ] `scripts/` maintenance utilities (interactive, need SSH/live server)
 - [ ] Theme/CSS correctness — no visual testing infrastructure

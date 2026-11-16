@@ -57,6 +57,7 @@ export default {
         const id = b.id || b.world_books_id_pk;
         db.prepare('UPDATE cards SET api_profiles_id_fk=NULL WHERE api_profiles_id_fk=?').run(id);
         db.prepare('UPDATE mem_profiles SET mem_extraction_profile_id=0 WHERE mem_extraction_profile_id=?').run(id);
+        db.prepare('UPDATE mem_profiles SET mem_arc_profile_id=0 WHERE mem_arc_profile_id=?').run(id);
         db.prepare('DELETE FROM api_profiles WHERE api_profiles_id_pk=? AND users_id_fk=?').run(id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
@@ -72,12 +73,14 @@ export default {
             b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
             b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
             b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
-            b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0];
+            b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0,
+            b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId ?? 0];
         const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,auto_mem,mem_every,mem_budget,mem_max,
             mem_max_fact,mem_max_event,mem_max_relationship,mem_max_preference,mem_extraction_prompt,
             mem_context_threshold,mem_response_length,mem_gen_budget,mem_unlimited,mem_unified,mem_triggers,
-            mem_autotune,mem_refresh,mem_activity,mem_extraction_profile_id)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+            mem_autotune,mem_refresh,mem_activity,mem_extraction_profile_id,
+            mem_canon_budget,mem_max_arcs,mem_arc_budget,mem_arc_profile_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
             .run(u.users_id_pk, b.name, ...vals).lastInsertRowid;
         send(res, 200, { id });
     },
@@ -87,13 +90,15 @@ export default {
             mem_max_fact=?, mem_max_event=?, mem_max_relationship=?, mem_max_preference=?,
             mem_extraction_prompt=?, mem_context_threshold=?, mem_response_length=?,
             mem_gen_budget=?, mem_unlimited=?, mem_unified=?, mem_triggers=?,
-            mem_autotune=?, mem_refresh=?, mem_activity=?, mem_extraction_profile_id=?
+            mem_autotune=?, mem_refresh=?, mem_activity=?, mem_extraction_profile_id=?,
+            mem_canon_budget=?, mem_max_arcs=?, mem_arc_budget=?, mem_arc_profile_id=?
             WHERE mem_profiles_id_pk=? AND users_id_fk=?`)
             .run(String(b.name ?? '').trim(), b.auto ? 1 : 0, b.every ?? 10, b.budget ?? 800, b.max ?? 50,
                 b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
                 b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
                 b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
                 b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0,
+                b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId ?? 0,
                 b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
