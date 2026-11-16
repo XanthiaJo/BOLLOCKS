@@ -104,6 +104,14 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 - [x] `users/delete` and authenticated `register` are admin-only (first registered user); non-admin → 403
 - [x] `world` entry create/update/delete requires owning the entry's book — users can't write into each other's lorebooks
 
+**`test/update.test.js` — update check (mock GitHub API via `BOLLOCKS_GH_API`)**
+
+- [x] `cmpVersion` ordering: stable beats prereleases of the same numbers; `beta.3 > beta.2`; numeric (not lexical) prerelease bumps
+- [x] stable = `releases/latest`; no release yet (404) → `latest: null`, not an update
+- [x] beta = newest `vX.Y.Z-beta.N` prerelease only (stable/alpha releases skipped)
+- [x] nightly = dev tip commit (short sha + message + link); `update` is true/false, null when the running build has no git sha to compare
+- [x] unknown channel falls back to stable; the route requires a session (401 otherwise)
+
 ## `test/pngcard.test.js` — card parser units
 
 - [x] `extractCardJson`: tEXt `chara`, zTXt (deflate) `chara`/`ccv3`; junk/missing/garbage chunks → `null`
