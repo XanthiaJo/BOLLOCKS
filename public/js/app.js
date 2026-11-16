@@ -113,7 +113,10 @@ async function loadRoom() {
             renderToks();
         }
         if (d.type === 'delete') document.querySelector(`li[data-mid="${d.id}"]`)?.remove();
-        if (d.type === 'mem') mpFlashSaved(d.phase === 'done' ? (d.count ? `${d.count} new memories` : 'Memories updated') : 'Extracting memories…');
+        if (d.type === 'mem') {
+            if (d.notify !== false) mpFlashSaved(d.phase === 'done' ? (d.count ? `${d.count} new memories` : 'Memories updated') : 'Extracting memories…');
+            if (d.phase === 'done') get(`lastmem?room=${room}`).then(renderLastMem);
+        }
     };
     // Network drops auto-retry, but an HTTP error response leaves the source
     // CLOSED forever — reopen it or live updates silently stop until refresh.

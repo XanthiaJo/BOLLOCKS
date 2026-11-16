@@ -413,8 +413,10 @@ export async function maybeSummarize(roomId) {
     db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
     if (mem.mem_activity) {
         console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
-        push(roomId, { type: 'mem', phase: 'done', count: added });
     }
+    // Always signal completion — clients refresh lastmem on done even when
+    // activity notifications (the flash) are disabled.
+    push(roomId, { type: 'mem', phase: 'done', count: added, notify: !!mem.mem_activity });
     // Cap stored smart memories per type — oldest entries of each type drop off.
     for (const [type, col] of [['fact','mem_max_fact'],['event','mem_max_event'],['relationship','mem_max_relationship'],['preference','mem_max_preference']]) {
         const cap = mem[col] || 0;
