@@ -102,16 +102,6 @@ nav a.on{background:var(--accent);color:var(--white)}
 .mp-upd .updres button{width:100%;margin-top:8px;font-size:.85em}
 .mp-scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:35}
 .mp-scrim.on{display:block}
-@media (max-width:700px){ /* --mob */
-  nav{gap:8px;padding:8px 10px;overflow-x:auto;scrollbar-width:none}
-  nav::-webkit-scrollbar{display:none}
-  nav a{white-space:nowrap}
-  #sidebar,#rsidebar{display:none}
-  /* drawers overlay content under the nav; layout.js sets top + mutual exclusion */
-  #sidebar.open,#rsidebar.open{display:block;position:fixed;top:49px;bottom:0;z-index:40;box-shadow:0 8px 24px var(--veil-soft)}
-  #sidebar.open{left:0;width:260px}
-  #rsidebar.open{right:0;width:min(320px,85vw)}
-}
 #rsidebar h3{margin:4px 0 8px;font-size:.85em;text-transform:uppercase;color:var(--dim);letter-spacing:.06em}
 /* sidebar picker row — one pattern for all selectable list items:
    .txt (name+caption) flexes, optional thumb <img> and .btns sit beside it.
@@ -244,3 +234,17 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 .acc-h.open .arrow{transform:rotate(90deg)}
 .acc-b{padding:8px 10px;display:none}
 .acc-b.open{display:block}
+
+/* Mobile drawer rules — MUST stay after the base #sidebar/#rsidebar rules:
+   same-specificity selectors, so source order is what lets display:none
+   hide closed sidebars. */
+@media (max-width:700px){ /* --mob */
+  nav{gap:8px;padding:8px 10px;overflow-x:auto;scrollbar-width:none}
+  nav::-webkit-scrollbar{display:none}
+  nav a{white-space:nowrap}
+  #sidebar,#rsidebar{display:none}
+  /* drawers overlay content under the nav; layout.js sets top + mutual exclusion */
+  #sidebar.open,#rsidebar.open{display:flex;position:fixed;top:49px;bottom:0;z-index:40;box-shadow:0 8px 24px var(--veil-soft)}
+  #sidebar.open{left:0;width:260px}
+  #rsidebar.open{right:0;width:min(320px,85vw)}
+}
