@@ -72,7 +72,7 @@ describe('generation (mock LLM)', () => {
 
     test('profile prompt_order reorders the system prompt', async () => {
         const mps = (await s.get('promptprofiles')).json;
-        assert.equal(mps.promptBlocks.length, 11);
+        assert.equal(mps.promptBlocks.length, 13);
         const prof = mps.profiles[0];
         // 'history' stays last so the reversed sections still land in system.
         const rev = mps.promptBlocks.map(b => b.key).filter(k => k !== 'history').reverse().concat('history');
@@ -177,6 +177,57 @@ describe('generation (mock LLM)', () => {
             assert.doesNotMatch(mems[0].content, /triggers/i);
             await s.post('rooms/delete', { id: mroom });
             await s.post('cards/delete', { id: wren });
+        } finally { await ext.close(); }
+    });
+
+    test('canon memories bypass triggers and land in their own block', async () => {
+        const mem = (await s.post('memories', { room, content: 'CANON TRUTH', type: 'fact', canon: 1, triggers: 'nevermatches' })).json.id;
+        llm.requests.length = 0;
+        await s.post('generate', { room, card });
+        const sys = JSON.parse(llm.requests.at(-1).body).messages[0].content;
+        assert.match(sys, /Canon:\n- CANON TRUTH/);
+        assert.ok(!sys.includes('Memories:\n- CANON TRUTH')); // not double-injected
+        await s.post('memories/delete', { id: mem });
+    });
+
+    test('arcs: API lifecycle and open-thread injection', async () => {
+        const arcId = (await s.post('arcs', { room, title: 'The stolen map', summary: 'Kira suspects the guild' })).json.id;
+        const arcs = (await s.get(`arcs?room=${room}`)).json.arcs;
+        assert.equal(arcs[0].status, 'open');
+        const sysOf = async () => {
+            llm.requests.length = 0;
+            await s.post('generate', { room, card });
+            return JSON.parse(llm.requests.at(-1).body).messages[0].content;
+        };
+        assert.match(await sysOf(), /Open threads:\n- The stolen map — Kira suspects the guild/);
+        await s.post('arcs/resolve', { id: arcId });
+        assert.doesNotMatch(await sysOf(), /stolen map/); // resolved threads leave the prompt
+        assert.equal((await s.post('arcs/delete', { id: arcId })).status, 200);
+    });
+
+    test('extraction parses [arc*] tags and keeps typed memory tags', async () => {
+        const ext = await mockLLM('- [event] Wren offered tea.\n- [arc-open] The tea debt — Wren owes a service.\n- [arc] The tea debt — Wren promised biscuits too.');
+        try {
+            const profId = (await s.post('profiles', { name: 'ExtractArc', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'ExtArc', auto: true, every: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Arc room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            await s.post('say', { room: mroom, text: 'Wren offered me tea.' });
+            const arcs = await until(async () => {
+                const a = (await s.get(`arcs?room=${mroom}`)).json.arcs;
+                return a?.length ? a : null;
+            }, 'open arc');
+            // [arc-open] created it; the [arc] beat overwrote the summary.
+            assert.equal(arcs[0].title, 'The tea debt');
+            assert.equal(arcs[0].status, 'open');
+            assert.match(arcs[0].summary, /biscuits/);
+            // The memory bullet kept its [event] type instead of flattening to fact.
+            const mems = await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                return m?.length ? m : null;
+            }, 'smart memory');
+            assert.equal(mems[0].type, 'event');
+            await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
 

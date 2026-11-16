@@ -309,6 +309,22 @@ export function migrateSchema() {
     if (uv !== 6) db.exec('PRAGMA user_version=6');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
+    // canon=1: always-true memory — injected every generation, bypassing
+    // trigger gating and the injection-refresh counter.
+    if (!mecols.includes('canon')) db.exec('ALTER TABLE memories ADD COLUMN canon INTEGER DEFAULT 0');
+    // Story arcs: room-scoped open/resolved threads tracked by extraction
+    // ([arc-open]/[arc]/[arc-close] tags) and injected while open.
+    db.exec(`CREATE TABLE IF NOT EXISTS room_arcs (
+        room_arcs_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+        rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+        title TEXT NOT NULL,
+        summary TEXT DEFAULT '',
+        status TEXT DEFAULT 'open' CHECK(status IN ('open','resolved','dropped')),
+        opened_messages_id_fk INTEGER,
+        closed_messages_id_fk INTEGER,
+        created TEXT DEFAULT (datetime('now')),
+        updated TEXT DEFAULT (datetime('now'))
+    )`);
     // prompt_profiles: injection/prompt-assembly presets. prompt order moved
     // off mem_profiles — it positions card/world blocks too, so it was never
     // memory-scoped. The user's active profile applies to all their
@@ -330,6 +346,14 @@ export function migrateSchema() {
         }
     }
     if (mpcols.includes('mem_prompt_order')) db.exec('ALTER TABLE mem_profiles DROP COLUMN mem_prompt_order');
+    // Canon + arc settings on memory profiles. mem_arc_profile_id is the
+    // escape hatch for a dedicated arc pass — 0 shares the extraction profile.
+    for (const [col, def] of Object.entries({
+        mem_canon_budget: 'INTEGER DEFAULT 800',
+        mem_max_arcs: 'INTEGER DEFAULT 10',
+        mem_arc_budget: 'INTEGER DEFAULT 700',
+        mem_arc_profile_id: 'INTEGER DEFAULT 0',
+    })) if (!mpcols.includes(col)) db.exec(`ALTER TABLE mem_profiles ADD COLUMN ${col} ${def}`);
     // members = entity (card/user + talkativeness); room_members = junction.
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='room_members'").get()) {
         db.exec(`CREATE TABLE room_members (

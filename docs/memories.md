@@ -143,3 +143,125 @@ flowchart TD
 - Should permanent card memories be visible across rooms if the same card is in multiple rooms? Currently scoped per room. Leaning: keep per-room (matches smart memories; avoids cross-room leakage).
 - Should smart memories ever be attributed to a character? Decided no — room-scoped only, to avoid ambiguity. Users can promote manually.
 - Should there be a "global character memory" (ST-style)? Deferred; would need a memory with no `room_memories` link + UI scope selector.
+
+## Canon & arcs
+
+The `.ph` sections on the Smart memory settings page sketch a richer memory
+system. Two of them — **canon** and **arcs** — are implemented end-to-end;
+their settings-page inputs are wired to real profile columns but stay
+`disabled` until the features get real UI. Designed for minimal API cost.
+
+Terms: **canon** = curated always-true facts ("never contradict this");
+**arcs** = open story threads with a lifecycle ("this is unfolding — advance
+it"). Canon is static; arcs open, progress, close.
+
+### Who does what
+
+Two cost centers behave differently: **generation calls** (background LLM
+jobs — a cheap/local profile works fine) and **injection** (every prompt block
+bills input tokens on the *main* model every reply — only budgets control it).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant S as Server
+    participant W as Memory-writer<br/>(mem_extraction_profile)
+    participant D as SQLite
+    participant R as Reply LLM<br/>(card's api_profile)
+
+    U->>S: POST /api/say
+    S->>D: INSERT message
+
+    Note over S,W: WRITE path — background, cheap/local model OK
+    S->>S: maybeSummarize(room)
+    alt every mem_every msgs OR ctx threshold hit
+        S->>W: excerpt + roster (authoritative state)
+        W-->>S: "[type] memory" / "[arc-open]" / "[arc-close]"
+        S->>D: INSERT memories + triggers<br/>UPSERT room_arcs
+        S->>D: advance watermark, enforce caps
+    end
+
+    Note over S,R: READ path — every reply, main model
+    S->>S: generateReply(room, card)
+    S->>D: canon (always) + constant/triggered world<br/>+ memories (trigger-gated, budget-capped)<br/>+ open arcs (budget-capped)
+    S->>R: system prompt (stable → volatile) + history + nudge
+    R-->>S: reply text
+    S->>D: INSERT message + prompt_logs row
+    S-->>U: SSE {type:'message'}
+```
+
+Canon lives entirely in the read path — pure SQL, no model call. Arcs exist
+on both sides: written by the memory-writer, injected on every reply.
+
+### Schema
+
+```sql
+ALTER TABLE memories ADD COLUMN canon INTEGER DEFAULT 0;
+ALTER TABLE mem_profiles ADD COLUMN mem_canon_budget INTEGER DEFAULT 800;
+
+CREATE TABLE IF NOT EXISTS room_arcs (
+    room_arcs_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+    rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+    title TEXT NOT NULL,
+    summary TEXT DEFAULT '',           -- writer updates as it progresses
+    status TEXT DEFAULT 'open'
+        CHECK(status IN ('open','resolved','dropped')),
+    opened_messages_id_fk INTEGER,     -- anchors "when did this start"
+    closed_messages_id_fk INTEGER,
+    created TEXT DEFAULT (datetime('now')),
+    updated TEXT DEFAULT (datetime('now'))
+);
+
+ALTER TABLE mem_profiles ADD COLUMN mem_max_arcs INTEGER DEFAULT 10;
+ALTER TABLE mem_profiles ADD COLUMN mem_arc_budget INTEGER DEFAULT 700;
+ALTER TABLE mem_profiles ADD COLUMN mem_arc_profile_id INTEGER DEFAULT 0;
+-- 0 = share mem_extraction_profile_id; non-zero = dedicated pass (reserved,
+-- must still belong to the room owner). Cleared on api_profile/user delete.
+```
+
+All additive in `migrateSchema()`; the new `mem_*` columns ride
+`MEM_PROFILE_FIELDS`; `room_arcs` is covered by `deleteRoomCascade`.
+
+### Canon (injection-only, no extra LLM calls)
+
+- `memories.canon` is set via `POST /api/memories` / `memories/update`
+  (orthogonal to `type`/`origin` — a smart fact can be promoted); shown as a
+  `canon` badge + disabled checkbox on the Memories page.
+- `generateReply` injects canon under the `canon` PROMPT_BLOCKS key (default
+  position: after `roster`, before `world` — very stable, cache-friendly).
+  Bypasses trigger gating AND the `mem_refresh` counter; capped by
+  `mem_canon_budget`. `canon=1` rows are excluded from the regular memory
+  block so they don't inject twice. Shared canon + the card's own apply.
+
+### Arcs (room_arcs + [arc\*] extraction tags)
+
+- Routes: `GET /api/arcs?room=`; `POST /api/arcs` / `arcs/update` /
+  `arcs/resolve` / `arcs/delete` — all `roomMember`-gated.
+- Injection: open arcs render under the `arcs` PROMPT_BLOCKS key (default:
+  after `memories`), `title — summary` per line, capped by `mem_arc_budget`.
+- Extraction: when `mem_max_arcs > 0`, the built-in extraction prompt gains
+  `MEM_ARCS_SUFFIX` plus the room's current open titles for grounding.
+  `[arc-open] Title — summary` inserts/updates, `[arc] Title — beat` updates
+  the summary, `[arc-close] Title` resolves — matched case-insensitively on
+  title. Arc lines coexist with the single memory bullet: extra memory lines
+  are still ignored, but the scan no longer stops at the first bullet.
+- Open arcs over `mem_max_arcs` drop to `dropped`, least-recently-touched
+  first.
+
+### Parser fix folded in
+
+Leading `[tag]` stripping now loops (up to 3 tags): type tags set `type`,
+`[arc*]` tags drive `room_arcs`, anything else (`[Name]`/`[shared]`) is
+stripped. The old single-strip order flattened every
+`[event]`/`[preference]`/`[relationship]` line to `fact` — types now land
+correctly.
+
+### Open decisions
+
+- Canon flag vs. reusing `world_entries.constant` — went with the flag (keeps
+  canon inside the memory UI: promote-in-place, per-room).
+- Arc `summary` overwrite vs. append — overwrite for now (one line per arc,
+  cheap injection); a beats timeline would need its own cap.
+- A dedicated arc extraction pass on `mem_arc_profile_id` — reserved, not
+  implemented; add if tag-folding proves unreliable.

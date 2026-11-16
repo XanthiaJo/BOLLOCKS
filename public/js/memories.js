@@ -34,7 +34,7 @@ function renderList(){
     <h4 style="margin:12px 0 4px;color:var(--dim);font-size:.85em;text-transform:uppercase;letter-spacing:.04em">${esc(t)} (${groups[t].length})</h4>
     ${groups[t].map(m=>editId===m.id?editForm(m):`
     <div class="card">
-      <div><div class="comment">${esc(m.content)}</div><div class="keys"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${m.triggers?esc(m.triggers):'(always on)'}</div><div class="meta">#${m.id} · ${m.created||''} · ${esc(memScope(m.cards_id_fk))}</div></div>
+      <div><div class="comment">${esc(m.content)}</div><div class="keys"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span>${m.canon?' <span class="mtag">canon</span>':''} ${m.triggers?esc(m.triggers):'(always on)'}</div><div class="meta">#${m.id} · ${m.created||''} · ${esc(memScope(m.cards_id_fk))}</div></div>
       <div class="btns"><button onclick="editMem(${m.id})">Edit</button>${curTab==='smart'?`<button onclick="permPick(${m.id})">&rarr; perm</button>`:(cardId===0?`<button onclick="toSmart(${m.id})">&rarr; smart</button>`:'')}<button class="del" onclick="del(${m.id})">Delete</button></div>
     </div>
     ${permPicker(m)}</div>`).join('')}`).join('');
@@ -54,6 +54,7 @@ function editForm(m){
     <div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap">
       <select id="em_type_${m.id}" style="width:auto">${types.map(t=>`<option${t===(m.type||'fact')?' selected':''}>${t}</option>`).join('')}</select>
       <select id="em_scope_${m.id}" style="width:auto">${scopeOpts}</select>
+      <label class="cb" title="Canon: always injected into the prompt, bypassing trigger keywords. Editing not enabled yet."><input type="checkbox" id="em_canon_${m.id}"${m.canon?' checked':''} disabled> canon</label>
     </div>
     <input id="em_trig_${m.id}" placeholder="trigger keywords" value="${esc(m.triggers||'')}" style="width:100%;margin-top:6px;font-size:.85em">
   </div>`;
