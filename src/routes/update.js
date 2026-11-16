@@ -107,10 +107,11 @@ export default {
             git('checkout', '-B', branch, `origin/${branch}`);
             const sha = git('rev-parse', '--short', 'HEAD');
             send(res, 200, { ok: true, branch, sha });
-            // Self-restart: a detached twin binds the same port (retrying
-            // while this process exits), so `npm start` shells need no
-            // supervisor. Respond first — the client polls /api/version.
+            // Self-restart: release the port, then respawn a detached twin so
+            // the pulled code takes over — `npm start` shells need no
+            // supervisor. Respond first; the client polls /api/version.
             setTimeout(() => {
+                globalThis.mpServer?.close();
                 spawn(process.execPath, ['src/server.js'], {
                     cwd: root, detached: true, stdio: 'ignore', windowsHide: true, env: process.env,
                 }).unref();

@@ -76,4 +76,7 @@ server.on('error', e => {
     console.error(`[rp] could not bind :${PORT}`, e);
     process.exit(1);
 });
+// The pull route closes this before spawning its replacement twin so the
+// port is free regardless of what the pulled code supports.
+globalThis.mpServer = server;
 server.listen(PORT, () => console.log(`[rp] listening on :${PORT}`));
