@@ -7,7 +7,7 @@ import { deleteUserCascade } from '../lib/cascade.js';
 export default {
     'GET /api/me': async (req, res, u) => {
         const persona = db.prepare('SELECT cards_id_pk AS id,name FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk);
-        send(res, 200, { handle: u.handle, email: u.email || '', persona: persona || null });
+        send(res, 200, { handle: u.handle, email: u.email || '', persona: persona || null, admin: isAdmin(u) });
     },
     'POST /api/me/update': async (req, res, u) => {
         const b = await readBody(req);

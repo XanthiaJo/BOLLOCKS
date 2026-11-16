@@ -15,8 +15,11 @@
         ['Connection', '/connection.html'],
     ];
     const here = location.pathname === '/index.html' ? '/' : location.pathname;
+    // The version badge lives at the bottom of the page's sidebar; pages
+    // without one (profile) keep it under the nav brand as a fallback.
+    const hasSidebar = !!(document.getElementById('sidebar') || document.getElementById('rsidebar'));
     const nav = document.createElement('nav');
-    nav.innerHTML = '<span class="brand">🍒 B.O.L.L.O.C.K.S<span class="ver" id="mpver"></span></span>' +
+    nav.innerHTML = '<span class="brand">🍒 B.O.L.L.O.C.K.S' + (hasSidebar ? '' : '<span class="ver" id="mpver"></span>') + '</span>' +
         NAV.map(([label, href]) =>
             `<a href="${href}"${href === here ? ' class="on"' : ''}>${label}</a>`).join('') +
         '<span style="flex:1"></span>' +
@@ -79,17 +82,150 @@
     ubtn.onclick = e => { e.stopPropagation(); udrop.classList.toggle('open'); };
     document.addEventListener('click', e => { if (!e.target.closest('.usermenu')) udrop.classList.remove('open'); });
     fetch('/api/version').then(r => r.json()).then(d => {
-        const el = document.getElementById('mpver');
-        if (!el || !d.version) return;
-        el.textContent = 'v' + d.version;
-        if (d.sha) {
-            const s = document.createElement('span');
-            s.textContent = d.sha;
-            s.style.cssText = 'display:block;font-size:.85em';
-            el.appendChild(s);
-        }
+        mpVer = d.version || '';
+        mpVerSha = d.sha || null;
+        mpVerBadge();
     }).catch(() => {});
 })();
+
+/* Sidebar version badge + update check.
+   The badge is pinned to the bottom of the page's sidebar (left #sidebar,
+   else #rsidebar) and opens a popover that checks GitHub for updates on a
+   chosen channel: stable = latest release, beta = latest vX.Y.Z-beta.N
+   prerelease, nightly = latest dev commit (compared against the running
+   build's git sha). Pages without a sidebar keep the badge in the nav. */
+let mpVer = '', mpVerSha = null, mpUpd, mpUpdAnchor, mpUpdLast, mpAdmin = false;
+
+function mpVerBadge() {
+    const host = document.getElementById('sidebar') || document.getElementById('rsidebar');
+    let el = document.getElementById('mpver');
+    if (host && (!el || el.parentNode !== host)) {
+        if (el) el.remove(); // nav fallback badge → move into the sidebar
+        el = document.createElement('a');
+        el.id = 'mpver'; el.className = 'mp-ver'; el.href = '#';
+        el.onclick = e => { e.preventDefault(); mpUpdOpen(el); };
+        host.appendChild(el);
+    } else if (!host && !el) return;
+    if (!mpVer) return;
+    el.textContent = 'v' + mpVer;
+    if (mpVerSha) {
+        const s = document.createElement('span');
+        s.textContent = mpVerSha;
+        s.style.cssText = 'display:block;font-size:.85em';
+        el.appendChild(s);
+    }
+}
+
+const mpEsc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Anchor the popover to the badge (clamped to the viewport), flipping above
+// it when the badge sits low. Re-run whenever the popover's content grows —
+// the check result lands async, so the skeleton's height isn't final.
+function mpUpdPlace() {
+    if (!mpUpd || !mpUpdAnchor || !mpUpd.classList.contains('open')) return;
+    mpUpd.style.top = mpUpd.style.left = '';
+    const r = mpUpdAnchor.getBoundingClientRect();
+    mpUpd.style.left = Math.max(8, Math.min(r.left, innerWidth - mpUpd.offsetWidth - 8)) + 'px';
+    if (r.bottom + mpUpd.offsetHeight + 8 > innerHeight) mpUpd.style.top = Math.max(8, r.top - mpUpd.offsetHeight - 6) + 'px';
+    else mpUpd.style.top = (r.bottom + 6) + 'px';
+}
+
+function mpUpdOpen(anchor) {
+    if (!mpUpd) {
+        mpUpd = document.createElement('div');
+        mpUpd.className = 'mp-upd';
+        document.body.appendChild(mpUpd);
+        document.addEventListener('click', e => { if (!e.target.closest('.mp-upd,#mpver')) mpUpd.classList.remove('open'); });
+        addEventListener('keydown', e => { if (e.key === 'Escape') mpUpd.classList.remove('open'); });
+    }
+    if (mpUpd.classList.contains('open')) return mpUpd.classList.remove('open');
+    mpUpdAnchor = anchor;
+    const saved = localStorage.mp_updchan || 'stable';
+    mpUpd.innerHTML = '<div class="updh">Check for updates</div>' +
+        '<div class="updchans">' +
+        ['stable', 'beta', 'nightly'].map(c =>
+            `<button${c === saved ? ' class="on"' : ''} onclick="mpUpdCheck('${c}')">${c[0].toUpperCase() + c.slice(1)}</button>`).join('') +
+        '</div><div class="updres" id="mpupdres"></div>';
+    mpUpd.classList.add('open');
+    mpUpdPlace();
+    mpUpdCheck(saved);
+    // Am I admin? Decides whether the pull/update action is offered.
+    fetch('/api/me', { headers: { Authorization: 'Bearer ' + (localStorage.mp_token || '') } })
+        .then(r => r.ok ? r.json() : null).then(d => {
+            if (d?.admin && mpUpdLast) { mpAdmin = true; mpUpdRender(mpUpdLast); }
+        }).catch(() => {});
+}
+
+function mpUpdRender(d) {
+    const res = document.getElementById('mpupdres');
+    if (!res) return;
+    if (d.error) { res.textContent = d.error; return; }
+    const pull = ch => mpAdmin
+        ? `<br><button class="act" onclick="mpUpdPull('${ch}')">Pull &amp; update</button>` : '';
+    if (d.channel === 'nightly') {
+        if (!d.latest) { res.textContent = 'No commits found on dev.'; return; }
+        res.innerHTML = `Dev tip: <b>${mpEsc(d.latest.sha)}</b> — ${mpEsc(d.latest.message)}<br>` +
+            `<a href="${mpEsc(d.latest.url)}" target="_blank" rel="noopener">View commit</a>` +
+            (d.update === true ? '<br><b>New commit available.</b>'
+                : d.update === null ? "<br>(running build has no git sha — can't compare)" : '<br>Up to date.') +
+            // Nightly can always be synced by an admin (null = sha unknown).
+            (d.update !== false ? pull('nightly') : '');
+    } else if (d.latest) {
+        res.innerHTML = (d.update
+            ? `New release available: <b>${mpEsc(d.latest.tag)}</b><br><a href="${mpEsc(d.latest.url)}" target="_blank" rel="noopener">View release</a>`
+            : `Up to date — latest ${d.channel} is <b>${mpEsc(d.latest.tag)}</b>`) + (d.update ? pull(d.channel) : '');
+    } else {
+        res.textContent = `No ${d.channel} releases yet.`;
+    }
+    mpUpdPlace();
+}
+
+function mpUpdCheck(ch) {
+    localStorage.mp_updchan = ch;
+    for (const b of mpUpd.querySelectorAll('.updchans button'))
+        b.classList.toggle('on', b.getAttribute('onclick') === `mpUpdCheck('${ch}')`);
+    const res = document.getElementById('mpupdres');
+    if (!res) return;
+    res.textContent = 'Checking…';
+    mpUpdPlace();
+    fetch('/api/update?channel=' + ch, { headers: { Authorization: 'Bearer ' + (localStorage.mp_token || '') } })
+        .then(r => r.status === 401 ? (location = '/login.html') : r.json())
+        .then(d => { if (d) { mpUpdLast = d; mpUpdRender(d); } })
+        .catch(() => { res.textContent = 'Update check failed.'; mpUpdPlace(); });
+}
+
+// Admin action: fast-forward the checkout to the channel's branch and let the
+// server restart itself; poll /api/version until the new build answers.
+function mpUpdPull(ch) {
+    const res = document.getElementById('mpupdres');
+    if (!res) return;
+    res.textContent = 'Pulling…';
+    fetch('/api/update/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (localStorage.mp_token || '') },
+        body: JSON.stringify({ channel: ch }),
+    })
+        .then(r => r.status === 401 ? (location = '/login.html') : r.json())
+        .then(d => {
+            if (!d) return;
+            if (d.error) { res.textContent = d.error; mpUpdPlace(); return; }
+            res.innerHTML = `Updated to <b>${mpEsc(d.sha)}</b> (${mpEsc(d.branch)}) — restarting…`;
+            mpUpdPlace();
+            const t0 = Date.now();
+            const iv = setInterval(() => {
+                fetch('/api/version').then(r => r.json()).then(v => {
+                    if ((v.sha && v.sha !== mpVerSha) || (!v.sha && Date.now() - t0 > 4000)) {
+                        clearInterval(iv);
+                        location.reload();
+                    } else if (Date.now() - t0 > 20000) {
+                        clearInterval(iv);
+                        res.textContent = 'Restart pending — reload the page in a moment.';
+                    }
+                }).catch(() => {});
+            }, 1200);
+        })
+        .catch(() => { res.textContent = 'Update failed.'; });
+}
 
 // Right-sidebar profile quick-activate (used by connection page's rail).
 function activateProf(id) {
@@ -171,6 +307,7 @@ function initSidebar({ tabs = [], sections = [], buttons = [], footer = '' } = {
         sections.map(s => `${s.wrap ? `<div id="${s.wrap}">` : ''}${s.title ? `<h3>${s.title}</h3>` : ''}<div id="${s.id}"></div>${s.wrap ? '</div>' : ''}`).join('') +
         buttons.map(b => `<button${b.id ? ` id="${b.id}"` : ''} class="${b.cls || 'act'}" onclick="${b.onclick}">${b.label}</button>`).join('') +
         (footer ? `<small>${footer}</small>` : '');
+    mpVerBadge(); // innerHTML wipe removes the version badge — pin it back
 }
 
 /* Editor form header — every editor's first child is
