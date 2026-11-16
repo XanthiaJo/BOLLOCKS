@@ -306,7 +306,10 @@ export function migrateSchema() {
             if (clean !== r.triggers) db.prepare('UPDATE memories SET triggers=? WHERE memories_id_pk=?').run(clean, r.id);
         }
     }
-    if (uv !== 6) db.exec('PRAGMA user_version=6');
+    // One-time: the seeded lorebook was named 'The House — notes' — rename
+    // to plain 'The House'.
+    if (uv < 7) db.exec("UPDATE world_books SET name='The House' WHERE name='The House — notes'");
+    if (uv !== 7) db.exec('PRAGMA user_version=7');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
     // canon=1: always-true memory — injected every generation, bypassing
@@ -737,7 +740,7 @@ function seedExamples(room) {
     db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,cards_id_fk) VALUES (?,?)').run(room, wren);
 
     const book = db.prepare('INSERT INTO world_books (owner_users_id_fk,name) VALUES (?,?)')
-        .run(uid, 'The House — notes').lastInsertRowid;
+        .run(uid, 'The House').lastInsertRowid;
     const ins = db.prepare('INSERT INTO world_entries (comment,content,constant,enabled,ord) VALUES (?,?,?,?,?)');
     const link = db.prepare('INSERT INTO book_entries (world_books_id_fk,world_entries_id_fk) VALUES (?,?)');
     const ik = db.prepare('INSERT OR IGNORE INTO world_entry_keys (world_entries_id_fk,word,kind) VALUES (?,?,?)');
