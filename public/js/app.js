@@ -276,7 +276,6 @@ function renderLastMem(m) {
     $('lastmem').innerHTML = m ? `<div style="font-size:.8em;color:var(--muted);line-height:1.4">${m.text}</div>` : '<div style="font-size:.8em;color:var(--neutral)">none yet</div>';
 }
 let lastStats = null;
-const PAGE_LINKS = { 'World Info': '/world.html', 'Memories': '/memories.html' };
 function showModal(title, text) {
     let v = document.getElementById('partview');
     if (!v) {
@@ -292,7 +291,16 @@ function showModal(title, text) {
         <button onclick="document.getElementById('partview').remove()">Close</button></div>`;
 }
 function showRequest() { showModal('Request JSON', JSON.stringify(lastStats?.request, null, 2)); }
-function showPart(k) { showModal(k, (lastStats?.texts || {})[k]); }
+function showPart(k) {
+    const t = (lastStats?.texts || {})[k];
+    if (k.startsWith('(')) return showModal(k, t); // never sent — show raw text
+    const json = k === 'Chat History' && lastStats?.request
+        // Exactly the message objects sent — excludes the system prompt
+        // and the trailing "Name:" nudge.
+        ? lastStats.request.messages.filter(m => m.role !== 'system').slice(0, -1)
+        : { role: 'system', content: t };
+    showModal(k, JSON.stringify(json, null, 2));
+}
 async function renderToks() {
     const { stats } = await get('genstats?room=' + room);
     lastStats = stats;
@@ -310,13 +318,10 @@ async function renderToks() {
         (scale !== 1 ? `<small style="color:var(--faint)">sections ≈ scaled to actual total</small>` : '') +
         entries.map(([k, v]) => {
             const shown = k.startsWith('(') ? v : Math.round(v * scale);
-            const href = PAGE_LINKS[k];
             const hasText = k in (lastStats?.texts || {});
-            const lbl = href
-                ? `<a href="${href}" style="color:var(--muted)">${k}</a>`
-                : hasText
-                    ? `<a href="#" onclick="showPart('${k}');return false" style="color:var(--muted)">${k}</a>`
-                    : `<span>${k}</span>`;
+            const lbl = hasText
+                ? `<a href="#" onclick="showPart('${k}');return false" style="color:var(--muted)" title="View JSON sent for this section">${k}</a>`
+                : `<span>${k}</span>`;
             return `<div style="display:flex;justify-content:space-between;font-size:.8em;color:var(--muted)" title="est ${v}"><span>${lbl}</span><span>${shown}</span></div>`;
         }).join('');
 }
