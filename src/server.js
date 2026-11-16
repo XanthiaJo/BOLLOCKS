@@ -34,7 +34,7 @@ const router = {
     'GET /api/version': async (req, res) => send(res, 200, { version: VERSION, sha: SHA || null }),
 };
 
-http.createServer(async (req, res) => {
+const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
     const key = `${req.method} ${url.pathname}`;
     const user = auth(req);
@@ -67,4 +67,13 @@ http.createServer(async (req, res) => {
         return fs.createReadStream(file).pipe(res);
     }
     send(res, 404, { error: 'not found' });
-}).listen(PORT, () => console.log(`[rp] listening on :${PORT}`));
+});
+// EADDRINUSE is retried briefly so a self-restart (POST /api/update/pull
+// respawns a twin before this process exits) can take over the port.
+let bindRetries = 10;
+server.on('error', e => {
+    if (e.code === 'EADDRINUSE' && bindRetries-- > 0) return setTimeout(() => server.listen(PORT), 500);
+    console.error(`[rp] could not bind :${PORT}`, e);
+    process.exit(1);
+});
+server.listen(PORT, () => console.log(`[rp] listening on :${PORT}`));

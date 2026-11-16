@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
-import { boot, tmp, pub } from './helpers.js';
+import { boot, tmp, pub, asUser } from './helpers.js';
 import { cmpVersion } from '../src/routes/update.js';
 
 const RUNNING_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -110,5 +110,23 @@ test('unknown channel falls back to stable; unauthenticated requests are 401', a
         assert.equal(r.json.channel, 'stable');
         const p = pub(s);
         assert.equal((await p.get('update?channel=stable')).status, 401);
+    } finally { await s.stop(); await gh.close(); }
+});
+
+// pull/update: only refusal paths are exercised — an admin-allowed pull
+// would run git against the real checkout, so the happy path stays manual.
+test('update/pull: admin-only, valid channel required', async () => {
+    const gh = await mockGH({});
+    const s = await boot(tmp('update-pull'), { BOLLOCKS_GH_API: gh.url });
+    try {
+        await s.login('admin');
+        assert.equal((await s.post('update/pull', { channel: 'bogus' })).status, 400);
+        await asUser(s, 'alice')(async () => {
+            const r = await s.post('update/pull', { channel: 'nightly' });
+            assert.equal(r.status, 403);
+            assert.match(r.json.error, /admin/);
+        });
+        const p = pub(s);
+        assert.equal((await p.post('update/pull', { channel: 'stable' })).status, 401);
     } finally { await s.stop(); await gh.close(); }
 });

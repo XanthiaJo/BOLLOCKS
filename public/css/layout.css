@@ -91,7 +91,7 @@ nav a.on{background:var(--accent);color:var(--white)}
 .mp-ver{display:block;position:sticky;bottom:0;margin-top:auto;padding:8px 2px 8px;font-size:.8em;color:var(--dim);text-decoration:none;background:var(--surface);border-top:1px solid var(--line);cursor:pointer}
 .mp-ver:hover{color:var(--text)}
 .mp-ver span{font-weight:400;letter-spacing:.03em}
-.mp-upd{display:none;position:fixed;z-index:60;min-width:240px;max-width:320px;background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:10px;box-shadow:0 8px 24px var(--veil-soft);font-size:.9em}
+.mp-upd{display:none;position:fixed;z-index:60;min-width:240px;max-width:320px;max-height:calc(100dvh - 16px);overflow-y:auto;background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:10px;box-shadow:0 8px 24px var(--veil-soft);font-size:.9em}
 .mp-upd.open{display:block}
 .mp-upd .updh{font-weight:600;margin-bottom:8px}
 .mp-upd .updchans{display:flex;gap:4px;margin-bottom:8px}
@@ -99,6 +99,7 @@ nav a.on{background:var(--accent);color:var(--white)}
 .mp-upd .updchans button.on{background:var(--accent)}
 .mp-upd .updres{color:var(--muted);line-height:1.45}
 .mp-upd .updres a{color:var(--ai)}
+.mp-upd .updres button{width:100%;margin-top:8px;font-size:.85em}
 .mp-scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:35}
 .mp-scrim.on{display:block}
 @media (max-width:700px){ /* --mob */

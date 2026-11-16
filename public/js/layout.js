@@ -94,7 +94,7 @@
    chosen channel: stable = latest release, beta = latest vX.Y.Z-beta.N
    prerelease, nightly = latest dev commit (compared against the running
    build's git sha). Pages without a sidebar keep the badge in the nav. */
-let mpVer = '', mpVerSha = null, mpUpd;
+let mpVer = '', mpVerSha = null, mpUpd, mpUpdAnchor, mpUpdLast, mpAdmin = false;
 
 function mpVerBadge() {
     const host = document.getElementById('sidebar') || document.getElementById('rsidebar');
@@ -118,6 +118,18 @@ function mpVerBadge() {
 
 const mpEsc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// Anchor the popover to the badge (clamped to the viewport), flipping above
+// it when the badge sits low. Re-run whenever the popover's content grows —
+// the check result lands async, so the skeleton's height isn't final.
+function mpUpdPlace() {
+    if (!mpUpd || !mpUpdAnchor || !mpUpd.classList.contains('open')) return;
+    mpUpd.style.top = mpUpd.style.left = '';
+    const r = mpUpdAnchor.getBoundingClientRect();
+    mpUpd.style.left = Math.max(8, Math.min(r.left, innerWidth - mpUpd.offsetWidth - 8)) + 'px';
+    if (r.bottom + mpUpd.offsetHeight + 8 > innerHeight) mpUpd.style.top = Math.max(8, r.top - mpUpd.offsetHeight - 6) + 'px';
+    else mpUpd.style.top = (r.bottom + 6) + 'px';
+}
+
 function mpUpdOpen(anchor) {
     if (!mpUpd) {
         mpUpd = document.createElement('div');
@@ -127,6 +139,7 @@ function mpUpdOpen(anchor) {
         addEventListener('keydown', e => { if (e.key === 'Escape') mpUpd.classList.remove('open'); });
     }
     if (mpUpd.classList.contains('open')) return mpUpd.classList.remove('open');
+    mpUpdAnchor = anchor;
     const saved = localStorage.mp_updchan || 'stable';
     mpUpd.innerHTML = '<div class="updh">Check for updates</div>' +
         '<div class="updchans">' +
@@ -134,14 +147,37 @@ function mpUpdOpen(anchor) {
             `<button${c === saved ? ' class="on"' : ''} onclick="mpUpdCheck('${c}')">${c[0].toUpperCase() + c.slice(1)}</button>`).join('') +
         '</div><div class="updres" id="mpupdres"></div>';
     mpUpd.classList.add('open');
-    // Anchor to the badge (clamped to the viewport), flipping above it when
-    // the badge sits low — e.g. while a mobile drawer is open.
-    mpUpd.style.top = mpUpd.style.left = '';
-    const r = anchor.getBoundingClientRect();
-    mpUpd.style.left = Math.max(8, Math.min(r.left, innerWidth - mpUpd.offsetWidth - 8)) + 'px';
-    if (r.bottom + mpUpd.offsetHeight + 8 > innerHeight) mpUpd.style.top = Math.max(8, r.top - mpUpd.offsetHeight - 6) + 'px';
-    else mpUpd.style.top = (r.bottom + 6) + 'px';
+    mpUpdPlace();
     mpUpdCheck(saved);
+    // Am I admin? Decides whether the pull/update action is offered.
+    fetch('/api/me', { headers: { Authorization: 'Bearer ' + (localStorage.mp_token || '') } })
+        .then(r => r.ok ? r.json() : null).then(d => {
+            if (d?.admin && mpUpdLast) { mpAdmin = true; mpUpdRender(mpUpdLast); }
+        }).catch(() => {});
+}
+
+function mpUpdRender(d) {
+    const res = document.getElementById('mpupdres');
+    if (!res) return;
+    if (d.error) { res.textContent = d.error; return; }
+    const pull = ch => mpAdmin
+        ? `<br><button class="act" onclick="mpUpdPull('${ch}')">Pull &amp; update</button>` : '';
+    if (d.channel === 'nightly') {
+        if (!d.latest) { res.textContent = 'No commits found on dev.'; return; }
+        res.innerHTML = `Dev tip: <b>${mpEsc(d.latest.sha)}</b> — ${mpEsc(d.latest.message)}<br>` +
+            `<a href="${mpEsc(d.latest.url)}" target="_blank" rel="noopener">View commit</a>` +
+            (d.update === true ? '<br><b>New commit available.</b>'
+                : d.update === null ? "<br>(running build has no git sha — can't compare)" : '<br>Up to date.') +
+            // Nightly can always be synced by an admin (null = sha unknown).
+            (d.update !== false ? pull('nightly') : '');
+    } else if (d.latest) {
+        res.innerHTML = (d.update
+            ? `New release available: <b>${mpEsc(d.latest.tag)}</b><br><a href="${mpEsc(d.latest.url)}" target="_blank" rel="noopener">View release</a>`
+            : `Up to date — latest ${d.channel} is <b>${mpEsc(d.latest.tag)}</b>`) + (d.update ? pull(d.channel) : '');
+    } else {
+        res.textContent = `No ${d.channel} releases yet.`;
+    }
+    mpUpdPlace();
 }
 
 function mpUpdCheck(ch) {
@@ -151,26 +187,44 @@ function mpUpdCheck(ch) {
     const res = document.getElementById('mpupdres');
     if (!res) return;
     res.textContent = 'Checking…';
+    mpUpdPlace();
     fetch('/api/update?channel=' + ch, { headers: { Authorization: 'Bearer ' + (localStorage.mp_token || '') } })
+        .then(r => r.status === 401 ? (location = '/login.html') : r.json())
+        .then(d => { if (d) { mpUpdLast = d; mpUpdRender(d); } })
+        .catch(() => { res.textContent = 'Update check failed.'; mpUpdPlace(); });
+}
+
+// Admin action: fast-forward the checkout to the channel's branch and let the
+// server restart itself; poll /api/version until the new build answers.
+function mpUpdPull(ch) {
+    const res = document.getElementById('mpupdres');
+    if (!res) return;
+    res.textContent = 'Pulling…';
+    fetch('/api/update/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (localStorage.mp_token || '') },
+        body: JSON.stringify({ channel: ch }),
+    })
         .then(r => r.status === 401 ? (location = '/login.html') : r.json())
         .then(d => {
             if (!d) return;
-            if (d.error) { res.textContent = d.error; return; }
-            if (d.channel === 'nightly') {
-                if (!d.latest) { res.textContent = 'No commits found on dev.'; return; }
-                res.innerHTML = `Dev tip: <b>${mpEsc(d.latest.sha)}</b> — ${mpEsc(d.latest.message)}<br>` +
-                    `<a href="${mpEsc(d.latest.url)}" target="_blank" rel="noopener">View commit</a>` +
-                    (d.update === true ? '<br><b>New commit available — pull latest dev.</b>'
-                        : d.update === null ? "<br>(running build has no git sha — can't compare)" : '<br>Up to date.');
-            } else if (d.latest) {
-                res.innerHTML = d.update
-                    ? `New release available: <b>${mpEsc(d.latest.tag)}</b><br><a href="${mpEsc(d.latest.url)}" target="_blank" rel="noopener">View release</a>`
-                    : `Up to date — latest ${d.channel} is <b>${mpEsc(d.latest.tag)}</b>`;
-            } else {
-                res.textContent = `No ${d.channel} releases yet.`;
-            }
+            if (d.error) { res.textContent = d.error; mpUpdPlace(); return; }
+            res.innerHTML = `Updated to <b>${mpEsc(d.sha)}</b> (${mpEsc(d.branch)}) — restarting…`;
+            mpUpdPlace();
+            const t0 = Date.now();
+            const iv = setInterval(() => {
+                fetch('/api/version').then(r => r.json()).then(v => {
+                    if ((v.sha && v.sha !== mpVerSha) || (!v.sha && Date.now() - t0 > 4000)) {
+                        clearInterval(iv);
+                        location.reload();
+                    } else if (Date.now() - t0 > 20000) {
+                        clearInterval(iv);
+                        res.textContent = 'Restart pending — reload the page in a moment.';
+                    }
+                }).catch(() => {});
+            }, 1200);
         })
-        .catch(() => { res.textContent = 'Update check failed.'; });
+        .catch(() => { res.textContent = 'Update failed.'; });
 }
 
 // Right-sidebar profile quick-activate (used by connection page's rail).

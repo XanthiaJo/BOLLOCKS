@@ -3,12 +3,19 @@
 // dev (the badge can't know what "installed" means for a git pull — it just
 // reports the dev tip against the running SHA). GitHub API base/repo are
 // overridable via env so tests can point them at a local mock.
-import { send } from '../lib/util.js';
+import { execFileSync, spawn } from 'node:child_process';
+import path from 'node:path';
+import { send, readBody } from '../lib/util.js';
+import { isAdmin } from '../lib/access.js';
+import { PUB } from '../lib/files.js';
 import { VERSION, SHA } from '../lib/version.js';
 
 const REPO = process.env.BOLLOCKS_REPO || 'XanthiaJo/BOLLOCKS';
 const GH = process.env.BOLLOCKS_GH_API || 'https://api.github.com';
 const CHANNELS = ['stable', 'beta', 'nightly'];
+// Which ref each channel pulls: stable tracks master, beta the beta branch,
+// nightly dev. Only these fixed names are ever passed to git.
+const BRANCHES = { stable: 'master', beta: 'beta', nightly: 'dev' };
 const TTL = 5 * 60 * 1000; // anonymous GitHub rate limit is 60/h per IP
 const cache = new Map();
 
@@ -80,6 +87,37 @@ export default {
             send(res, 200, { channel, current, latest, update });
         } catch (e) {
             send(res, 502, { error: `update check failed: ${e?.message || e}` });
+        }
+    },
+
+    // Admin-only: fast-forward the checkout to the chosen channel's ref and
+    // restart so the pulled code takes over. Refuses a dirty working tree —
+    // checkout -B + fetch are safe only when nothing local is at risk.
+    'POST /api/update/pull': async (req, res, u) => {
+        const b = await readBody(req);
+        const channel = CHANNELS.includes(b.channel) ? b.channel : '';
+        if (!channel) return send(res, 400, { error: 'channel must be stable, beta or nightly' });
+        if (!isAdmin(u)) return send(res, 403, { error: 'admin only' });
+        const root = path.join(PUB, '..');
+        const git = (...args) => execFileSync('git', args, { cwd: root }).toString().trim();
+        const branch = BRANCHES[channel];
+        try {
+            if (git('status', '--porcelain')) return send(res, 409, { error: 'working tree not clean — refusing to update' });
+            git('fetch', 'origin', branch);
+            git('checkout', '-B', branch, `origin/${branch}`);
+            const sha = git('rev-parse', '--short', 'HEAD');
+            send(res, 200, { ok: true, branch, sha });
+            // Self-restart: a detached twin binds the same port (retrying
+            // while this process exits), so `npm start` shells need no
+            // supervisor. Respond first — the client polls /api/version.
+            setTimeout(() => {
+                spawn(process.execPath, ['src/server.js'], {
+                    cwd: root, detached: true, stdio: 'ignore', windowsHide: true, env: process.env,
+                }).unref();
+                setTimeout(() => process.exit(0), 500);
+            }, 200);
+        } catch (e) {
+            send(res, 500, { error: `update failed: ${e?.message || e}` });
         }
     },
 };
