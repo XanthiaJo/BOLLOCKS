@@ -9,18 +9,21 @@ export const DATA_DIR = path.resolve(process.env.BOLLOCKS_DATA || path.join(path
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 export const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
+// Declared REFERENCES clauses are enforced — they're the safety net behind
+// the route-ordered delete cascades (see lib/cascade.js).
+db.exec('PRAGMA foreign_keys=ON');
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY, handle TEXT UNIQUE NOT NULL,
+    users_id_pk INTEGER PRIMARY KEY, handle TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL, salt TEXT NOT NULL,
     settings TEXT DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS sessions (
-    token TEXT PRIMARY KEY, users_id_fk INTEGER NOT NULL REFERENCES users(id),
+    sessions_token_pk TEXT PRIMARY KEY, users_id_fk INTEGER NOT NULL REFERENCES users(users_id_pk),
     created TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS rooms (
-    id INTEGER PRIMARY KEY, name TEXT NOT NULL
+    rooms_id_pk INTEGER PRIMARY KEY, name TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS room_members (
     rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
@@ -29,23 +32,23 @@ CREATE TABLE IF NOT EXISTS room_members (
     UNIQUE (rooms_id_fk, cards_id_fk)
 );
 CREATE TABLE IF NOT EXISTS cards (
-    id INTEGER PRIMARY KEY, owner_users_id_fk INTEGER REFERENCES users(id),
+    cards_id_pk INTEGER PRIMARY KEY, owner_users_id_fk INTEGER REFERENCES users(users_id_pk),
     name TEXT NOT NULL, description TEXT DEFAULT '',
     first_message TEXT DEFAULT '',
     api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk)
 );
 CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
-    cards_id_fk INTEGER REFERENCES cards(id),
+    messages_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+    rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+    cards_id_fk INTEGER REFERENCES cards(cards_id_pk),
     text TEXT NOT NULL,
     send_date TEXT DEFAULT (datetime('now')),
-    supersedes INTEGER REFERENCES messages(id)
+    supersedes INTEGER REFERENCES messages(messages_id_pk)
 );
-CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(rooms_id_fk, id);
+CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(rooms_id_fk, messages_id_pk);
 CREATE TABLE IF NOT EXISTS world_books (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_users_id_fk INTEGER REFERENCES users(id),
+    world_books_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_users_id_fk INTEGER REFERENCES users(users_id_pk),
     name TEXT NOT NULL,
     created TEXT DEFAULT (datetime('now'))
 );
@@ -57,15 +60,15 @@ CREATE TABLE IF NOT EXISTS world_entries (
     ord INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS memories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
     content TEXT NOT NULL,
     created TEXT DEFAULT (datetime('now')),
     type TEXT DEFAULT 'fact',
     origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart'))
 );
 CREATE TABLE IF NOT EXISTS api_profiles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    users_id_fk INTEGER NOT NULL REFERENCES users(id),
+    api_profiles_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+    users_id_fk INTEGER NOT NULL REFERENCES users(users_id_pk),
     name TEXT NOT NULL,
     api_url TEXT NOT NULL DEFAULT '',
     model TEXT NOT NULL DEFAULT '',
@@ -73,7 +76,7 @@ CREATE TABLE IF NOT EXISTS api_profiles (
     active INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS mem_profiles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mem_profiles_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
     users_id_fk INTEGER NOT NULL REFERENCES users(users_id_pk),
     name TEXT NOT NULL,
     auto_mem INTEGER DEFAULT 0,
@@ -311,9 +314,31 @@ export function migrateSchema() {
             if (clean !== r.triggers) db.prepare('UPDATE memories SET triggers=? WHERE memories_id_pk=?').run(clean, r.id);
         }
     }
-    if (uv !== 6) db.exec('PRAGMA user_version=6');
+    // One-time: the seeded lorebook was named 'The House — notes' — rename
+    // to plain 'The House'.
+    if (uv < 7) db.exec("UPDATE world_books SET name='The House' WHERE name='The House — notes'");
+    if (uv !== 7) db.exec('PRAGMA user_version=7');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
+    // (canon=1 is gone: "canon" means having no trigger keywords — see the
+    // user_version=8 migration below and the drop in the cleanup block.)
+    // Story arcs: room-scoped open/resolved threads tracked by extraction
+    // ([arc-open]/[arc]/[arc-close] tags) and injected while open.
+    // origin: 'user' (opened from the Stories page) vs 'smart' (extraction).
+    db.exec(`CREATE TABLE IF NOT EXISTS room_arcs (
+        room_arcs_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+        rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+        title TEXT NOT NULL,
+        summary TEXT DEFAULT '',
+        status TEXT DEFAULT 'open' CHECK(status IN ('open','resolved','dropped')),
+        origin TEXT DEFAULT 'user' CHECK(origin IN ('user','smart')),
+        opened_messages_id_fk INTEGER REFERENCES messages(messages_id_pk) ON DELETE SET NULL,
+        closed_messages_id_fk INTEGER REFERENCES messages(messages_id_pk) ON DELETE SET NULL,
+        created TEXT DEFAULT (datetime('now')),
+        updated TEXT DEFAULT (datetime('now'))
+    )`);
+    if (!db.prepare('PRAGMA table_info(room_arcs)').all().map(c => c.name).includes('origin'))
+        db.exec("ALTER TABLE room_arcs ADD COLUMN origin TEXT DEFAULT 'user'");
     // prompt_profiles: injection/prompt-assembly presets. prompt order moved
     // off mem_profiles — it positions card/world blocks too, so it was never
     // memory-scoped. The user's active profile applies to all their
@@ -335,6 +360,14 @@ export function migrateSchema() {
         }
     }
     if (mpcols.includes('mem_prompt_order')) db.exec('ALTER TABLE mem_profiles DROP COLUMN mem_prompt_order');
+    // Canon + arc settings on memory profiles. mem_arc_profile_id is the
+    // escape hatch for a dedicated arc pass — 0 shares the extraction profile.
+    for (const [col, def] of Object.entries({
+        mem_canon_budget: 'INTEGER DEFAULT 800',
+        mem_max_arcs: 'INTEGER DEFAULT 10',
+        mem_arc_budget: 'INTEGER DEFAULT 700',
+        mem_arc_profile_id: 'INTEGER DEFAULT 0',
+    })) if (!mpcols.includes(col)) db.exec(`ALTER TABLE mem_profiles ADD COLUMN ${col} ${def}`);
     // members = entity (card/user + talkativeness); room_members = junction.
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='room_members'").get()) {
         db.exec(`CREATE TABLE room_members (
@@ -350,7 +383,7 @@ export function migrateSchema() {
             kind TEXT NOT NULL, talkativeness INTEGER DEFAULT 50)`);
         db.exec(`INSERT INTO members_new (members_id_pk,users_id_fk,cards_id_fk,kind,talkativeness)
             SELECT members_id_pk,users_id_fk,cards_id_fk,kind,talkativeness FROM members`);
-        db.exec('DROP TABLE members; ALTER TABLE members_new RENAME TO members');
+        db.exec('PRAGMA foreign_keys=OFF; DROP TABLE members; ALTER TABLE members_new RENAME TO members; PRAGMA foreign_keys=ON');
     }
     // members = a card in a room; kind/users_id_fk derive from the card.
     if (db.prepare('PRAGMA table_info(members)').all().some(c => c.name === 'users_id_fk')) {
@@ -375,13 +408,13 @@ export function migrateSchema() {
     const msgCols = db.prepare('PRAGMA table_info(messages)').all().map(c => c.name);
     if (msgCols.includes('name') || msgCols.includes('kind')) {
         db.exec(`CREATE TABLE messages_new (messages_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-            rooms_id_fk INTEGER NOT NULL REFERENCES rooms(id),
-            cards_id_fk INTEGER REFERENCES cards(id),
+            rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+            cards_id_fk INTEGER REFERENCES cards(cards_id_pk),
             text TEXT NOT NULL, send_date TEXT DEFAULT (datetime('now')),
             supersedes INTEGER)`);
         db.exec(`INSERT INTO messages_new (id,rooms_id_fk,cards_id_fk,text,send_date,supersedes)
             SELECT id,rooms_id_fk,cards_id_fk,text,send_date,supersedes FROM messages`);
-        db.exec('DROP TABLE messages; ALTER TABLE messages_new RENAME TO messages');
+        db.exec('PRAGMA foreign_keys=OFF; DROP TABLE messages; ALTER TABLE messages_new RENAME TO messages; PRAGMA foreign_keys=ON');
     }
     // Keywords get their own table — keys=primary triggers, keysecondary=secondary.
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='world_entry_keys'").get()) {
@@ -467,7 +500,7 @@ export function migrateSchema() {
             comment TEXT DEFAULT '')`);
         db.exec(`INSERT INTO world_entries_new (id,world_books_id_fk,keys,keysecondary,content,constant,enabled,ord,comment)
             SELECT id,world_books_id_fk,keys,keysecondary,content,constant,enabled,ord,comment FROM world_entries`);
-        db.exec('DROP TABLE world_entries; ALTER TABLE world_entries_new RENAME TO world_entries');
+        db.exec('PRAGMA foreign_keys=OFF; DROP TABLE world_entries; ALTER TABLE world_entries_new RENAME TO world_entries; PRAGMA foreign_keys=ON');
     }
     const pcols = db.prepare('PRAGMA table_info(api_profiles)').all().map(c => c.name);
     if (!pcols.includes('strip_prefix')) db.exec('ALTER TABLE api_profiles ADD COLUMN strip_prefix INTEGER DEFAULT 1');
@@ -520,16 +553,17 @@ export function migrateSchema() {
         const smartCond = [hasOrigin && "origin='smart'", hasSource && "source='auto'"]
             .filter(Boolean).join(' OR ') || '0';
         const triggersExpr = mecols2.includes('triggers') ? 'triggers' : "''";
-        db.exec(`BEGIN;
+        db.exec(`PRAGMA foreign_keys=OFF; BEGIN;
             CREATE TABLE memories_new (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
                 content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')),
                 type TEXT DEFAULT 'fact', origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart')),
-                triggers TEXT DEFAULT '');
-            INSERT INTO memories_new (memories_id_pk,content,created,type,origin,triggers)
+                triggers TEXT DEFAULT '', canon INTEGER DEFAULT 0);
+            INSERT INTO memories_new (memories_id_pk,content,created,type,origin,triggers,canon)
                 SELECT memories_id_pk, content, created, type,
                     CASE WHEN ${smartCond} THEN 'smart' ELSE 'user' END,
-                    ${triggersExpr} FROM memories;
-            DROP TABLE memories; ALTER TABLE memories_new RENAME TO memories; COMMIT;`);
+                    ${triggersExpr}, ${mecols2.includes('canon') ? 'IFNULL(canon,0)' : '0'} FROM memories;
+            DROP TABLE memories; ALTER TABLE memories_new RENAME TO memories; COMMIT;
+            PRAGMA foreign_keys=ON`);
     } else if (!mecols2.includes('origin')) {
         // Fresh-ish DB without origin column (shouldn't happen, but be safe).
         db.exec("ALTER TABLE memories ADD COLUMN origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart'))");
@@ -604,6 +638,13 @@ export function migrateSchema() {
             }
         db.exec('ALTER TABLE memories DROP COLUMN triggers');
     }
+    // One-time: "canon" is now defined by having no trigger keywords —
+    // clear triggers off rows that carried the old canon=1 flag so they
+    // stay always-injected. The column itself is dropped in the cleanup
+    // block below.
+    if (uv < 8 && db.prepare('PRAGMA table_info(memories)').all().some(c => c.name === 'canon'))
+        db.exec('DELETE FROM memory_triggers WHERE memories_id_fk IN (SELECT memories_id_pk FROM memories WHERE canon=1)');
+    if (uv !== 8) db.exec('PRAGMA user_version=8');
     // Room owner: the user whose persona sits in the room (lowest user id,
     // matching the convention generation uses for memory extraction).
     const rcolsEnd = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);
@@ -626,6 +667,118 @@ export function migrateSchema() {
         prompt_tokens INTEGER,
         completion_tokens INTEGER,
         created TEXT DEFAULT (datetime('now')))`);
+    // Schema cleanup: drop dead columns, backfill real FK constraints, and
+    // convert 0-sentinels to NULL so REFERENCES can express "none". All
+    // guarded on actual schema state so it's idempotent on clean DBs.
+    const sqlOf = t => db.prepare('SELECT sql FROM sqlite_master WHERE name=?').get(t)?.sql || '';
+    const colsOf = t => db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
+    for (const [t, c] of [['memories', 'canon'], ['mem_profiles', 'auto_mem'],
+                          ['world_entries', 'keys'], ['world_entries', 'keysecondary'],
+                          ['world_entries', 'world_books_id_fk']])
+        if (colsOf(t).includes(c)) db.exec(`ALTER TABLE ${t} DROP COLUMN ${c}`);
+    // Column renames to the pk/fk convention. These run late on purpose —
+    // ALTERs above still add some of these under their old names to old DBs.
+    const ren = (t, o, n) => {
+        const c = colsOf(t);
+        if (c.includes(o) && !c.includes(n)) db.exec(`ALTER TABLE ${t} RENAME COLUMN ${o} TO ${n}`);
+    };
+    ren('messages', 'supersedes', 'supersedes_messages_id_fk');
+    ren('rooms', 'mem_last_messages_id', 'mem_last_messages_id_fk');
+    ren('mem_profiles', 'mem_extraction_profile_id', 'extraction_api_profiles_id_fk');
+    ren('mem_profiles', 'mem_arc_profile_id', 'arc_api_profiles_id_fk');
+    // memories.room_arcs_id_fk: folds a memory under the arc it was extracted
+    // in (submemory membership). SET NULL so deleting an arc unfolds its
+    // memories back to standalone injection. Runs late — after every
+    // memories rebuild above.
+    if (!colsOf('memories').includes('room_arcs_id_fk'))
+        db.exec('ALTER TABLE memories ADD COLUMN room_arcs_id_fk INTEGER REFERENCES room_arcs(room_arcs_id_pk) ON DELETE SET NULL');
+    // Arc message anchors → nullable FKs (the arc survives its anchor
+    // message being deleted).
+    if (!sqlOf('room_arcs').includes('REFERENCES messages')) {
+        db.exec(`PRAGMA foreign_keys=OFF;
+            CREATE TABLE room_arcs_new (
+                room_arcs_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+                rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
+                title TEXT NOT NULL,
+                summary TEXT DEFAULT '',
+                status TEXT DEFAULT 'open' CHECK(status IN ('open','resolved','dropped')),
+                origin TEXT DEFAULT 'user' CHECK(origin IN ('user','smart')),
+                opened_messages_id_fk INTEGER REFERENCES messages(messages_id_pk) ON DELETE SET NULL,
+                closed_messages_id_fk INTEGER REFERENCES messages(messages_id_pk) ON DELETE SET NULL,
+                created TEXT DEFAULT (datetime('now')),
+                updated TEXT DEFAULT (datetime('now')));
+            INSERT INTO room_arcs_new (room_arcs_id_pk,rooms_id_fk,title,summary,status,origin,opened_messages_id_fk,closed_messages_id_fk,created,updated)
+                SELECT room_arcs_id_pk,rooms_id_fk,title,summary,status,origin,opened_messages_id_fk,closed_messages_id_fk,created,updated FROM room_arcs;
+            DROP TABLE room_arcs; ALTER TABLE room_arcs_new RENAME TO room_arcs;
+            PRAGMA foreign_keys=ON`);
+    }
+    // rooms: the followed mem profile and owner become real nullable FKs;
+    // sentinel 0 → NULL.
+    if (!sqlOf('rooms').includes('REFERENCES mem_profiles')) {
+        // Copy only columns both shapes share — ancient rooms tables may
+        // lack columns entirely (defaults fill the gaps).
+        const ROOM_COLS = ['rooms_id_pk', 'name', 'ai_trigger', 'bg', 'mem_last_messages_id_fk',
+            'mem_refresh_count', 'mem_profiles_id_fk', 'max_context', 'owner_users_id_fk'];
+        const rhave = ROOM_COLS.filter(c => colsOf('rooms').includes(c));
+        const rsel = rhave.map(c => c === 'mem_profiles_id_fk' ? 'NULLIF(mem_profiles_id_fk,0)' : c).join(',');
+        db.exec(`PRAGMA foreign_keys=OFF;
+            CREATE TABLE rooms_new (
+                rooms_id_pk INTEGER PRIMARY KEY,
+                name TEXT NOT NULL DEFAULT '',
+                ai_trigger TEXT DEFAULT 'manual',
+                bg TEXT DEFAULT '',
+                mem_last_messages_id_fk INTEGER DEFAULT 0, -- stale-tolerant pointer; deliberately no REFERENCES
+                mem_refresh_count INTEGER DEFAULT 0,
+                mem_profiles_id_fk INTEGER REFERENCES mem_profiles(mem_profiles_id_pk) ON DELETE SET NULL,
+                max_context INTEGER DEFAULT 0,
+                owner_users_id_fk INTEGER REFERENCES users(users_id_pk));
+            INSERT INTO rooms_new (${rhave.join(',')}) SELECT ${rsel} FROM rooms;
+            DROP TABLE rooms; ALTER TABLE rooms_new RENAME TO rooms;
+            PRAGMA foreign_keys=ON`);
+    }
+    // mem_profiles: auto_mem is gone (a room following a profile IS the
+    // switch); the extraction/arc api-profile pickers become real nullable
+    // FKs; sentinel 0 → NULL.
+    if (!sqlOf('mem_profiles').includes('REFERENCES api_profiles')) {
+        const MP_COLS = ['mem_profiles_id_pk', 'users_id_fk', 'name', 'mem_every', 'mem_budget',
+            'mem_max', 'mem_max_fact', 'mem_max_event', 'mem_max_relationship', 'mem_max_preference',
+            'mem_extraction_prompt', 'mem_context_threshold', 'mem_response_length', 'mem_gen_budget',
+            'mem_unlimited', 'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh',
+            'mem_activity', 'extraction_api_profiles_id_fk', 'mem_canon_budget', 'mem_max_arcs',
+            'mem_arc_budget', 'arc_api_profiles_id_fk'];
+        const mcols = MP_COLS.filter(c => colsOf('mem_profiles').includes(c));
+        const msel = mcols.map(c => (c === 'extraction_api_profiles_id_fk' || c === 'arc_api_profiles_id_fk') ? `NULLIF(${c},0)` : c).join(',');
+        db.exec(`PRAGMA foreign_keys=OFF;
+            CREATE TABLE mem_profiles_new (
+                mem_profiles_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+                users_id_fk INTEGER NOT NULL REFERENCES users(users_id_pk),
+                name TEXT NOT NULL,
+                mem_every INTEGER DEFAULT 10,
+                mem_budget INTEGER DEFAULT 800,
+                mem_max INTEGER DEFAULT 50,
+                mem_max_fact INTEGER DEFAULT 15,
+                mem_max_event INTEGER DEFAULT 15,
+                mem_max_relationship INTEGER DEFAULT 15,
+                mem_max_preference INTEGER DEFAULT 15,
+                mem_extraction_prompt TEXT DEFAULT '',
+                mem_context_threshold INTEGER DEFAULT 80,
+                mem_response_length INTEGER DEFAULT 2000,
+                mem_gen_budget INTEGER DEFAULT 2000,
+                mem_unlimited INTEGER DEFAULT 0,
+                mem_unified INTEGER DEFAULT 1,
+                mem_triggers INTEGER DEFAULT 1,
+                mem_autotune INTEGER DEFAULT 0,
+                mem_refresh INTEGER DEFAULT 1,
+                mem_activity INTEGER DEFAULT 0,
+                extraction_api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk) ON DELETE SET NULL,
+                mem_canon_budget INTEGER DEFAULT 800,
+                mem_max_arcs INTEGER DEFAULT 10,
+                mem_arc_budget INTEGER DEFAULT 700,
+                arc_api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk) ON DELETE SET NULL);
+            INSERT INTO mem_profiles_new (${mcols.join(',')}) SELECT ${msel} FROM mem_profiles;
+            DROP TABLE mem_profiles; ALTER TABLE mem_profiles_new RENAME TO mem_profiles;
+            PRAGMA foreign_keys=ON`);
+    }
 }
 
 /** One-time: import legacy settings-JSON connections as a "Default" profile. */
@@ -718,7 +871,7 @@ function seedExamples(room) {
     db.prepare('INSERT OR IGNORE INTO room_members (rooms_id_fk,cards_id_fk) VALUES (?,?)').run(room, wren);
 
     const book = db.prepare('INSERT INTO world_books (owner_users_id_fk,name) VALUES (?,?)')
-        .run(uid, 'The House — notes').lastInsertRowid;
+        .run(uid, 'The House').lastInsertRowid;
     const ins = db.prepare('INSERT INTO world_entries (comment,content,constant,enabled,ord) VALUES (?,?,?,?,?)');
     const link = db.prepare('INSERT INTO book_entries (world_books_id_fk,world_entries_id_fk) VALUES (?,?)');
     const ik = db.prepare('INSERT OR IGNORE INTO world_entry_keys (world_entries_id_fk,word,kind) VALUES (?,?,?)');

@@ -27,14 +27,19 @@ Do NOT default to [fact] — if the memory describes something that occurred or 
 Example input: "Blake: the Venice API review pile is killing me\\nCreamms: I'll take half of it tomorrow"
 Example output:
 - [event] Creamms offered to take half of Blake's review pile tomorrow.`;
-const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords in parentheses, e.g. "- [fact] Blake has a pending review pile. (triggers: pending, review)"';
+const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords in parentheses — the words most likely to re-evoke it, including synonyms, titles, and roles, e.g. "- [fact] The king is dead. (triggers: king, monarch, crown, throne)"';
+// Arc-tracking addendum for the built-in extraction prompt, appended when the
+// profile tracks arcs (mem_max_arcs > 0). Arc lines may appear alongside the
+// single memory bullet; [arc] advances and [arc-close] resolves a thread.
+const MEM_ARCS_SUFFIX = ' If the excerpt opens, advances, or resolves an ongoing storyline, additionally output "- [arc-open] Title — what is underway", "- [arc] Title — new development", or "- [arc-close] Title". Reuse an open thread\'s title exactly when updating or closing it.';
 
 // Fields a memory profile can override on a room's mem_* settings.
-const MEM_PROFILE_FIELDS = ['auto_mem', 'mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
+const MEM_PROFILE_FIELDS = ['mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
     'mem_max_event', 'mem_max_relationship', 'mem_max_preference', 'mem_extraction_prompt',
     'mem_context_threshold', 'mem_response_length', 'mem_gen_budget', 'mem_unlimited',
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
-    'mem_extraction_profile_id'];
+    'extraction_api_profiles_id_fk', 'mem_canon_budget', 'mem_max_arcs', 'mem_arc_budget',
+    'arc_api_profiles_id_fk'];
 
 // Named system-prompt sections in cache-optimal order (stable content first —
 // see the assembly comment in generateReply). The user's active
@@ -53,10 +58,14 @@ export const PROMPT_BLOCKS = [
         example: 'Example dialogue:\nAria: We were never here.\n{{user}}: Says who?' },
     { key: 'roster', label: 'Other characters',
         example: 'Also present in the scene:\nBlake: a retired knight who owes Aria money' },
+    { key: 'canon', label: 'Canon',
+        example: 'Canon:\n- The drowned forest was destroyed in the war.' },
     { key: 'world', label: 'World info',
         example: 'World info:\nThe drowned forest floods every new moon.' },
     { key: 'memories', label: 'Memories',
         example: 'Memories:\n- [fact] Aria distrusts the harbor guild.\n- [event] Blake offered to carry the map case.' },
+    { key: 'arcs', label: 'Open threads',
+        example: 'Open threads:\n- The stolen map — Aria suspects the harbor guild took it' },
     { key: 'instructions', label: 'Instructions',
         example: "You are Aria and ONLY Aria — an NPC in a shared roleplay. The other characters listed are separate people speaking for themselves; do NOT speak for them or imitate them. Write ONLY Aria's next message." },
     { key: 'history', label: 'Chat history',
@@ -66,9 +75,10 @@ export const PROMPT_BLOCKS = [
 ];
 
 /** Effective memory settings for a room: always the memory profile it follows
- *  via mem_profiles_id_fk. No link → the room's own columns, which default to
- *  auto_mem=0: smart memories are simply off. Room columns only carry per-room
- *  bits like the injection-refresh counter. */
+ *  via mem_profiles_id_fk. No link → the room's own columns: smart memories
+ *  are off. Room columns only carry per-room bits like the injection-refresh
+ *  counter. Following a profile IS the enable switch (the old auto_mem
+ *  flag was dropped). */
 export function memProfileFor(room) {
     const p = room?.mem_profiles_id_fk
         ? db.prepare('SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=?').get(room.mem_profiles_id_fk)
@@ -115,6 +125,12 @@ export async function generateReply(roomId, card) {
         JOIN cards c ON c.cards_id_pk=rm.cards_id_fk WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 AND c.cards_id_pk!=?`)
         .all(roomId, card.id);
 
+    // Trigger matching: whole-word (with an optional plural s) — substring
+    // hits like "king" in "making" don't fire, "kings" does. Both world
+    // entries and memory triggers scan the same haystack: the full fetched
+    // history plus the generating card's fields.
+    const wordHit = (hay, w) =>
+        new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + 's?\\b').test(hay);
     // Keyword-triggered world entries: constant entries always in; keyed
     // entries fire when a key appears in recent chat or the card's fields.
     const scanText = (history.map(m => `${m.name} ${m.text}`).join('\n')
@@ -128,8 +144,8 @@ export async function generateReply(roomId, card) {
             const rows = db.prepare('SELECT word,kind FROM world_entry_keys WHERE world_entries_id_fk=?').all(e.world_entries_id_pk);
             const prim = rows.filter(r => r.kind==='primary').map(r => r.word);
             const sec = rows.filter(r => r.kind==='secondary').map(r => r.word);
-            return prim.some(k => k && scanText.includes(k.toLowerCase()))
-                && sec.every(k => !k || scanText.includes(k.toLowerCase()));
+            return prim.some(k => k && wordHit(scanText, k.toLowerCase()))
+                && sec.every(k => !k || wordHit(scanText, k.toLowerCase()));
         });
     const worldText = world.length
         ? 'World info:\n' + world.map(e => e.content).join('\n\n')
@@ -144,14 +160,48 @@ export async function generateReply(roomId, card) {
     const refreshN = mem?.mem_refresh || 1;
     const refreshKey = room?.mem_refresh_count || 0;
     const injectMem = refreshN <= 1 || refreshKey % refreshN === 0;
-    const cap = (rows, acc) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= budget); };
-    const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
+    const cap = (rows, max, acc = 0) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= max); };
     const active = r => !r.triggers || r.triggers.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
-        .some(t => recentText.includes(t));
+        .some(t => wordHit(scanText, t));
     const TRIG_SQL = `(SELECT GROUP_CONCAT(mt.word,',') FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk) AS triggers`;
-    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), 0);
-    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? ORDER BY m.memories_id_pk DESC`)
-        .all(roomId, card.id).reverse().filter(active), roomMems.reduce((a, r) => a + tok(r.content), 0));
+    const HAS_TRIG = `EXISTS (SELECT 1 FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk)`;
+    const NO_TRIG = `NOT ${HAS_TRIG}`;
+    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND ${HAS_TRIG} AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), budget, 0);
+    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND mc.cards_id_fk=? AND ${HAS_TRIG} ORDER BY m.memories_id_pk DESC`)
+        .all(roomId, card.id).reverse().filter(active), budget, roomMems.reduce((a, r) => a + tok(r.content), 0));
+
+    // Canon: memories with no trigger keywords are always-true — injected
+    // every generation, bypassing the refresh counter, capped by their own
+    // budget. Shared canon + this card's canon both apply.
+    const canonRows = cap(db.prepare(`SELECT m.content FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+        WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND ${NO_TRIG} AND (NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk)
+            OR EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk AND mc.cards_id_fk=?))
+        ORDER BY m.memories_id_pk`).all(roomId, card.id), mem?.mem_canon_budget ?? 800);
+    const canonText = canonRows.length ? 'Canon:\n' + canonRows.map(m => '- ' + m.content).join('\n') : null;
+
+    // Open story arcs: tracked threads the AI should keep advancing.
+    const arcRows = cap(db.prepare(`SELECT title || CASE WHEN summary!='' THEN ' — ' || summary ELSE '' END AS content
+        FROM room_arcs WHERE rooms_id_fk=? AND status='open' ORDER BY updated`).all(roomId), mem?.mem_arc_budget ?? 700);
+    // Closed arcs are consolidated chapters: the headline injects when a
+    // title word reappears in context OR a folded memory's trigger fires —
+    // the detail pulls its chapter back up, and any matching details ride
+    // under the headline as indented sub-lines.
+    const STOP = new Set(['the', 'a', 'an', 'of', 'and', 'in', 'on', 'at', 'to', 'for', 'my', 'his', 'her', 'our']);
+    const folded = db.prepare(`SELECT m.content, m.room_arcs_id_fk AS arcId,${TRIG_SQL}
+        FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+        WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NOT NULL`).all(roomId);
+    const hitKids = folded.filter(active).reduce((m, c) => ((m[c.arcId] ||= []).push(c), m), {});
+    const pastArcs = cap(db.prepare(`SELECT room_arcs_id_pk AS id, title, summary FROM room_arcs
+        WHERE rooms_id_fk=? AND status!='open' AND summary!='' ORDER BY updated DESC`).all(roomId)
+        .filter(a => hitKids[a.id]?.length
+            || a.title.toLowerCase().split(/[^a-z0-9']+/).filter(w => w.length > 2 && !STOP.has(w)).some(w => wordHit(scanText, w)))
+        .map(a => ({ content: `- ${a.title} — ${a.summary}`
+            + (hitKids[a.id] || []).map(c => `\n  - ${c.content}`).join('') })),
+        mem?.mem_arc_budget ?? 700);
+    const arcText = (arcRows.length || pastArcs.length)
+        ? (arcRows.length ? 'Open threads:\n' + arcRows.map(a => '- ' + a.content).join('\n') : '')
+            + (pastArcs.length ? (arcRows.length ? '\n\n' : '') + 'Earlier events:\n' + pastArcs.map(a => a.content).join('\n') : '')
+        : null;
 
     const memText = (injectMem && (roomMems.length || mems.length))
         ? (mem?.mem_unified
@@ -175,8 +225,10 @@ export async function generateReply(roomId, card) {
         examples: card.mes_example && `Example dialogue:\n${card.mes_example}`,
         roster: others.length && `Also present in the scene:\n` +
             others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
+        canon: canonText,
         world: worldText,
         memories: memText,
+        arcs: arcText,
         instructions: `You are ${card.name} and ONLY ${card.name} — an NPC in a shared roleplay. ` +
             `The other characters listed are separate people speaking for themselves; ` +
             `do NOT speak for them or imitate them. Write ONLY ${card.name}'s next message.` +
@@ -230,6 +282,8 @@ export async function generateReply(roomId, card) {
         'Chat History': history.reduce((n, m) => n + tok(m.name + ' ' + m.text), 0),
     };
     parts.Memories = tok(memText);
+    parts.Canon = tok(canonText);
+    parts['Open Threads'] = tok(arcText);
     parts['Current Time'] = tok(timeText);
 
     // Section texts for the chat sidebar's click-to-view prompt inspector.
@@ -243,6 +297,8 @@ export async function generateReply(roomId, card) {
         'Other Characters': others.map(o => `${o.name}: ${o.description || o.name}`).join('\n'),
         'Post-History Instructions': card.post_history_instructions,
         'Memories': memText,
+        'Canon': canonText,
+        'Open Threads': arcText,
         'Current Time': timeText,
         'Chat History': history.map(m => `${m.name}: ${m.text}`).join('\n'),
     };
@@ -329,23 +385,26 @@ export async function generateReply(roomId, card) {
  */
 export async function maybeSummarize(roomId) {
     const room = db.prepare('SELECT *, rooms_id_pk AS id FROM rooms WHERE rooms_id_pk=?').get(roomId);
+    // Smart memories run when the room follows a memory profile — the picker
+    // is the on/off switch (mem_profiles.auto_mem is deprecated; the
+    // owner-owned extraction profile check below still gates).
+    if (!room?.mem_profiles_id_fk) return;
     const mem = memProfileFor(room);
-    if (!mem?.auto_mem) return;
     const lastId = db.prepare('SELECT MAX(messages_id_pk) m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
     const interval = mem.mem_every || 10;
     const threshold = mem.mem_context_threshold || 80;
     const maxCtx = room.max_context || 6400;
     // Messages since last extraction.
-    const since = db.prepare('SELECT text FROM messages WHERE rooms_id_fk=? AND messages_id_pk>?').all(roomId, room.mem_last_messages_id);
+    const since = db.prepare('SELECT text FROM messages WHERE rooms_id_fk=? AND messages_id_pk>?').all(roomId, room.mem_last_messages_id_fk);
     const sinceTokens = since.reduce((a, m) => a + tok(m.text), 0);
     const contextPct = maxCtx > 0 ? (sinceTokens / maxCtx) * 100 : 0;
-    const intervalMet = lastId - room.mem_last_messages_id >= interval;
+    const intervalMet = lastId - room.mem_last_messages_id_fk >= interval;
     const thresholdMet = contextPct >= threshold;
     if (!intervalMet && !thresholdMet) return;
     // Memory extraction uses only the profile the room owner configured —
     // no fallback. Unset, missing, or owned by someone else: skip.
-    const ext = mem.mem_extraction_profile_id
-        ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(mem.mem_extraction_profile_id)
+    const ext = mem.extraction_api_profiles_id_fk
+        ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(mem.extraction_api_profiles_id_fk)
         : null;
     if (!ext?.api_url || ext.users_id_fk !== room.owner_users_id_fk) {
         if (mem.mem_activity) console.log(`[mem] activity: extraction skipped for room ${roomId} (no owner-configured extraction profile)`);
@@ -354,7 +413,7 @@ export async function maybeSummarize(roomId) {
     const conn = { ...ext, apiUrl: ext.api_url };
     const excerpt = db.prepare(
         MSG_SQL + ' WHERE m.rooms_id_fk=? AND m.messages_id_pk>? ORDER BY m.messages_id_pk LIMIT 30')
-        .all(roomId, room.mem_last_messages_id);
+        .all(roomId, room.mem_last_messages_id_fk);
     if (!excerpt.length) return;
     if (mem.mem_activity) push(roomId, { type: 'mem', phase: 'start' });
     // Grounding: the cards in the room are the authoritative current state,
@@ -366,10 +425,16 @@ export async function maybeSummarize(roomId) {
         ? 'Character sheets (authoritative current state):\n'
             + roster.map(c => `${c.name}: ${c.description || c.name}`).join('\n') + '\n\n'
         : '';
+    // Open thread titles go into the prompt so the writer can advance or
+    // close them by name instead of spawning near-duplicate threads.
+    const openArcs = db.prepare("SELECT title FROM room_arcs WHERE rooms_id_fk=? AND status='open' ORDER BY updated").all(roomId).map(a => a.title);
+    const arcsSuffix = (mem.mem_max_arcs ?? 10) > 0
+        ? MEM_ARCS_SUFFIX + (openArcs.length ? ` Currently open threads: ${openArcs.join('; ')}.` : '')
+        : '';
     const reqBody = {
         model: conn.model || 'local',
         messages: [
-            { role: 'system', content: mem.mem_extraction_prompt?.trim() || (MEM_EXTRACT_PROMPT + (mem.mem_triggers ? MEM_TRIGGERS_SUFFIX : '')) },
+            { role: 'system', content: mem.mem_extraction_prompt?.trim() || (MEM_EXTRACT_PROMPT + (mem.mem_triggers ? MEM_TRIGGERS_SUFFIX : '') + arcsSuffix) },
             { role: 'user', content: sheet + 'Recent chat:\n' + excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
         ],
         temperature: 0.3, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
@@ -388,12 +453,37 @@ export async function maybeSummarize(roomId) {
     const ins = db.prepare("INSERT INTO memories (content,type,origin) VALUES (?,?, 'smart')");
     const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
+    const findArc = db.prepare("SELECT room_arcs_id_pk AS id FROM room_arcs WHERE rooms_id_fk=? AND status='open' AND LOWER(title)=LOWER(?)");
+    const insArc = db.prepare("INSERT INTO room_arcs (rooms_id_fk,title,summary,opened_messages_id_fk,origin) VALUES (?,?,?,?,'smart')");
+    const upArc = db.prepare("UPDATE room_arcs SET summary=?, status='open', updated=datetime('now') WHERE room_arcs_id_pk=?");
+    const closeArc = db.prepare("UPDATE room_arcs SET status='resolved', closed_messages_id_fk=?, updated=datetime('now') WHERE room_arcs_id_pk=?");
+    const closedArcs = [];
     for (const line of text.split('\n')) {
         let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
-        fact = fact.replace(/^\[[^\]]+\]\s*/, ''); // strip leading [Name]/[shared] scope tag
-        const tag = fact.match(/^\[(fact|event|relationship|preference)\]\s*/i);
-        const type = tag ? tag[1].toLowerCase() : 'fact';
-        if (tag) fact = fact.slice(tag[0].length);
+        // Leading [tag]s: memory-type tags set the stored type, [arc*] tags
+        // drive room_arcs, anything else ([Name]/[shared] scope tags) is
+        // stripped. The old single-strip order silently flattened every
+        // [event]/[preference]/[relationship] line to 'fact'.
+        let type = 'fact', arc = null;
+        for (let i = 0; i < 3; i++) {
+            const t = fact.match(/^\[([^\]]+)\]\s*/);
+            if (!t) break;
+            const w = t[1].trim().toLowerCase();
+            if (['fact', 'event', 'relationship', 'preference'].includes(w)) type = w;
+            else if (['arc', 'arc-open', 'arc-close'].includes(w)) arc = w;
+            fact = fact.slice(t[0].length).trimStart();
+        }
+        if (arc) {
+            const m = fact.match(/^(.*?)(?:\s+[—–]\s+|:\s+)(.*)$/s);
+            const title = (m ? m[1] : fact).trim().replace(/[.\s]+$/, '');
+            const summary = (m ? m[2] : '').trim();
+            if (!title || (mem.mem_max_arcs ?? 10) <= 0) continue;
+            const ex = findArc.get(roomId, title);
+            if (arc === 'arc-close') { if (ex) { closeArc.run(lastId, ex.id); closedArcs.push(ex.id); } }
+            else if (ex) { if (summary) upArc.run(summary, ex.id); }
+            else insArc.run(roomId, title, summary, lastId);
+            continue;
+        }
         let triggers = '';
         // "(triggers: a, b)" anywhere in the line; else a bare trailing "(a, b)".
         const tr = fact.match(/\(\s*triggers?\s*:\s*([^)]*)\)/i) || fact.match(/\(([^)]*)\)\s*$/);
@@ -401,16 +491,17 @@ export async function maybeSummarize(roomId) {
             triggers = tr[1].split(',').map(s => s.trim().replace(/^triggers?\s*:/i, '').toLowerCase()).filter(Boolean).join(',');
             fact = (fact.slice(0, tr.index) + fact.slice(tr.index + tr[0].length)).trim();
         }
-        if (fact.length > 10) {
+        if (fact.length > 10 && !added) {
             const mid = ins.run(fact, type).lastInsertRowid;
             for (const w of triggers.split(',')) { const word = w.trim(); if (word) insTrig.run(mid, word); }
             linkRoom.run(roomId, mid); added++;
-            break; // one memory per extraction run
+            // One memory per extraction run — but keep scanning the rest of
+            // the output for [arc*] lines.
         }
     }
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
-    db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
+    db.prepare('UPDATE rooms SET mem_last_messages_id_fk=? WHERE rooms_id_pk=?').run(lastId, roomId);
     if (mem.mem_activity) {
         console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
     }
@@ -440,6 +531,19 @@ export async function maybeSummarize(roomId) {
                  WHERE rm2.rooms_id_fk=? AND m2.origin='smart' ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
             .run(roomId, roomId, totalCap);
     }
+    // Cap open arcs — oldest-touched threads are dropped first.
+    const arcMax = mem.mem_max_arcs ?? 10;
+    if (arcMax > 0) {
+        closedArcs.push(...db.prepare(`SELECT room_arcs_id_pk AS id FROM room_arcs WHERE rooms_id_fk=? AND status='open'
+            AND room_arcs_id_pk NOT IN (SELECT room_arcs_id_pk FROM room_arcs WHERE rooms_id_fk=? AND status='open' ORDER BY updated DESC LIMIT ?)`)
+            .all(roomId, roomId, arcMax).map(r => r.id));
+        db.prepare(`UPDATE room_arcs SET status='dropped', updated=datetime('now') WHERE rooms_id_fk=? AND status='open'
+            AND room_arcs_id_pk NOT IN (SELECT room_arcs_id_pk FROM room_arcs WHERE rooms_id_fk=? AND status='open' ORDER BY updated DESC LIMIT ?)`)
+            .run(roomId, roomId, arcMax);
+    }
+    // Consolidate every thread that closed this run — spans include this
+    // batch's memories, so folding has to happen after all inserts.
+    for (const id of closedArcs) consolidateArc(roomId, id).catch(e => console.error('[mem]', e.message));
     // Auto-tune: when enabled, raise the injection budget so stored smart
     // memories aren't dropped purely for exceeding the current budget.
     // (Budgets live on the memory profile now — rooms only carry the FK.)
@@ -448,4 +552,67 @@ export async function maybeSummarize(roomId) {
         const b = mem.mem_budget || 800;
         if (used > b && b < 8000) db.prepare('UPDATE mem_profiles SET mem_budget=? WHERE mem_profiles_id_pk=?').run(Math.ceil(used), mem.mem_profiles_id_pk);
     }
+}
+
+// Arc consolidation: when a thread closes, distill its message span into
+// the arc's summary — the chapter headline — and fold the smart memories
+// extracted during the span under it. Folded memories stop injecting on
+// their own; their triggers now pull the arc line into context instead,
+// and any that match are appended as detail under the headline (submemory
+// retrieval). Untriggered (canon) memories are never folded — durable
+// facts stay top-level. Uses the profile's arc API profile, falling back
+// to the extraction profile; neither configured = consolidation off.
+export async function consolidateArc(roomId, arcId) {
+    const arc = db.prepare('SELECT * FROM room_arcs WHERE room_arcs_id_pk=?').get(arcId);
+    if (!arc || arc.status === 'open') return;
+    const room = db.prepare('SELECT * FROM rooms WHERE rooms_id_pk=?').get(roomId);
+    const mem = memProfileFor(room);
+    if (!mem) return;
+    const pid = mem.arc_api_profiles_id_fk || mem.extraction_api_profiles_id_fk;
+    const ext = pid ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(pid) : null;
+    if (!ext?.api_url || ext.users_id_fk !== room.owner_users_id_fk) return;
+    const conn = { ...ext, apiUrl: ext.api_url };
+
+    // Span: between the open/close message anchors when present, else the
+    // arc's creation time / the latest room message.
+    const dateOf = id => id ? db.prepare('SELECT send_date AS d FROM messages WHERE messages_id_pk=?').get(id)?.d : null;
+    const spanStart = dateOf(arc.opened_messages_id_fk) || arc.created;
+    const lastMsgId = db.prepare('SELECT MAX(messages_id_pk) AS m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
+    const span = db.prepare(MSG_SQL + ' WHERE m.rooms_id_fk=? AND m.messages_id_pk BETWEEN ? AND ? ORDER BY m.messages_id_pk')
+        .all(roomId, arc.opened_messages_id_fk || 0, arc.closed_messages_id_fk || lastMsgId);
+    if (span.length) {
+        // Long spans: head (setup) + tail (resolution) matter most.
+        let text = span.map(m => `${m.name}: ${m.text}`).join('\n');
+        if (text.length > 8000) text = text.slice(0, 3000) + '\n[…]\n' + text.slice(-5000);
+        const reqBody = {
+            model: conn.model || 'local',
+            messages: [
+                { role: 'system', content: 'You are the chronicler of a roleplay story. Given a story thread and the chat excerpt it played out in, write a ONE to TWO sentence past-tense summary of what happened and how it ended. Factual and compact — names and outcomes, no flourish.' },
+                { role: 'user', content: `Thread: ${arc.title}${arc.summary ? '\nNotes: ' + arc.summary : ''}\n\nExcerpt:\n${text}` },
+            ],
+            temperature: 0.3, max_tokens: 300,
+        };
+        const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
+                ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })() },
+            body: JSON.stringify(reqBody),
+        });
+        if (resp.ok) {
+            const summary = (await resp.json())?.choices?.[0]?.message?.content?.trim();
+            if (summary) {
+                db.prepare("UPDATE room_arcs SET summary=?, updated=datetime('now') WHERE room_arcs_id_pk=?").run(summary, arcId);
+                logPrompt(roomId, null, 'extract', reqBody, summary, null);
+            }
+        }
+    }
+    // Fold smart, triggered memories created since the arc opened under
+    // it. (No upper bound: consolidation runs once, at close — memory
+    // timestamps are extraction-time, so they always postdate the close
+    // anchor's send_date.)
+    db.prepare(`UPDATE memories SET room_arcs_id_fk=? WHERE origin='smart' AND room_arcs_id_fk IS NULL
+        AND created >= ?
+        AND memories_id_pk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)
+        AND EXISTS (SELECT 1 FROM memory_triggers mt WHERE mt.memories_id_fk=memories.memories_id_pk)`)
+        .run(arcId, spanStart, roomId);
 }

@@ -10,6 +10,7 @@ function setTriggers(id, str) {
 import { db } from '../db.js';
 import { send, readBody } from '../lib/util.js';
 import { roomMember, memoryShared } from '../lib/access.js';
+import { consolidateArc } from '../generate.js';
 
 export default {
     'GET /api/lastmem': async (req, res, u) => {
@@ -81,6 +82,59 @@ export default {
             return send(res, 400, { error: 'character smart memories not supported yet' });
     db.prepare('DELETE FROM memory_cards WHERE memories_id_fk=?').run(id);
     if (b.cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, b.cardId);
+        send(res, 200, { ok: true });
+    },
+    // Story arcs: room-scoped open threads, user-managed via these routes
+    // and AI-managed via [arc*] extraction tags.
+    'GET /api/arcs': async (req, res, u) => {
+        const room = Number(new URL(req.url, 'http://x').searchParams.get('room') || 0);
+        if (!roomMember(room, u)) return send(res, 403, { error: 'not a room member' });
+        const arcs = db.prepare(`SELECT room_arcs_id_pk AS id, title, summary, status, origin, created, updated
+            FROM room_arcs WHERE rooms_id_fk=? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, updated DESC`).all(room);
+        send(res, 200, { arcs });
+    },
+    'POST /api/arcs': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!roomMember(b.room || 1, u)) return send(res, 403, { error: 'not a room member' });
+        if (!b.title?.trim()) return send(res, 400, { error: 'title required' });
+        const id = db.prepare('INSERT INTO room_arcs (rooms_id_fk,title,summary) VALUES (?,?,?)')
+            .run(b.room || 1, b.title.trim(), b.summary || '').lastInsertRowid;
+        send(res, 200, { id });
+    },
+    'POST /api/arcs/update': async (req, res, u) => {
+        const b = await readBody(req);
+        const arc = db.prepare('SELECT rooms_id_fk, status FROM room_arcs WHERE room_arcs_id_pk=?').get(b.id);
+        if (!arc) return send(res, 404, { error: 'no arc' });
+        if (!roomMember(arc.rooms_id_fk, u)) return send(res, 403, { error: 'not a room member' });
+        const status = ['open', 'resolved', 'dropped'].includes(b.status) ? b.status : null;
+        db.prepare(`UPDATE room_arcs SET title=COALESCE(NULLIF(?,''),title), summary=COALESCE(?,summary),
+            status=COALESCE(?,status), updated=datetime('now'),
+            closed_messages_id_fk=CASE WHEN ? IN ('resolved','dropped') AND status='open'
+                THEN (SELECT MAX(messages_id_pk) FROM messages WHERE rooms_id_fk=?) ELSE closed_messages_id_fk END
+            WHERE room_arcs_id_pk=?`)
+            .run(b.title?.trim() ?? null, b.summary ?? null, status, status, arc.rooms_id_fk, b.id);
+        if (status && status !== 'open' && arc.status === 'open')
+            consolidateArc(arc.rooms_id_fk, b.id).catch(e => console.error('[mem]', e.message));
+        send(res, 200, { ok: true });
+    },
+    'POST /api/arcs/resolve': async (req, res, u) => {
+        const b = await readBody(req);
+        const arc = db.prepare('SELECT rooms_id_fk, status FROM room_arcs WHERE room_arcs_id_pk=?').get(b.id);
+        if (!arc) return send(res, 404, { error: 'no arc' });
+        if (!roomMember(arc.rooms_id_fk, u)) return send(res, 403, { error: 'not a room member' });
+        db.prepare(`UPDATE room_arcs SET status='resolved', updated=datetime('now'),
+            closed_messages_id_fk=(SELECT MAX(messages_id_pk) FROM messages WHERE rooms_id_fk=?) WHERE room_arcs_id_pk=?`)
+            .run(arc.rooms_id_fk, b.id);
+        if (arc.status === 'open')
+            consolidateArc(arc.rooms_id_fk, b.id).catch(e => console.error('[mem]', e.message));
+        send(res, 200, { ok: true });
+    },
+    'POST /api/arcs/delete': async (req, res, u) => {
+        const b = await readBody(req);
+        const arc = db.prepare('SELECT rooms_id_fk FROM room_arcs WHERE room_arcs_id_pk=?').get(b.id);
+        if (!arc) return send(res, 404, { error: 'no arc' });
+        if (!roomMember(arc.rooms_id_fk, u)) return send(res, 403, { error: 'not a room member' });
+        db.prepare('DELETE FROM room_arcs WHERE room_arcs_id_pk=?').run(b.id);
         send(res, 200, { ok: true });
     },
 };

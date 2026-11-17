@@ -14,7 +14,7 @@ the DB has ever had. Proposals below are staged by value-vs-risk.
   profile + FK. Textbook normalization.
 - `world_entry_keys` — keywords as rows, not comma strings. The pattern
   `memories.triggers` *should* have followed (see below).
-- `sessions`, `messages.supersedes` self-FK, `users.handle` UNIQUE —
+- `sessions`, `messages.supersedes_messages_id_fk` self-FK, `users.handle` UNIQUE —
   all properly constrained.
 - JSON blobs (`users.settings`, `api_profiles.headers`, `prompt_order`,
   `prompt_logs.request/response`, `meta` EAV) — opaque config/audit data.
@@ -30,7 +30,21 @@ the DB has ever had. Proposals below are staged by value-vs-risk.
   legacy `ADD COLUMN source` re-add was removed — it forced a full
   `memories` rebuild (FK-cascade-wiping junction rows) on every boot.
 
-## Stage 2 — worth doing
+## Stage 2 — done
+
+- [x] **Dead columns dropped** — `memories.canon`, `mem_profiles.auto_mem`,
+  `world_entries.keys`/`keysecondary`/`world_books_id_fk` removed via guarded
+  `DROP COLUMN` at the end of `migrateSchema()` (the junction tables carry
+  the data now; canon semantics moved to "no trigger rows").
+- [x] **FKs backfilled + enforced** — `PRAGMA foreign_keys=ON` at connect;
+  `room_arcs` message anchors (`ON DELETE SET NULL`), `rooms.mem_profiles_id_fk`
+  and `owner_users_id_fk`, `mem_profiles`' api-profile pickers rebuilt with
+  real `REFERENCES`. Sentinel `0` converted to `NULL` during the rebuilds —
+  `NULL` is now the "none" convention everywhere.
+- [x] **Top `CREATE` block modernized** — uses canonical `*_id_pk`/`*_id_fk`
+  names directly, so references are valid at creation. (Enabling FK checks
+  surfaced dangling `REFERENCES rooms(id)` clauses left over from the
+  legacy-name era — they only survived because enforcement was off.)
 
 ### ~~2a. `memories.triggers` → trigger rows~~ — done (PR #92)
 
@@ -59,13 +73,13 @@ Went the route-owned direction: `lib/cascade.js` holds ordered,
 complete delete chains (`deleteRoomCascade`/`deleteCardCascade`/
 `deleteUserCascade`) — FK actions can't reach through junctions anyway,
 and the audit found the partial manual chains were actually *broken*:
-several deletes 500ed on `FOREIGN KEY constraint failed` under
-node:sqlite's `foreign_keys=ON` default. Declared cascades stay as
-safety nets.
+several deletes 500ed on `FOREIGN KEY constraint failed`. FK enforcement
+is now explicit (`PRAGMA foreign_keys=ON` at connect); declared cascades
+stay as safety nets.
 
 ## Stage 3 — optional / cosmetic
 
-- **Room extraction bookkeeping** (`mem_last_messages_id`,
+- **Room extraction bookkeeping** (`mem_last_messages_id_fk`,
   `mem_refresh_count`): single-valued pointers on `rooms`, technically
   fine, but would sit more honestly in a `room_state(room_id, key, value)`
   or on `room_memories`-adjacent state. Low value either way.

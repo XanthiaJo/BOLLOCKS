@@ -56,7 +56,8 @@ export default {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
         db.prepare('UPDATE cards SET api_profiles_id_fk=NULL WHERE api_profiles_id_fk=?').run(id);
-        db.prepare('UPDATE mem_profiles SET mem_extraction_profile_id=0 WHERE mem_extraction_profile_id=?').run(id);
+        db.prepare('UPDATE mem_profiles SET extraction_api_profiles_id_fk=NULL WHERE extraction_api_profiles_id_fk=?').run(id);
+        db.prepare('UPDATE mem_profiles SET arc_api_profiles_id_fk=NULL WHERE arc_api_profiles_id_fk=?').run(id);
         db.prepare('DELETE FROM api_profiles WHERE api_profiles_id_pk=? AND users_id_fk=?').run(id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
@@ -68,41 +69,45 @@ export default {
     'POST /api/memprofiles': async (req, res, u) => {
         const b = await readBody(req);
         if (!b.name) return send(res, 400, { error: 'name required' });
-        const vals = [b.auto ? 1 : 0, b.every ?? 10, b.budget ?? 800, b.max ?? 50,
+        const vals = [b.every ?? 10, b.budget ?? 800, b.max ?? 50,
             b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
             b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
             b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
-            b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0];
-        const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,auto_mem,mem_every,mem_budget,mem_max,
+            b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId || null,
+            b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId || null];
+        const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,mem_every,mem_budget,mem_max,
             mem_max_fact,mem_max_event,mem_max_relationship,mem_max_preference,mem_extraction_prompt,
             mem_context_threshold,mem_response_length,mem_gen_budget,mem_unlimited,mem_unified,mem_triggers,
-            mem_autotune,mem_refresh,mem_activity,mem_extraction_profile_id)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+            mem_autotune,mem_refresh,mem_activity,extraction_api_profiles_id_fk,
+            mem_canon_budget,mem_max_arcs,mem_arc_budget,arc_api_profiles_id_fk)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
             .run(u.users_id_pk, b.name, ...vals).lastInsertRowid;
         send(res, 200, { id });
     },
     'POST /api/memprofiles/update': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare(`UPDATE mem_profiles SET name=COALESCE(NULLIF(?,''),name), auto_mem=?, mem_every=?, mem_budget=?, mem_max=?,
+        db.prepare(`UPDATE mem_profiles SET name=COALESCE(NULLIF(?,''),name), mem_every=?, mem_budget=?, mem_max=?,
             mem_max_fact=?, mem_max_event=?, mem_max_relationship=?, mem_max_preference=?,
             mem_extraction_prompt=?, mem_context_threshold=?, mem_response_length=?,
             mem_gen_budget=?, mem_unlimited=?, mem_unified=?, mem_triggers=?,
-            mem_autotune=?, mem_refresh=?, mem_activity=?, mem_extraction_profile_id=?
+            mem_autotune=?, mem_refresh=?, mem_activity=?, extraction_api_profiles_id_fk=?,
+            mem_canon_budget=?, mem_max_arcs=?, mem_arc_budget=?, arc_api_profiles_id_fk=?
             WHERE mem_profiles_id_pk=? AND users_id_fk=?`)
-            .run(String(b.name ?? '').trim(), b.auto ? 1 : 0, b.every ?? 10, b.budget ?? 800, b.max ?? 50,
+            .run(String(b.name ?? '').trim(), b.every ?? 10, b.budget ?? 800, b.max ?? 50,
                 b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
                 b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
                 b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
-                b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId ?? 0,
+                b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId || null,
+                b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId || null,
                 b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
     'POST /api/memprofiles/delete': async (req, res, u) => {
         const b = await readBody(req);
         // Rooms following the deleted profile are re-pointed at another of
-        // the SAME user's profiles (0 = feature-less room columns only when
-        // none remain). Only the owner's own rooms can legitimately follow.
-        db.prepare(`UPDATE rooms SET mem_profiles_id_fk=COALESCE((SELECT mem_profiles_id_pk FROM mem_profiles WHERE mem_profiles_id_pk<>? AND users_id_fk=? ORDER BY mem_profiles_id_pk LIMIT 1),0)
+        // the SAME user's profiles (NULL = feature-less when none remain).
+        // Only the owner's own rooms can legitimately follow.
+        db.prepare(`UPDATE rooms SET mem_profiles_id_fk=(SELECT mem_profiles_id_pk FROM mem_profiles WHERE mem_profiles_id_pk<>? AND users_id_fk=? ORDER BY mem_profiles_id_pk LIMIT 1)
             WHERE mem_profiles_id_fk=? AND owner_users_id_fk=?`).run(b.id, u.users_id_pk, b.id, u.users_id_pk);
         // Any other room still pointing at the deleted profile (e.g. a
         // legacy link) falls back to none rather than blocking the delete.
