@@ -49,7 +49,6 @@ export default {
         const rooms = db.prepare(`SELECT DISTINCT r.rooms_id_pk AS id, r.name, r.ai_trigger, r.max_context,
             r.mem_profiles_id_fk, r.owner_users_id_fk AS owner,
             (SELECT name FROM mem_profiles WHERE mem_profiles_id_pk=r.mem_profiles_id_fk) AS mem_profile_name,
-            (SELECT auto_mem FROM mem_profiles WHERE mem_profiles_id_pk=r.mem_profiles_id_fk) AS mem_profile_auto,
             (r.owner_users_id_fk=?) AS is_owner,
             (SELECT COUNT(*) FROM room_members rm2 WHERE rm2.rooms_id_fk=r.rooms_id_pk) AS members, r.bg FROM rooms r
             JOIN room_members rm ON rm.rooms_id_fk=r.rooms_id_pk JOIN cards c ON c.cards_id_pk=rm.cards_id_fk WHERE c.owner_users_id_fk=? ORDER BY r.rooms_id_pk`).all(u.users_id_pk, u.users_id_pk);
@@ -140,7 +139,7 @@ export default {
         const rid = b.room || b.id || 1;
         if (!roomOwnerOnly(rid, u)) return send(res, 403, { error: 'room owner only' });
         if (b.memProfile !== undefined) {
-            const pid = Number(b.memProfile) || 0;
+            const pid = Number(b.memProfile) || null;
             // Rooms may only follow profiles owned by the room owner.
             if (pid && !db.prepare('SELECT 1 FROM mem_profiles WHERE mem_profiles_id_pk=? AND users_id_fk=?').get(pid, u.users_id_pk))
                 return send(res, 403, { error: 'room can only follow your own profiles' });

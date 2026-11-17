@@ -59,17 +59,17 @@ Route-handler conventions: routes are `export default { 'METHOD /path': handler 
 
 ## Data model
 
-Canonical column naming: `<table>_<col>_pk` for primary keys, `<referenced_table>_<col>_fk` for foreign keys (e.g. `rooms_id_pk`, `owner_users_id_fk`). The `CREATE TABLE` block at the top of `db.js` uses legacy short names — `migrateSchema()`'s `REN` map renames them on startup, so always write queries against the pk/fk names.
+Canonical column naming: `<table>_<col>_pk` for primary keys, `<referenced_table>_<col>_fk` for foreign keys (e.g. `rooms_id_pk`, `owner_users_id_fk`). The `CREATE TABLE` block at the top of `db.js` already uses canonical names; `migrateSchema()`'s `REN` map still renames legacy columns on old DBs. **FKs are enforced** (`PRAGMA foreign_keys=ON` at connect) — declared `ON DELETE` actions are the safety net behind the route-ordered delete chains in `lib/cascade.js`, so keep delete order correct rather than relying on cascades.
 
 Core tables:
 
 - `users` / `sessions` — accounts; `sessions.sessions_token_pk` is the bearer/cookie token.
-- `rooms` — chats; carries `ai_trigger` (manual/all/named/roundrobin), `bg`, `max_context`, `mem_profiles_id_fk`, `owner_users_id_fk`, `mem_last_messages_id`, `mem_refresh_count`.
+- `rooms` — chats; carries `ai_trigger` (manual/all/named/roundrobin), `bg`, `max_context`, `mem_profiles_id_fk`, `owner_users_id_fk`, `mem_last_messages_id_fk`, `mem_refresh_count`.
 - `cards` — character sheets (ST v2 field parity); `is_persona=1` marks a user's human persona; `owner_users_id_fk` owns it; `api_profiles_id_fk` may pin a generation profile.
 - `room_members` — junction joining cards into rooms; holds per-room `talkativeness`. Humans sit in rooms via their persona card.
 - `messages` — chat log per room (`cards_id_fk` NULL = system line); use `MSG_SQL` for the standard SELECT (adds `id`, `name`, `kind` ∈ say/ai/sys).
 - `world_books` → `book_entries` → `world_entries` → `world_entry_keys` (primary/secondary keyword rows); `room_books` links at most one book to a room.
-- `memories` (+`room_memories`, +`memory_cards`, +`memory_triggers`) — `origin='user'` permanent vs `origin='smart'` auto-extracted; `memory_triggers` rows keyword-gate injection (no rows = canon: always injected in its own early block, immune to refresh); `type` ∈ fact/event/relationship/preference; the `canon` column is deprecated/unread.
+- `memories` (+`room_memories`, +`memory_cards`, +`memory_triggers`) — `origin='user'` permanent vs `origin='smart'` auto-extracted; `memory_triggers` rows keyword-gate injection (no rows = canon: always injected in its own early block, immune to refresh); `type` ∈ fact/event/relationship/preference.
 - `room_arcs` — room-scoped story threads (`status` ∈ open/resolved/dropped, `origin` ∈ user/smart); written by `[arc*]` extraction tags or `POST /api/arcs*`, injected while open.
 - `prompt_logs` — per-room LLM request/response log (`kind` ∈ reply/extract; newest 50 per room) surfaced via `GET /api/promptlog`.
 - `api_profiles` — per-user OpenAI-compatible connections (`active` flag, `headers` JSON, `context_size`, `max_response`, `strip_prefix`, `key`).
@@ -81,7 +81,7 @@ Core tables:
 ## Generation pipeline (generate.js)
 
 - `generateReply(roomId, card)`: picks the connection (card's `api_profiles_id_fk`, else card-owner's active profile), applies `{{char}}`/`{{user}}` macros, injects keyword-triggered world entries + trigger-gated memories (budget-capped, chars/4 estimate), trims history to the smaller of room `max_context` / profile `context_size` (keeps greeting + tail), posts to `/chat/completions`, strips a leading `Name:` tag, records `genStats[roomId]`.
-- `maybeSummarize(roomId)`: if the room follows a memory profile (`auto_mem` deprecated), every `mem_every` messages (or context-threshold hit) it asks the LLM to distill recent lines into typed bullet memories, enforces per-type and total caps, and can autotune the injection budget.
+- `maybeSummarize(roomId)`: if the room follows a memory profile (the link is the switch — the old `auto_mem` flag was dropped), every `mem_every` messages (or context-threshold hit) it asks the LLM to distill recent lines into typed bullet memories, enforces per-type and total caps, and can autotune the injection budget.
 - Who replies: `POST /api/say` in `server.js` applies the room's `ai_trigger` policy (talkativeness roll per AI member) — generation itself is always server-side.
 
 ## Frontend conventions
