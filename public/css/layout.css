@@ -3,6 +3,9 @@
    NOTE: login.html must stay self-contained (served without auth) and
    keeps its own :root copy — update both if the palette changes. */
 :root{
+    /* mobile breakpoint (px). Canonical value — JS reads this; var() isn't
+       allowed inside @media so keep the query literals below in sync. */
+    --mob:700;
     /* surfaces */
     --bg:#1a1b1e;          /* page background */
     --bg-deep:#0d0e10;     /* darker backdrop (login) */
@@ -63,8 +66,8 @@
 }
 
 *{box-sizing:border-box}
-body{font-family:system-ui;background:var(--bg);color:var(--text);margin:0;height:100vh;display:flex;flex-direction:column}
-nav{display:flex;gap:14px;align-items:center;padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--line);flex:none}
+body{font-family:system-ui;background:var(--bg);color:var(--text);margin:0;height:100vh;height:100dvh;display:flex;flex-direction:column;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+nav{display:flex;gap:14px;align-items:center;padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--line);flex:none;position:relative;z-index:40}
 nav .brand{font-weight:700;margin-right:8px;display:flex;flex-direction:column;line-height:1.1}
 nav .brand .ver{font-size:.68em;font-weight:400;color:var(--faint);letter-spacing:.03em;text-align:center;margin-top:5px}
 nav a{color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:5px;font-size:.95em}
@@ -73,7 +76,7 @@ nav a.on{background:var(--accent);color:var(--white)}
 #shell{flex:1;display:flex;min-height:0}
 #content{flex:1;min-width:0;display:flex;flex-direction:column}
 #sidebar{width:220px;flex:none}
-#rsidebar{width:400px;flex:none;padding:24px 12px 12px;background:var(--surface);overflow-y:auto;border-left:1px solid var(--surface2)}
+#rsidebar{width:400px;flex:none;padding:24px 12px 0;background:var(--surface);overflow-y:auto;border-left:1px solid var(--surface2);display:flex;flex-direction:column}
 #sidebar.hide,#rsidebar.hide{display:none}
 .navtoggle{color:var(--muted);text-decoration:none;padding:6px 10px;cursor:pointer;font-size:1.1em}
 #mpuserbtn{color:var(--ai)}
@@ -84,11 +87,21 @@ nav a.on{background:var(--accent);color:var(--white)}
 .userdrop a{display:block;padding:8px 14px;font-size:.9em;color:var(--muted);text-decoration:none;white-space:nowrap}
 .userdrop a:hover{background:var(--surface2);color:var(--text)}
 .userdrop hr{border:none;border-top:1px solid var(--edge);margin:4px 0}
-@media (max-width:700px){
-  #sidebar,#rsidebar{display:none}
-  #sidebar.open,#rsidebar.open{display:block}
-  #rsidebar{width:280px}
-}
+/* Sidebar version badge (sticky bottom) + its update-check popover */
+.mp-ver{display:block;position:sticky;bottom:0;margin-top:auto;padding:8px 2px 8px;font-size:.8em;color:var(--dim);text-decoration:none;background:var(--surface);border-top:1px solid var(--line);cursor:pointer}
+.mp-ver:hover{color:var(--text)}
+.mp-ver span{font-weight:400;letter-spacing:.03em}
+.mp-upd{display:none;position:fixed;z-index:60;min-width:240px;max-width:320px;max-height:calc(100dvh - 16px);overflow-y:auto;background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:10px;box-shadow:0 8px 24px var(--veil-soft);font-size:.9em}
+.mp-upd.open{display:block}
+.mp-upd .updh{font-weight:600;margin-bottom:8px}
+.mp-upd .updchans{display:flex;gap:4px;margin-bottom:8px}
+.mp-upd .updchans button{flex:1;margin:0;padding:5px 4px;font-size:.8em;background:var(--neutral);color:var(--white)}
+.mp-upd .updchans button.on{background:var(--accent)}
+.mp-upd .updres{color:var(--muted);line-height:1.45}
+.mp-upd .updres a{color:var(--ai)}
+.mp-upd .updres button{width:100%;margin-top:8px;font-size:.85em}
+.mp-scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:35}
+.mp-scrim.on{display:block}
 #rsidebar h3{margin:4px 0 8px;font-size:.85em;text-transform:uppercase;color:var(--dim);letter-spacing:.06em}
 /* sidebar picker row — one pattern for all selectable list items:
    .txt (name+caption) flexes, optional thumb <img> and .btns sit beside it.
@@ -102,7 +115,7 @@ nav a.on{background:var(--accent);color:var(--white)}
 .rprof>img{width:32px;height:32px;border-radius:4px;object-fit:cover;flex:none}
 .rprof .btns{display:flex;gap:4px}
 .rprof .btns button{width:auto;margin:0;padding:3px 8px;font-size:.8em}
-#sidebar{padding:12px;background:var(--surface);overflow-y:auto;border-right:1px solid var(--surface2)}
+#sidebar{padding:12px 12px 0;background:var(--surface);overflow-y:auto;border-right:1px solid var(--surface2);display:flex;flex-direction:column}
 #sidebar h3{margin:4px 0 8px;font-size:.85em;text-transform:uppercase;color:var(--dim);letter-spacing:.06em}
 #content{min-height:0;display:flex;flex-direction:column;overflow:hidden}
 input,textarea,select,button{padding:8px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:4px;margin:3px 0}
@@ -166,7 +179,7 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 
 /* centralized editor — every page's #editor opens as a modal card */
 .mp-veil{position:fixed;inset:0;background:var(--veil);display:flex;align-items:flex-start;justify-content:center;padding:5vh 16px;z-index:50}
-.mp-veil #editor{display:block!important;width:min(720px,94vw);max-height:86vh;overflow-y:auto;border:1px solid var(--edge);border-radius:8px;padding:18px;background:var(--panel);box-shadow:0 12px 40px var(--veil)}
+.mp-veil #editor,.mp-veil .mp-card{display:block!important;width:min(720px,94vw);max-height:86vh;overflow-y:auto;border:1px solid var(--edge);border-radius:8px;padding:18px;background:var(--panel);box-shadow:0 12px 40px var(--veil)}
 .mp-saved{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--toast-bg);color:var(--toast-text);border:1px solid var(--ok);padding:8px 20px;border-radius:20px;font-size:.9em;opacity:0;transition:opacity .25s;pointer-events:none;z-index:99}
 .mp-saved.show{opacity:1}
 
@@ -221,3 +234,39 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 .acc-h.open .arrow{transform:rotate(90deg)}
 .acc-b{padding:8px 10px;display:none}
 .acc-b.open{display:block}
+
+/* Nav link strip — transparent wrapper on desktop (display:contents keeps
+   nav's gap applying to the links); on mobile it hides and the ☰ menu's
+   .mp-navmenu dropdown takes over. */
+.navlinks{display:contents}
+/* Hamburger — never on desktop, where the links show inline. */
+.mp-menutgl{display:none}
+.mp-navmenu{display:none;position:absolute;left:0;right:0;top:100%;background:var(--panel);border-bottom:1px solid var(--edge);padding:6px 0;z-index:60;box-shadow:0 12px 28px var(--veil-soft)}
+.mp-navmenu.open{display:block}
+.mp-navmenu a{display:block;padding:12px 18px;color:var(--muted);text-decoration:none;font-size:.95em}
+.mp-navmenu a:hover{background:var(--surface2);color:var(--text)}
+.mp-navmenu a.on{color:var(--white);border-left:3px solid var(--accent);background:var(--accent-bg)}
+
+/* Mobile drawer rules — MUST stay after the base #sidebar/#rsidebar rules:
+   same-specificity selectors, so source order is what lets display:none
+   hide closed sidebars. */
+@media (max-width:700px){ /* --mob */
+  nav{gap:8px;padding:8px 10px}
+  /* site links collapse behind the ☰ menu; brand, panel toggles and the
+     user menu stay pinned */
+  .navlinks{display:none}
+  .mp-menutgl{display:block}
+  #sidebar,#rsidebar{display:none}
+  /* drawers overlay content under the nav; layout.js sets top + mutual exclusion */
+  #sidebar.open,#rsidebar.open{display:flex;position:fixed;top:49px;bottom:0;z-index:40;box-shadow:0 8px 24px var(--veil-soft)}
+  #sidebar.open{left:0;width:260px}
+  #rsidebar.open{right:0;width:min(320px,85vw)}
+
+  /* settings rows stack: label + hint on their own lines, control below —
+     a label beside a 200px+ input can't fit on a phone. */
+  .settings .row{grid-template-columns:1fr}
+  .settings .row .lbl,.settings .row .hint{grid-column:1}
+  .settings .row>:last-child{grid-column:1;grid-row:auto;justify-self:start!important}
+  .settings .row input:not([type=checkbox]):not([type=number]),
+  .settings .row select,.settings .row textarea{width:100%!important}
+}

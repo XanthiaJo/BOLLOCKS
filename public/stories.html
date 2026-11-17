@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BOLLOCKS · Stories</title>
+<link rel="stylesheet" href="css/layout.css">
+</head>
+<body>
+<aside id="rsidebar"></aside>
+<div id="content">
+<main>
+  <div class="cvhead">
+    <h2 id="title">Stories</h2>
+    <span class="cvbtns"><button class="act" id="btn_new" onclick="newArc()">+ New thread</button></span>
+  </div>
+  <div class="panel" id="smartbar" style="display:none">
+      <div><span class="lbl" style="margin-bottom:3px" title="Which memory profile (preset of smart-memory settings) this chat follows.">Memory profile for this chat</span></div>
+      <select id="smart_mprof" onchange="pickMProf(this.value)" style="width:240px"></select>
+      <span class="hint" style="display:block;margin-top:6px">With a profile set, a second AI periodically reads new messages in this chat — storing memories and tracking story threads like the ones below.</span>
+      <small id="smart_mprof_hint" style="display:block;color:var(--dim);margin-top:4px">Heavier settings live under the profile — edit them on the <a href="/memsettings.html" style="color:var(--muted)">Memory profiles</a> page.</small>
+  </div>
+  <div class="panel" id="newarcbox" style="display:none">
+    <div class="edhead" data-save="saveNewArc" data-cancel="cancelNewArc"><h3>New thread</h3></div>
+    <input id="newarctitle" placeholder="Thread title — e.g. The missing map" style="width:100%">
+    <textarea id="newarcsummary" placeholder="What is underway — the current beat (optional)" style="min-height:50px;width:100%;margin-top:4px"></textarea>
+    <span class="hint">Open threads stay in the prompt until resolved — the AI keeps advancing them. Extraction can also open and close them on its own (Smart tab).</span>
+  </div>
+  <div class="panel" id="list"></div>
+</main>
+</div>
+<script src="js/layout.js"></script>
+
+<script src="js/stories.js"></script>
+</body>
+</html>

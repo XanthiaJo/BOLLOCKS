@@ -4,6 +4,7 @@ import path from 'node:path';
 import { db, seed, migrateProfiles, migrateSchema } from './db.js';
 import { send, auth } from './lib/util.js';
 import { PUB } from './lib/files.js';
+import { VERSION, SHA } from './lib/version.js';
 import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
 import memoriesRoutes from './routes/memories.js';
@@ -12,8 +13,8 @@ import cardsRoutes from './routes/cards.js';
 import roomsRoutes from './routes/rooms.js';
 import profilesRoutes from './routes/profiles.js';
 import chatRoutes from './routes/chat.js';
+import updateRoutes from './routes/update.js';
 
-const VERSION = JSON.parse(fs.readFileSync(path.join(PUB, '..', 'package.json'), 'utf8')).version;
 const PORT = Number(process.env.PORT || 8100);
 migrateSchema();
 migrateProfiles();
@@ -29,10 +30,11 @@ const router = {
     ...roomsRoutes,
     ...profilesRoutes,
     ...chatRoutes,
-    'GET /api/version': async (req, res) => send(res, 200, { version: VERSION }),
+    ...updateRoutes,
+    'GET /api/version': async (req, res) => send(res, 200, { version: VERSION, sha: SHA || null }),
 };
 
-http.createServer(async (req, res) => {
+const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
     const key = `${req.method} ${url.pathname}`;
     const user = auth(req);
@@ -49,12 +51,32 @@ http.createServer(async (req, res) => {
     const file = path.join(PUB, url.pathname === '/' ? 'index.html' : url.pathname);
     if (fs.existsSync(file) && file.startsWith(PUB + path.sep)) {
         if (!user && path.basename(file) !== 'login.html') {
-            res.writeHead(302, { Location: '/login.html' });
+            res.writeHead(302, { Location: '/login.html', 'Cache-Control': 'no-store' });
             return res.end();
         }
         const ext = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }[path.extname(file)] || 'text/plain';
-        res.writeHead(200, { 'Content-Type': ext });
+        // no-cache: browsers and CDN edges must revalidate every load, so
+        // deploys are picked up immediately; Last-Modified keeps the
+        // revalidation cheap via 304s.
+        const mtime = Math.floor(fs.statSync(file).mtimeMs / 1000) * 1000;
+        if (Date.parse(req.headers['if-modified-since'] || '') >= mtime) {
+            res.writeHead(304, { 'Cache-Control': 'no-cache' });
+            return res.end();
+        }
+        res.writeHead(200, { 'Content-Type': ext, 'Cache-Control': 'no-cache', 'Last-Modified': new Date(mtime).toUTCString() });
         return fs.createReadStream(file).pipe(res);
     }
     send(res, 404, { error: 'not found' });
-}).listen(PORT, () => console.log(`[rp] listening on :${PORT}`));
+});
+// EADDRINUSE is retried briefly so a self-restart (POST /api/update/pull
+// respawns a twin before this process exits) can take over the port.
+let bindRetries = 10;
+server.on('error', e => {
+    if (e.code === 'EADDRINUSE' && bindRetries-- > 0) return setTimeout(() => server.listen(PORT), 500);
+    console.error(`[rp] could not bind :${PORT}`, e);
+    process.exit(1);
+});
+// The pull route closes this before spawning its replacement twin so the
+// port is free regardless of what the pulled code supports.
+globalThis.mpServer = server;
+server.listen(PORT, () => console.log(`[rp] listening on :${PORT}`));

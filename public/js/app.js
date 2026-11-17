@@ -32,16 +32,42 @@ function md(src) {
         .replace(/~~([^~]+)~~/g, '<s>$1</s>');
 }
 
-function addMsg(m) {
+let newBelow = 0;
+function bumpNew() {
+    const b = $('newmsgs'); if (!b) return;
+    newBelow++;
+    b.textContent = `↓ ${newBelow} new`;
+    b.classList.add('on');
+}
+function jumpLatest() {
+    newBelow = 0;
+    $('newmsgs')?.classList.remove('on');
+    $('msgs').scrollTop = 1e9;
+}
+function addMsg(m, stick) {
+    if (document.querySelector(`li[data-mid="${m.id}"]`)) return; // already rendered (say() appends optimistically, SSE echoes it)
+    const el = $('msgs');
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     const li = document.createElement('li');
     li.dataset.mid = m.id;
     li.className = 'mes' + (m.kind === 'ai' ? ' ai' : m.kind === 'sys' ? ' sys' : '');
     li.innerHTML = `<div class="who">${m.cards_id_fk ? `<img class="mav" src="/api/avatar?id=${m.cards_id_fk}" onerror="this.remove()">` : ''}<span class="n"></span></div><div class="body"><span class="t"></span></div>` +
         `<button class="delm" title="Delete" onclick="delMsg(${m.id},this)">✕</button>`;
     li.querySelector('.n').textContent = m.name;
+    if (m.send_date) {
+        const d = new Date(m.send_date.replace(' ', 'T') + 'Z'); // stored UTC
+        const hm = d.toTimeString().slice(0, 5);
+        const w = document.createElement('span');
+        w.className = 'when';
+        w.textContent = d.toDateString() === new Date().toDateString() ? hm
+            : `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${hm}`;
+        w.title = d.toLocaleString();
+        li.querySelector('.who').append(w);
+    }
     li.querySelector('.t').innerHTML = md(m.text);
-    $('msgs').append(li);
-    $('msgs').scrollTop = 1e9;
+    el.append(li);
+    if (stick || (stick === undefined && nearBottom)) el.scrollTop = 1e9;
+    else bumpNew();
 }
 
 async function loadRoom() {
@@ -54,6 +80,7 @@ async function loadRoom() {
         }
     } catch { }
     const r = await get(`room?id=${room}`);
+    newBelow = 0; $('newmsgs')?.classList.remove('on');
     $('msgs').innerHTML = '';
     (r.messages || []).forEach(addMsg);
     $('members').innerHTML = (r.members || [])
@@ -86,8 +113,14 @@ async function loadRoom() {
             renderToks();
         }
         if (d.type === 'delete') document.querySelector(`li[data-mid="${d.id}"]`)?.remove();
-        if (d.type === 'mem') mpFlashSaved(d.phase === 'done' ? (d.count ? `${d.count} new memories` : 'Memories updated') : 'Extracting memories…');
+        if (d.type === 'mem') {
+            if (d.notify !== false) mpFlashSaved(d.phase === 'done' ? (d.count ? `${d.count} new memories` : 'Memories updated') : 'Extracting memories…');
+            if (d.phase === 'done') get(`lastmem?room=${room}`).then(renderLastMem);
+        }
     };
+    // Network drops auto-retry, but an HTTP error response leaves the source
+    // CLOSED forever — reopen it or live updates silently stop until refresh.
+    es.onerror = () => { if (es.readyState === EventSource.CLOSED) setTimeout(loadRoom, 3000); };
     renderRooms();
     renderWorld();
     renderToks();
@@ -204,11 +237,19 @@ async function newRoom() {
 }
 
 let persona = null;
+// Enter-sends is a per-device pref (mp_entersend): default off on touch
+// devices where Enter is for newlines, on for pointer devices.
+const enterSend = () => $('entersend')?.checked ?? true;
+function inKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey && enterSend()) { e.preventDefault(); say(); }
+}
 async function say() {
     const text = $('in').value.trim();
     if (!text) return;
     $('in').value = '';
-    await api('say', { room, cardId: persona?.id || null, text });
+    $('in').style.height = 'auto';
+    const m = await api('say', { room, cardId: persona?.id || null, text });
+    if (m?.id) addMsg(m, true); // own message always snaps — SSE may be a dead socket
 }
 async function gen() {
     const r = await api('generate', { room });
@@ -235,8 +276,7 @@ function renderLastMem(m) {
     $('lastmem').innerHTML = m ? `<div style="font-size:.8em;color:var(--muted);line-height:1.4">${m.text}</div>` : '<div style="font-size:.8em;color:var(--neutral)">none yet</div>';
 }
 let lastStats = null;
-const PAGE_LINKS = { 'World Info': '/world.html', 'Memories': '/memories.html' };
-function showJson(title, obj) {
+function showModal(title, text) {
     let v = document.getElementById('partview');
     if (!v) {
         v = document.createElement('div');
@@ -244,26 +284,22 @@ function showJson(title, obj) {
         v.onclick = e => { if (e.target === v) v.remove(); };
         document.body.appendChild(v);
     }
-    v.innerHTML = `<div class="card" style="width:min(720px,94vw);max-height:82vh;overflow-y:auto;background:var(--panel);padding:16px">
+    const esc = String(text ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    v.innerHTML = `<div class="mp-card">
         <h3 style="margin:0 0 10px">${title}</h3>
-        <pre style="white-space:pre-wrap;font-size:.8em;color:var(--pre);margin:0 0 14px">${String(obj ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+        <pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:.85em;color:var(--pre);margin:0 0 14px">${esc || '(empty)'}</pre>
         <button onclick="document.getElementById('partview').remove()">Close</button></div>`;
 }
-function showRequest() { showJson('Request JSON', JSON.stringify(lastStats?.request, null, 2)); }
+function showRequest() { showModal('Request JSON', JSON.stringify(lastStats?.request, null, 2)); }
 function showPart(k) {
-    const txt = (lastStats?.texts || {})[k];
-    let v = document.getElementById('partview');
-    if (!v) {
-        v = document.createElement('div');
-        v.id = 'partview'; v.className = 'mp-veil';
-        v.onclick = e => { if (e.target === v) v.remove(); };
-        document.body.appendChild(v);
-    }
-    const esc = String(txt ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    v.innerHTML = `<div class="card" style="width:min(720px,94vw);max-height:82vh;overflow-y:auto;background:var(--panel);padding:16px">
-        <h3 style="margin:0 0 10px">${k}</h3>
-        <pre style="white-space:pre-wrap;font-size:.85em;color:var(--pre);margin:0 0 14px">${esc || '(empty)'}</pre>
-        <button onclick="document.getElementById('partview').remove()">Close</button></div>`;
+    const t = (lastStats?.texts || {})[k];
+    if (k.startsWith('(')) return showModal(k, t); // never sent — show raw text
+    const json = k === 'Chat History' && lastStats?.request
+        // Exactly the message objects sent — excludes the system prompt
+        // and the trailing "Name:" nudge.
+        ? lastStats.request.messages.filter(m => m.role !== 'system').slice(0, -1)
+        : { role: 'system', content: t };
+    showModal(k, JSON.stringify(json, null, 2));
 }
 async function renderToks() {
     const { stats } = await get('genstats?room=' + room);
@@ -282,18 +318,25 @@ async function renderToks() {
         (scale !== 1 ? `<small style="color:var(--faint)">sections ≈ scaled to actual total</small>` : '') +
         entries.map(([k, v]) => {
             const shown = k.startsWith('(') ? v : Math.round(v * scale);
-            const href = PAGE_LINKS[k];
             const hasText = k in (lastStats?.texts || {});
-            const lbl = href
-                ? `<a href="${href}" style="color:var(--muted)">${k}</a>`
-                : hasText
-                    ? `<a href="#" onclick="showPart('${k}');return false" style="color:var(--muted)">${k}</a>`
-                    : `<span>${k}</span>`;
+            const lbl = hasText
+                ? `<a href="#" onclick="showPart('${k}');return false" style="color:var(--muted)" title="View JSON sent for this section">${k}</a>`
+                : `<span>${k}</span>`;
             return `<div style="display:flex;justify-content:space-between;font-size:.8em;color:var(--muted)" title="est ${v}"><span>${lbl}</span><span>${shown}</span></div>`;
         }).join('');
 }
 
 async function start() {
+    $('entersend').checked = localStorage.mp_entersend === undefined
+        ? !matchMedia('(pointer:coarse)').matches
+        : localStorage.mp_entersend === '1';
+    $('msgs').addEventListener('scroll', () => {
+        const el = $('msgs');
+        if (newBelow && el.scrollHeight - el.scrollTop - el.clientHeight < 80) {
+            newBelow = 0;
+            $('newmsgs')?.classList.remove('on');
+        }
+    });
     const m = await get('me');
     me = m.handle || 'you';
     persona = m.persona || null;

@@ -11,6 +11,10 @@ RUN mkdir -p /app/data && addgroup -S bollocks && adduser -S bollocks -G bollock
 USER bollocks
 
 ENV PORT=8100
+# Deploy ref baked in at build time — /api/version reports it. The build
+# context has no .git, so the deploy wrapper passes --build-arg GIT_SHA=…
+ARG GIT_SHA=""
+ENV GIT_SHA=$GIT_SHA
 EXPOSE 8100
 VOLUME ["/app/data"]
 
