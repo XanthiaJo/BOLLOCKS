@@ -34,12 +34,12 @@ const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords i
 const MEM_ARCS_SUFFIX = ' If the excerpt opens, advances, or resolves an ongoing storyline, additionally output "- [arc-open] Title — what is underway", "- [arc] Title — new development", or "- [arc-close] Title". Reuse an open thread\'s title exactly when updating or closing it.';
 
 // Fields a memory profile can override on a room's mem_* settings.
-const MEM_PROFILE_FIELDS = ['auto_mem', 'mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
+const MEM_PROFILE_FIELDS = ['mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
     'mem_max_event', 'mem_max_relationship', 'mem_max_preference', 'mem_extraction_prompt',
     'mem_context_threshold', 'mem_response_length', 'mem_gen_budget', 'mem_unlimited',
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
-    'mem_extraction_profile_id', 'mem_canon_budget', 'mem_max_arcs', 'mem_arc_budget',
-    'mem_arc_profile_id'];
+    'extraction_api_profiles_id_fk', 'mem_canon_budget', 'mem_max_arcs', 'mem_arc_budget',
+    'arc_api_profiles_id_fk'];
 
 // Named system-prompt sections in cache-optimal order (stable content first —
 // see the assembly comment in generateReply). The user's active
@@ -77,8 +77,8 @@ export const PROMPT_BLOCKS = [
 /** Effective memory settings for a room: always the memory profile it follows
  *  via mem_profiles_id_fk. No link → the room's own columns: smart memories
  *  are off. Room columns only carry per-room bits like the injection-refresh
- *  counter. The mem_profiles.auto_mem column is deprecated — following a
- *  profile is the enable switch. */
+ *  counter. Following a profile IS the enable switch (the old auto_mem
+ *  flag was dropped). */
 export function memProfileFor(room) {
     const p = room?.mem_profiles_id_fk
         ? db.prepare('SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=?').get(room.mem_profiles_id_fk)
@@ -371,16 +371,16 @@ export async function maybeSummarize(roomId) {
     const threshold = mem.mem_context_threshold || 80;
     const maxCtx = room.max_context || 6400;
     // Messages since last extraction.
-    const since = db.prepare('SELECT text FROM messages WHERE rooms_id_fk=? AND messages_id_pk>?').all(roomId, room.mem_last_messages_id);
+    const since = db.prepare('SELECT text FROM messages WHERE rooms_id_fk=? AND messages_id_pk>?').all(roomId, room.mem_last_messages_id_fk);
     const sinceTokens = since.reduce((a, m) => a + tok(m.text), 0);
     const contextPct = maxCtx > 0 ? (sinceTokens / maxCtx) * 100 : 0;
-    const intervalMet = lastId - room.mem_last_messages_id >= interval;
+    const intervalMet = lastId - room.mem_last_messages_id_fk >= interval;
     const thresholdMet = contextPct >= threshold;
     if (!intervalMet && !thresholdMet) return;
     // Memory extraction uses only the profile the room owner configured —
     // no fallback. Unset, missing, or owned by someone else: skip.
-    const ext = mem.mem_extraction_profile_id
-        ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(mem.mem_extraction_profile_id)
+    const ext = mem.extraction_api_profiles_id_fk
+        ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(mem.extraction_api_profiles_id_fk)
         : null;
     if (!ext?.api_url || ext.users_id_fk !== room.owner_users_id_fk) {
         if (mem.mem_activity) console.log(`[mem] activity: extraction skipped for room ${roomId} (no owner-configured extraction profile)`);
@@ -389,7 +389,7 @@ export async function maybeSummarize(roomId) {
     const conn = { ...ext, apiUrl: ext.api_url };
     const excerpt = db.prepare(
         MSG_SQL + ' WHERE m.rooms_id_fk=? AND m.messages_id_pk>? ORDER BY m.messages_id_pk LIMIT 30')
-        .all(roomId, room.mem_last_messages_id);
+        .all(roomId, room.mem_last_messages_id_fk);
     if (!excerpt.length) return;
     if (mem.mem_activity) push(roomId, { type: 'mem', phase: 'start' });
     // Grounding: the cards in the room are the authoritative current state,
@@ -476,7 +476,7 @@ export async function maybeSummarize(roomId) {
     }
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
-    db.prepare('UPDATE rooms SET mem_last_messages_id=? WHERE rooms_id_pk=?').run(lastId, roomId);
+    db.prepare('UPDATE rooms SET mem_last_messages_id_fk=? WHERE rooms_id_pk=?').run(lastId, roomId);
     if (mem.mem_activity) {
         console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
     }

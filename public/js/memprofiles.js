@@ -2,7 +2,7 @@
 /* global $, esc, api, load, memProfiles, defPrompt */
 let selProf=Number(localStorage.mp_memprof||0);
 // selProf===-1 = unsaved "new profile" draft — panel opens blank, Save creates.
-const BLANK_PROF={name:'',auto_mem:0,mem_every:10,mem_budget:800,mem_max:50,mem_max_fact:15,mem_max_event:15,mem_max_relationship:15,mem_max_preference:15,mem_extraction_prompt:'',mem_context_threshold:80,mem_response_length:2000,mem_gen_budget:2000,mem_unlimited:0,mem_unified:1,mem_triggers:0,mem_autotune:0,mem_refresh:1,mem_activity:0,mem_extraction_profile_id:0,mem_canon_budget:800,mem_max_arcs:10,mem_arc_budget:700,mem_arc_profile_id:0};
+const BLANK_PROF={name:'',mem_every:10,mem_budget:800,mem_max:50,mem_max_fact:15,mem_max_event:15,mem_max_relationship:15,mem_max_preference:15,mem_extraction_prompt:'',mem_context_threshold:80,mem_response_length:2000,mem_gen_budget:2000,mem_unlimited:0,mem_unified:1,mem_triggers:0,mem_autotune:0,mem_refresh:1,mem_activity:0,extraction_api_profiles_id_fk:0,mem_canon_budget:800,mem_max_arcs:10,mem_arc_budget:700,arc_api_profiles_id_fk:0};
 function toggleDefPrompt(a){const p=$('def_prompt');const show=p.style.display==='none';p.style.display=show?'block':'none';if(show)p.textContent=defPrompt||'(built-in prompt unavailable)';a.textContent=show?'hide it':'show it';}
 function setSelProf(id){selProf=id;localStorage.mp_memprof=id;}
 function fillProf(p){
@@ -12,7 +12,7 @@ function fillProf(p){
   $('set_prompt').value=p.mem_extraction_prompt||'';$('set_ctx').value=p.mem_context_threshold||80;$('set_resplen').value=p.mem_response_length||2000;
   $('set_genbudget').value=p.mem_unlimited?-1:(p.mem_gen_budget||2000);$('set_unified').checked=!!p.mem_unified;$('set_triggers').checked=!!p.mem_triggers;$('set_autotune').checked=!!p.mem_autotune;$('set_refresh').value=p.mem_refresh||1;
   $('set_activity').checked=!!p.mem_activity;
-  $('set_profile').value=p.mem_extraction_profile_id||0;
+  $('set_profile').value=p.extraction_api_profiles_id_fk||0;
   // Canon = memories with no trigger keywords; this caps their prompt block.
   $('set_canonbudget').value=p.mem_canon_budget||800;
   $('set_max_arcs').value=p.mem_max_arcs||10;
@@ -20,7 +20,7 @@ function fillProf(p){
 }
 function selectProf(id){setSelProf(id);load()}
 function cancelProf(){if(selProf>0){const p=memProfiles.find(x=>x.mem_profiles_id_pk===selProf);if(p)fillProf(p);return}fillProf(BLANK_PROF);$('edtitle').textContent='New profile'}
-function rowToProf(p){return {id:p.mem_profiles_id_pk,name:p.name,auto:!!p.auto_mem,every:p.mem_every||10,budget:p.mem_budget||800,max:p.mem_max||50,maxFact:p.mem_max_fact||15,maxEvent:p.mem_max_event||15,maxRel:p.mem_max_relationship||15,maxPref:p.mem_max_preference||15,extractionPrompt:p.mem_extraction_prompt||'',contextThreshold:p.mem_context_threshold||80,responseLength:p.mem_response_length||2000,profileId:p.mem_extraction_profile_id||0,genBudget:p.mem_gen_budget||2000,unlimited:!!p.mem_unlimited,unified:(p.mem_unified??1)?1:0,triggers:!!p.mem_triggers,autotune:!!p.mem_autotune,refresh:p.mem_refresh||1,activity:!!p.mem_activity,canonBudget:p.mem_canon_budget||800,maxArcs:p.mem_max_arcs||10,arcBudget:p.mem_arc_budget||700,arcProfileId:p.mem_arc_profile_id||0}}
+function rowToProf(p){return {id:p.mem_profiles_id_pk,name:p.name,every:p.mem_every||10,budget:p.mem_budget||800,max:p.mem_max||50,maxFact:p.mem_max_fact||15,maxEvent:p.mem_max_event||15,maxRel:p.mem_max_relationship||15,maxPref:p.mem_max_preference||15,extractionPrompt:p.mem_extraction_prompt||'',contextThreshold:p.mem_context_threshold||80,responseLength:p.mem_response_length||2000,profileId:p.extraction_api_profiles_id_fk||0,genBudget:p.mem_gen_budget||2000,unlimited:!!p.mem_unlimited,unified:(p.mem_unified??1)?1:0,triggers:!!p.mem_triggers,autotune:!!p.mem_autotune,refresh:p.mem_refresh||1,activity:!!p.mem_activity,canonBudget:p.mem_canon_budget||800,maxArcs:p.mem_max_arcs||10,arcBudget:p.mem_arc_budget||700,arcProfileId:p.arc_api_profiles_id_fk||0}}
 function collectProf(){const p=memProfiles.find(x=>x.mem_profiles_id_pk===selProf);const base=p?rowToProf(p):{name:'Profile'};const gb=Number($('set_genbudget').value)||0,unl=gb<=-1;return {...base,id:selProf,name:$('pf_name').value.trim()||base.name,extractionPrompt:$('set_prompt').value,contextThreshold:Number($('set_ctx').value)||80,responseLength:Number($('set_resplen').value)||2000,profileId:$('set_profile').value?Number($('set_profile').value):0,genBudget:unl?-1:(gb||2000),unlimited:unl?1:0,unified:$('set_unified').checked?1:0,triggers:$('set_triggers').checked?1:0,autotune:$('set_autotune').checked?1:0,refresh:Number($('set_refresh').value)||1,activity:$('set_activity').checked?1:0,every:Number($('set_every').value)||10,budget:Number($('set_budget').value)||800,max:Number($('set_max').value)||50,maxFact:Number($('set_max_fact').value)||0,maxEvent:Number($('set_max_event').value)||0,maxRel:Number($('set_max_rel').value)||0,maxPref:Number($('set_max_pref').value)||0,canonBudget:$('set_canonbudget').value===''?800:Number($('set_canonbudget').value),maxArcs:$('set_max_arcs').value===''?10:Number($('set_max_arcs').value),arcBudget:$('set_arcbudget').value===''?700:Number($('set_arcbudget').value)}}
 async function saveProf(){
   if(selProf===-1){const {id:_id,...body}=collectProf();const r=await api('memprofiles',body);setSelProf(r?.id||0);load();return;}

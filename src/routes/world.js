@@ -38,8 +38,8 @@ export default {
             if (stillLinked.get(eid)) continue; // shared with another book — keep it
             delK.run(eid); delE.run(eid);
         }
-        db.prepare('DELETE FROM world_books WHERE world_books_id_pk=? AND owner_users_id_fk=?').run(id, u.users_id_pk);
         db.prepare('DELETE FROM room_books WHERE world_books_id_fk=?').run(id);
+        db.prepare('DELETE FROM world_books WHERE world_books_id_pk=? AND owner_users_id_fk=?').run(id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
     'POST /api/world/link': async (req, res, u) => {

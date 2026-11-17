@@ -27,12 +27,12 @@ There are two kinds of memory, distinguished by `origin`:
 ### Smart memories (AI-extracted)
 
 - Created automatically by `maybeSummarize()` after every `mem_every` messages, when the room follows a profile.
-- **Profile link:** a room follows a smart-memory profile via `rooms.mem_profiles_id_fk` — **the link itself is the on/off switch** (the profile dropdown; `auto_mem` is a deprecated unread column). Profiles stay user-owned presets (`mem_profiles.users_id_fk`); a room may only follow a profile owned by the room's owner, and only the room owner can change the link (`POST /api/room/memsettings`). No link → smart memories are **off** (no fallback to a default profile). Deleting a profile re-points only the owner's own rooms at another of their profiles.
-- Extraction runs only through the room owner's configured extraction profile (`mem_extraction_profile_id` on the memory profile). No fallback: if it is unset, missing, or belongs to someone other than the room owner, extraction is skipped.
+- **Profile link:** a room follows a smart-memory profile via `rooms.mem_profiles_id_fk` — **the link itself is the on/off switch** (the profile dropdown; the old `auto_mem` column has been dropped). Profiles stay user-owned presets (`mem_profiles.users_id_fk`); a room may only follow a profile owned by the room's owner, and only the room owner can change the link (`POST /api/room/memsettings`). No link → smart memories are **off** (no fallback to a default profile). Deleting a profile re-points only the owner's own rooms at another of their profiles.
+- Extraction runs only through the room owner's configured extraction profile (`extraction_api_profiles_id_fk` on the memory profile). No fallback: if it is unset, missing, or belongs to someone other than the room owner, extraction is skipped.
 - **Smart memories belong to the chat (room) only** - they are always stored as shared room memories (no `memory_cards` row).
   - Rationale: deciding whether an extracted fact belongs to a specific character vs. the chat as a whole is ambiguous and error-prone. Keep smart memories room-scoped; users can promote a fact to a character's permanent memory manually if desired.
 - Capped to `mem_max` per room (oldest `origin='smart'` dropped). Permanent memories are never subject to the cap.
-- Watermark (`mem_last_messages_id`) advances only after a successful extraction.
+- Watermark (`mem_last_messages_id_fk`) advances only after a successful extraction.
 
 ## Scoping model
 
@@ -134,7 +134,7 @@ flowchart TD
 2. `/api/memories/triggers` filters by `rooms_id_pk` instead of `memories_id_pk` — would update all memories in a room. Fix filter.
 3. No ownership/auth checks on memory endpoints or memsettings. Add per the table above.
 4. Smart extraction stores everything as shared (strips `[Name]`) — acceptable per design; document it.
-5. ~~Extraction profile (`set_profile`) not persisted~~ — resolved: `mem_extraction_profile_id` on the memory profile is used, and it must belong to the room owner (no fallback).
+5. ~~Extraction profile (`set_profile`) not persisted~~ — resolved: `extraction_api_profiles_id_fk` on the memory profile is used, and it must belong to the room owner (no fallback).
 6. `POST /api/memories` doesn't accept `type`/`triggers` from frontend.
 7. Consider adding `updated` timestamp and `owner_users_id_fk` for audit.
 
@@ -200,10 +200,9 @@ on both sides: written by the memory-writer, injected on every reply.
 ### Schema
 
 ```sql
-ALTER TABLE memories ADD COLUMN canon INTEGER DEFAULT 0;
--- DEPRECATED: kept for schema compat but no longer read. Canon is now
--- defined as "no memory_triggers rows"; a user_version=8 migration clears
--- triggers off old canon=1 rows so they stay always-injected.
+-- canon is "no memory_triggers rows" — no flag column. A user_version=8
+-- migration clears triggers off rows from the old canon=1 era so they
+-- stay always-injected; the column itself is then dropped.
 ALTER TABLE mem_profiles ADD COLUMN mem_canon_budget INTEGER DEFAULT 800;
 
 CREATE TABLE IF NOT EXISTS room_arcs (
@@ -213,18 +212,21 @@ CREATE TABLE IF NOT EXISTS room_arcs (
     summary TEXT DEFAULT '',           -- writer updates as it progresses
     status TEXT DEFAULT 'open'
         CHECK(status IN ('open','resolved','dropped')),
-    origin TEXT DEFAULT 'user',        -- 'user' (Stories page) | 'smart' (extraction)
-    opened_messages_id_fk INTEGER,     -- anchors "when did this start"
-    closed_messages_id_fk INTEGER,
+    origin TEXT DEFAULT 'user' CHECK(origin IN ('user','smart')),
+                                   -- 'user' (Stories page) | 'smart' (extraction)
+    opened_messages_id_fk INTEGER REFERENCES messages(messages_id_pk) ON DELETE SET NULL,
+    closed_messages_id_fk INTEGER REFERENCES messages(messages_id_pk) ON DELETE SET NULL,
     created TEXT DEFAULT (datetime('now')),
     updated TEXT DEFAULT (datetime('now'))
 );
 
 ALTER TABLE mem_profiles ADD COLUMN mem_max_arcs INTEGER DEFAULT 10;
 ALTER TABLE mem_profiles ADD COLUMN mem_arc_budget INTEGER DEFAULT 700;
-ALTER TABLE mem_profiles ADD COLUMN mem_arc_profile_id INTEGER DEFAULT 0;
--- 0 = share mem_extraction_profile_id; non-zero = dedicated pass (reserved,
--- must still belong to the room owner). Cleared on api_profile/user delete.
+ALTER TABLE mem_profiles ADD COLUMN arc_api_profiles_id_fk INTEGER
+    REFERENCES api_profiles(api_profiles_id_pk) ON DELETE SET NULL;
+-- NULL = share extraction_api_profiles_id_fk; non-NULL = dedicated pass
+-- (reserved, must still belong to the room owner). NULLed on
+-- api_profile/user delete.
 ```
 
 All additive in `migrateSchema()`; the new `mem_*` columns ride
@@ -280,5 +282,5 @@ correctly.
   mechanism, canon is just its absence.
 - Arc `summary` overwrite vs. append — overwrite for now (one line per arc,
   cheap injection); a beats timeline would need its own cap.
-- A dedicated arc extraction pass on `mem_arc_profile_id` — reserved, not
+- A dedicated arc extraction pass on `arc_api_profiles_id_fk` — reserved, not
   implemented; add if tag-folding proves unreliable.
