@@ -60,7 +60,7 @@ function git(root, ...args) {
 
 const SIGNOFF_RE = /^(Signed-off-by:|Co-authored-by:|Reviewed-by:|Acked-by:|Change-Id:|Generated[ -](with|by)\b)/i;
 const CONVENTIONAL_PREFIX_RE = /^(?:[a-z]+(?:\([^)]+\))?!?:\s*|BREAKING CHANGE:?\s*)/i;
-const SKIP_SUBJECT_RE = /^chore\((release|release-notes)\):/i;
+const SKIP_SUBJECT_RE = /^(?:chore\((?:release|release-notes)\):|chore\(package\): bump version\b)/i;
 
 function parseSemverTag(tag) {
   const match = /^v(\d+)\.(\d+)\.(\d+)$/.exec(tag.trim());
@@ -128,7 +128,18 @@ function humanizeCommitSubject(subject) {
 // list, otherwise the first meaningful paragraph. Mirrors the PHP
 // cleanCommitDescription() in BoxOfDragons' GenerateBuildInfo.php.
 function cleanCommitDescription(subject, body) {
-  body = (body || '').trim();
+  // Strip PR scaffolding before line work — squash-merge bodies carry the
+  // whole PR description: HTML comments (the autofill commit-list lives in
+  // them), headings, checklist items (test plans), horizontal rules.
+  body = (body || '')
+    // autofill inserts its commit list BETWEEN two comment markers — strip
+    // the whole block, not just the markers
+    .replace(/<!--\s*autofill:[a-z-]*:start\s*-->[\s\S]*?<!--\s*autofill:[a-z-]*:end\s*-->/g, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/^\s*#{1,6}\s.*$/gm, '')
+    .replace(/^[-*]\s*\[[ xX]\]\s+.*$/gm, '')
+    .replace(/^\s*([-*_]\s*){3,}\s*$/gm, '')
+    .trim();
   if (body === '') return null;
 
   const lines = body.split(/\r?\n+/);
@@ -169,10 +180,11 @@ function cleanCommitDescription(subject, body) {
       if (/^[-*]\s+/.test(line)) {
         flush();
         current = t.replace(/^[-*]\s+/, '');
-      } else if (current !== null && /^\s+/.test(line)) {
+      } else if (current !== null) {
+        // Hard-wrapped body text: blank lines already broke the paragraph,
+        // so any non-bullet line continues the item — indented or not.
         current += ' ' + t;
       } else {
-        flush();
         current = t;
       }
     }
@@ -180,10 +192,20 @@ function cleanCommitDescription(subject, body) {
     return bullets.length > 0 ? bullets : null;
   }
 
+  // Prose body — take the first paragraph, joining hard-wrapped lines so a
+  // sentence split mid-wrap isn't cut off.
+  const para = [];
   for (const line of lines) {
     const t = line.trim();
-    if (t === '' || SIGNOFF_RE.test(t)) continue;
-    const cleaned = stripRedundant(t.replace(/^[-*]\s*/, ''));
+    if (t === '') {
+      if (para.length > 0) break;
+      continue;
+    }
+    if (SIGNOFF_RE.test(t)) continue;
+    para.push(t);
+  }
+  if (para.length > 0) {
+    const cleaned = stripRedundant(para.join(' ').replace(/^[-*]\s*/, ''));
     if (cleaned !== '') return cleaned;
   }
   return null;
