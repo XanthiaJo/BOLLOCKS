@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BOLLOCKS · Stories</title>
+<link rel="stylesheet" href="css/layout.css">
+</head>
+<body>
+<aside id="rsidebar"></aside>
+<div id="content">
+<main>
+  <div class="cvhead">
+    <h2 id="title">Stories</h2>
+    <span class="cvbtns"><button class="act" id="btn_new" onclick="newArc()">+ New thread</button></span>
+  </div>
+  <div class="panel" id="newarcbox" style="display:none">
+    <div class="edhead" data-save="saveNewArc" data-cancel="cancelNewArc"><h3>New thread</h3></div>
+    <input id="newarctitle" placeholder="Thread title — e.g. The missing map" style="width:100%">
+    <textarea id="newarcsummary" placeholder="What is underway — the current beat (optional)" style="min-height:50px;width:100%;margin-top:4px"></textarea>
+    <span class="hint">Open threads stay in the prompt until resolved — the AI keeps advancing them. Extraction can also open and close them on its own (Smart tab).</span>
+  </div>
+  <div class="panel" id="list"></div>
+</main>
+</div>
+<script src="js/layout.js"></script>
+
+<script src="js/stories.js"></script>
+</body>
+</html>

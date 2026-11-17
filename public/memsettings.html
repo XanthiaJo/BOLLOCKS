@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BOLLOCKS · Smart memory</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BOLLOCKS · Memory profiles</title>
 <link rel="stylesheet" href="css/layout.css">
 </head>
 <body>
 <aside id="rsidebar"></aside>
 <div id="content">
 <main>
-  <div class="cvhead"><h2>Smart memory</h2></div>
+  <div class="cvhead"><h2>Memory profiles</h2></div>
   <div class="panel settings" id="profpanel" style="display:none">
     <div class="edhead" data-save="saveProf" data-cancel="cancelProf"><h3 id="edtitle"></h3></div>
     <label class="lbl" style="display:block">Profile name</label><input id="pf_name" style="width:240px;margin:2px 0">
@@ -72,7 +72,7 @@
     </div>
 
     <h4>Active Threads</h4>
-    <span class="hint">Story arcs tracked per chat — managed on the Memories page's Threads tab, or opened/closed automatically by extraction. 0 = extraction ignores threads.</span>
+    <span class="hint">Story arcs tracked per chat — managed on the Stories page, or opened/closed automatically by extraction. 0 = extraction ignores threads.</span>
     <div>
       <div class="row"><span class="lbl" title="How many open story threads are tracked at once. Oldest-touched threads drop first." title="How many open story threads are tracked at once. Oldest-touched threads drop first.">Max tracked arcs</span><input type="number" id="set_max_arcs" min="0" max="100" value="10" style="width:80px"></div>
       <div class="row"><span class="lbl" title="Token cap for open-threads context in prompts." title="Token cap for open-threads context in prompts.">Thread injection budget</span><input type="number" id="set_arcbudget" min="0" max="4000" value="700" style="width:80px"></div>
@@ -91,7 +91,7 @@
     </div>
 
     <h4>Canon</h4>
-    <span class="hint">Memories flagged canon on the Memories page are always injected — no triggers, no refresh gaps. This is their token cap.</span>
+    <span class="hint">Memories with no trigger keywords are canon — injected every turn, immune to refresh decay. This is their token cap.</span>
     <div>
       <div class="row"><span class="lbl" title="Token cap for canon (always-true world facts) in prompts." title="Token cap for canon (always-true world facts) in prompts.">Canon injection budget</span><input type="number" id="set_canonbudget" min="0" max="4000" value="800" style="width:80px"></div>
       <div class="ph"><div class="lbl" title="Format canon facts are injected with.">Canon template</div><textarea disabled placeholder="(not implemented yet)" style="min-height:50px"></textarea></div>

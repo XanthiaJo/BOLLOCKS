@@ -146,15 +146,17 @@ flowchart TD
 
 ## Canon & arcs
 
-The `.ph` sections on the Smart memory settings page sketch a richer memory
-system. Two of them — **canon** and **arcs** — are implemented end-to-end:
-their settings are live profile fields, and the Memories page carries the
-feature UI (Threads tab + canon flag). The remaining `.ph` sections are still
-placeholders. Designed for minimal API cost.
+The `.ph` sections on the Memory profiles settings page sketch a richer
+memory system. Two of them — **canon** and **arcs** — are implemented
+end-to-end. UI structure: the Memories page has **Manual** (permanent) and
+**Smart** (extracted) tabs, and story threads live on their own **Stories**
+page with the same Manual/Smart split (by who opened them). Designed for
+minimal API cost.
 
-Terms: **canon** = curated always-true facts ("never contradict this");
-**arcs** = open story threads with a lifecycle ("this is unfolding — advance
-it"). Canon is static; arcs open, progress, close.
+Terms: **canon** = always-true facts ("never contradict this") — defined
+mechanically as a memory with **no trigger keywords**, not a flag; **arcs** =
+open story threads with a lifecycle ("this is unfolding — advance it").
+Canon is static; arcs open, progress, close.
 
 ### Who does what
 
@@ -199,6 +201,9 @@ on both sides: written by the memory-writer, injected on every reply.
 
 ```sql
 ALTER TABLE memories ADD COLUMN canon INTEGER DEFAULT 0;
+-- DEPRECATED: kept for schema compat but no longer read. Canon is now
+-- defined as "no memory_triggers rows"; a user_version=8 migration clears
+-- triggers off old canon=1 rows so they stay always-injected.
 ALTER TABLE mem_profiles ADD COLUMN mem_canon_budget INTEGER DEFAULT 800;
 
 CREATE TABLE IF NOT EXISTS room_arcs (
@@ -208,6 +213,7 @@ CREATE TABLE IF NOT EXISTS room_arcs (
     summary TEXT DEFAULT '',           -- writer updates as it progresses
     status TEXT DEFAULT 'open'
         CHECK(status IN ('open','resolved','dropped')),
+    origin TEXT DEFAULT 'user',        -- 'user' (Stories page) | 'smart' (extraction)
     opened_messages_id_fk INTEGER,     -- anchors "when did this start"
     closed_messages_id_fk INTEGER,
     created TEXT DEFAULT (datetime('now')),
@@ -226,19 +232,27 @@ All additive in `migrateSchema()`; the new `mem_*` columns ride
 
 ### Canon (injection-only, no extra LLM calls)
 
-- `memories.canon` is set via `POST /api/memories` / `memories/update`
-  (orthogonal to `type`/`origin` — a smart fact can be promoted); shown as a
-  `canon` badge + disabled checkbox on the Memories page.
+- **Canon = no trigger keywords.** A memory with an empty trigger list is
+  always injected; adding keywords makes it contextual. There is no flag —
+  clearing the triggers field in either page's editor is how you promote a
+  memory (works for both `origin='user'` and `origin='smart'`).
 - `generateReply` injects canon under the `canon` PROMPT_BLOCKS key (default
   position: after `roster`, before `world` — very stable, cache-friendly).
-  Bypasses trigger gating AND the `mem_refresh` counter; capped by
-  `mem_canon_budget`. `canon=1` rows are excluded from the regular memory
-  block so they don't inject twice. Shared canon + the card's own apply.
+  Bypasses the `mem_refresh` counter; capped by `mem_canon_budget`.
+  Untriggered rows are excluded from the regular memory block so they don't
+  inject twice (the regular block now requires ≥1 trigger row). Shared canon
+  + the card's own apply.
+- Display: untriggered rows get a `canon` badge in the lists; the editor's
+  triggers field carries an "empty = canon" placeholder.
+- Caps note: canon smart memories still count toward the per-type/`mem_max`
+  eviction caps — promote truly permanent facts to `origin='user'` (→ manual).
 
 ### Arcs (room_arcs + [arc\*] extraction tags)
 
 - Routes: `GET /api/arcs?room=`; `POST /api/arcs` / `arcs/update` /
-  `arcs/resolve` / `arcs/delete` — all `roomMember`-gated.
+  `arcs/resolve` / `arcs/delete` — all `roomMember`-gated. `origin` splits the
+  Stories page tabs: `user` rows come from the API, `smart` rows from
+  `[arc-open]` extraction tags.
 - Injection: open arcs render under the `arcs` PROMPT_BLOCKS key (default:
   after `memories`), `title — summary` per line, capped by `mem_arc_budget`.
 - Extraction: when `mem_max_arcs > 0`, the built-in extraction prompt gains
@@ -260,8 +274,10 @@ correctly.
 
 ### Open decisions
 
-- Canon flag vs. reusing `world_entries.constant` — went with the flag (keeps
-  canon inside the memory UI: promote-in-place, per-room).
+- Canon semantics — settled: **untriggered = canon** (no flag, no separate
+  concept). Chosen over an explicit flag after the "scar doesn't need
+  injecting every turn" critique — keyword gating stays the relevance
+  mechanism, canon is just its absence.
 - Arc `summary` overwrite vs. append — overwrite for now (one line per arc,
   cheap injection); a beats timeline would need its own cap.
 - A dedicated arc extraction pass on `mem_arc_profile_id` — reserved, not

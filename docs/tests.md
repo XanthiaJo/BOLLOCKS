@@ -81,7 +81,7 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 **`test/memories.test.js`**
 
 - [x] Create room-scoped and card-scoped memories; `card=-1`/`card=N` scoping
-- [x] Update content/type/triggers/origin/canon; `/api/lastmem` returns latest `origin='smart'`
+- [x] Update content/type/triggers/origin; `/api/lastmem` returns latest `origin='smart'`; clearing triggers promotes a memory to canon
 - [x] `memories/move` toggles card↔room scope; delete unlinks and removes
 
 **`test/profiles.test.js` — connections & memory profiles**
@@ -98,8 +98,8 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 - [x] No AI member → 404; owner with no connection → 500 with a clear error
 - [x] `ai_trigger: 'all'` fires replies after a say (talkativeness 100); `'named'` fires only when the character is mentioned
 - [x] Smart-memory extraction (mock endpoint): typed tags land (`[event]` ≠ flattened to `fact`), one memory per run, trigger keywords parse
-- [x] Canon memories bypass triggers, inject under their own `Canon:` block, never double-inject
-- [x] Arcs: API create/resolve/delete lifecycle; open threads inject under `Open threads:`; `[arc-open]`/`[arc]`/`[arc-close]` extraction tags drive `room_arcs`
+- [x] Untriggered memories are canon: inject under their own `Canon:` block every turn, never double-inject; triggered memories stay out when keywords don't match
+- [x] Arcs: API create/resolve/delete lifecycle (`origin='user'`); open threads inject under `Open threads:`; `[arc-open]`/`[arc]`/`[arc-close]` extraction tags drive `room_arcs` (`origin='smart'`)
 
 **`test/users.test.js`**
 
