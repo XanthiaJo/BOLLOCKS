@@ -99,6 +99,7 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 - [x] `ai_trigger: 'all'` fires replies after a say (talkativeness 100); `'named'` fires only when the character is mentioned
 - [x] Smart-memory extraction (mock endpoint): typed tags land (`[event]` ≠ flattened to `fact`), one memory per run, trigger keywords parse
 - [x] Untriggered memories are canon: inject under their own `Canon:` block every turn, never double-inject; triggered memories stay out when keywords don't match
+- [x] Trigger matching is whole-word (`king` ≠ `looking`, `kings` fires) and scans the full fetched history, not just recent lines
 - [x] Arcs: API create/resolve/delete lifecycle (`origin='user'`); open threads inject under `Open threads:`; `[arc-open]`/`[arc]`/`[arc-close]` extraction tags drive `room_arcs` (`origin='smart'`)
 
 **`test/users.test.js`**
