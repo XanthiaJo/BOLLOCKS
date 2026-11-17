@@ -12,12 +12,13 @@ initSidebar({
   buttons:[{label:'+ New profile',onclick:'newMP()'}],
   footer:'Chats pick which smart-memory profile they follow in their chat settings or the <a href="/memories.html" style="color:var(--muted)">Memories</a> page\'s Smart tab. Select a profile to edit it.',
 });
-let memProfiles=[];let defPrompt='';
+let memProfiles=[];let defPrompt='';let defConsolPrompt='';let defStatePrompt='';
 async function load(){
   const [{profiles},mps]=await Promise.all([get('profiles'),get('memprofiles')]);
-  memProfiles=mps?.profiles||[];defPrompt=mps?.defaultPrompt||'';
+  memProfiles=mps?.profiles||[];defPrompt=mps?.defaultPrompt||'';defConsolPrompt=mps?.defaultConsolPrompt||'';defStatePrompt=mps?.defaultStatePrompt||'';
   const profOpts='<option value="0">— none (extraction off) —</option>'+(profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   $('set_profile').innerHTML=profOpts;
+  $('set_consol_profile').innerHTML='<option value="0">— same as extraction —</option>'+(profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   $('plist').innerHTML=(memProfiles||[]).map(p=>
     rprofRow({name:esc(p.name),
       sel:p.mem_profiles_id_pk===selProf,

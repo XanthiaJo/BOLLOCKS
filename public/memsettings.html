@@ -44,6 +44,32 @@
       <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><span class="hint">Fallback reply length — only used when the generation budget above is unset. Usually safe to leave alone. Default: 2000.</span><input type="number" id="set_resplen" min="256" max="8192" style="width:80px;display:inline-block"></div>
     </div>
 
+    <h4>Consolidation</h4>
+    <span class="hint">Merging duplicate smart memories so the store stays small and honest.</span>
+    <label class="row cbrow"><span class="lbl">Dedup pass</span><span class="hint">Free cleanup after every extraction run — exact and contained duplicates are marked superseded (never deleted).</span><input type="checkbox" id="set_dedup"></label>
+    <label class="row cbrow"><span class="lbl">Enable consolidation</span><span class="hint">Ask the model to merge near-duplicates when a memory type nears its cap — semantic dedup the string pass can't catch.</span><input type="checkbox" id="set_consolidate"></label>
+    <div class="row"><span class="lbl" title="Which API profile runs consolidation. Defaults to the extraction connection — a small local model is fine.">Consolidation profile</span><span class="hint">Dedicated connection for the merge pass; "Same as extraction" uses the memory-writer's. Local model is plenty — speed isn't a priority here.</span><select id="set_consol_profile" style="width:220px"></select></div>
+    <div class="row"><span class="lbl" title="Consolidate a type's memories once it reaches this % of its cap.">Consolidate at % of cap</span><span class="hint">Merge a memory type when it reaches this share of its per-type max. Default: 80.</span><input type="number" id="set_consol_at" min="10" max="100" value="80" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl" title="Also consolidate everything every N extraction runs. 0 = only at cap.">Also every N extraction runs</span><span class="hint">Periodic sweep of all types even if no cap is near. 0 = only run when a type nears its cap. Default: 10.</span><input type="number" id="set_consol_every" min="0" max="100" value="10" style="width:80px;display:inline-block"></div>
+    <div>
+      <div class="lbl" title="The instruction sent to the model when merging memories. Leave blank for default.">Consolidation prompt template</div>
+      <span class="hint">Custom merge instructions. Leave blank for the built-in prompt — <a href="#" data-pre="def_consol_prompt" onclick="toggleDefPrompt(this);return false" style="color:var(--muted)">show it</a>.</span>
+      <pre id="def_consol_prompt" style="display:none;white-space:pre-wrap;font-size:.78em;color:var(--dim);background:var(--input);padding:8px;border-radius:4px;margin:2px 0 6px"></pre>
+      <textarea id="set_consol_prompt" placeholder="(default consolidation prompt)" style="min-height:60px"></textarea>
+    </div>
+
+    <h4>Scene state</h4>
+    <span class="hint">A rolling snapshot of what is true right now — where people and objects are. Replaces itself each run, unlike accumulated memories.</span>
+    <label class="row cbrow"><span class="lbl">Track scene state</span><span class="hint">After extraction, a second pass writes a fresh [state] snapshot and supersedes the previous one — the store always reflects NOW, not history.</span><input type="checkbox" id="set_state"></label>
+    <div class="row"><span class="lbl" title="Refresh the snapshot every N extraction runs.">Refresh every N extractions</span><span class="hint">1 = refresh on every extraction run. Higher = cheaper, staler. Default: 1.</span><input type="number" id="set_state_every" min="1" max="50" value="1" style="width:80px;display:inline-block"></div>
+    <div class="row"><span class="lbl" title="Safety cap on live state entries; oldest are superseded.">Max state entries</span><span class="hint">Cap on the live snapshot size — a misbehaving model can't flood it. Default: 30.</span><input type="number" id="set_max_state" min="5" max="200" value="30" style="width:80px;display:inline-block"></div>
+    <div>
+      <div class="lbl" title="The instruction sent to the model when refreshing the snapshot. Leave blank for default.">State prompt template</div>
+      <span class="hint">Custom snapshot instructions. Leave blank for the built-in prompt — <a href="#" data-pre="def_state_prompt" onclick="toggleDefPrompt(this);return false" style="color:var(--muted)">show it</a>.</span>
+      <pre id="def_state_prompt" style="display:none;white-space:pre-wrap;font-size:.78em;color:var(--dim);background:var(--input);padding:8px;border-radius:4px;margin:2px 0 6px"></pre>
+      <textarea id="set_state_prompt" placeholder="(default state prompt)" style="min-height:60px"></textarea>
+    </div>
+
     <h4>Injection</h4>
     <span class="hint">How stored memories get put back into the AI's prompt.</span>
     <div class="row"><span class="lbl" title="Max tokens of memory content injected into each generation prompt.">Token budget</span><span class="hint">Max memory text added to each reply's prompt — beyond this, newer memories are left out (oldest are kept). Default: 800.</span><input type="number" id="set_budget" min="50" max="4000" style="width:80px;display:inline-block"></div>
@@ -75,18 +101,6 @@
     <div class="ph">
       <div class="row"><span class="lbl" title="How many open story threads are tracked at once." title="How many open story threads are tracked at once.">Max tracked arcs</span><input value="10" disabled style="width:80px"></div>
       <div class="row"><span class="lbl" title="Token cap for open-threads context in prompts." title="Token cap for open-threads context in prompts.">Thread injection budget</span><input value="700" disabled style="width:80px"></div>
-    </div>
-
-    <h4>Consolidation</h4>
-    <div class="ph">
-      <div class="row"><span class="lbl" title="Merge N pending fact-memories into one consolidated entry." title="Merge N pending fact-memories into one consolidated entry.">Consolidate [fact] after N unprocessed</span><input value="4" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for relationship-type memories." title="Same, for relationship-type memories.">Consolidate [relationship] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for preference-type memories." title="Same, for preference-type memories.">Consolidate [preference] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for event-type memories." title="Same, for event-type memories.">Consolidate [event] after N</span><input value="4" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for scene summaries." title="Same, for scene summaries.">Consolidate [scene] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for character revelations." title="Same, for character revelations.">Consolidate [revelation] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for character development notes." title="Same, for character development notes.">Consolidate [development] after N</span><input value="3" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Same, for detail memories." title="Same, for detail memories.">Consolidate [detail] after N</span><input value="3" disabled style="width:80px"></div>
     </div>
 
     <h4>Canon</h4>
@@ -126,14 +140,6 @@
       <label class="cb"><input type="checkbox" disabled> Auto-repair contradictions</label>
     </div>
 
-    <h4>Deduplication</h4>
-    <div class="ph">
-      <label class="cb"><input type="checkbox" disabled> Use semantic embeddings</label>
-      <div class="row"><span class="lbl" title="Service providing embeddings." title="Service providing embeddings.">Embedding source</span><input placeholder="ollama / openai" disabled></div>
-      <div class="row"><span class="lbl" title="Endpoint for the embeddings service." title="Endpoint for the embeddings service.">Embedding URL</span><input disabled></div>
-      <div class="row"><span class="lbl" title="Model used for embeddings, e.g. nomic-embed-text." title="Model used for embeddings, e.g. nomic-embed-text.">Embedding model</span><input placeholder="nomic-embed-text" disabled></div>
-      <label class="cb"><input type="checkbox" disabled> Keep model in memory</label>
-    </div>
 
     <button class="del" onclick="delMP(selProf)" style="margin-top:12px">Delete profile</button>
   </div>
