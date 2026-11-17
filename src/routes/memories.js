@@ -34,8 +34,8 @@ export default {
     'POST /api/memories': async (req, res, u) => {
         const b = await readBody(req);
         if (!roomMember(b.room || 1, u)) return send(res, 403, { error: 'not a room member' });
-        const id = db.prepare('INSERT INTO memories (content,type,origin,canon) VALUES (?,?,?,?)')
-            .run(b.content || '', b.type || 'fact', 'user', b.canon ? 1 : 0).lastInsertRowid;
+        const id = db.prepare('INSERT INTO memories (content,type,origin) VALUES (?,?,?)')
+            .run(b.content || '', b.type || 'fact', 'user').lastInsertRowid;
         setTriggers(id, b.triggers);
         db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(b.room || 1, id);
         if (b.cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, b.cardId);
@@ -50,8 +50,8 @@ export default {
         // Card-scoped smart memories are not supported yet.
         if (origin === 'smart' && db.prepare('SELECT 1 FROM memory_cards WHERE memories_id_fk=?').get(id))
             return send(res, 400, { error: 'character smart memories not supported yet' });
-        db.prepare('UPDATE memories SET content=COALESCE(?,content), type=COALESCE(?,type), origin=COALESCE(?,origin), canon=COALESCE(?,canon) WHERE memories_id_pk=?')
-            .run(b.content ?? null, b.type ?? null, origin, b.canon === undefined ? null : (b.canon ? 1 : 0), id);
+        db.prepare('UPDATE memories SET content=COALESCE(?,content), type=COALESCE(?,type), origin=COALESCE(?,origin) WHERE memories_id_pk=?')
+            .run(b.content ?? null, b.type ?? null, origin, id);
         if (b.triggers !== undefined) setTriggers(id, b.triggers);
         send(res, 200, { ok: true });
     },
@@ -88,7 +88,7 @@ export default {
     'GET /api/arcs': async (req, res, u) => {
         const room = Number(new URL(req.url, 'http://x').searchParams.get('room') || 0);
         if (!roomMember(room, u)) return send(res, 403, { error: 'not a room member' });
-        const arcs = db.prepare(`SELECT room_arcs_id_pk AS id, title, summary, status, created, updated
+        const arcs = db.prepare(`SELECT room_arcs_id_pk AS id, title, summary, status, origin, created, updated
             FROM room_arcs WHERE rooms_id_fk=? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, updated DESC`).all(room);
         send(res, 200, { arcs });
     },

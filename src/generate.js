@@ -158,15 +158,17 @@ export async function generateReply(roomId, card) {
     const active = r => !r.triggers || r.triggers.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
         .some(t => recentText.includes(t));
     const TRIG_SQL = `(SELECT GROUP_CONCAT(mt.word,',') FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk) AS triggers`;
-    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND IFNULL(m.canon,0)=0 AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), budget, 0);
-    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? AND IFNULL(m.canon,0)=0 ORDER BY m.memories_id_pk DESC`)
+    const HAS_TRIG = `EXISTS (SELECT 1 FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk)`;
+    const NO_TRIG = `NOT ${HAS_TRIG}`;
+    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND ${HAS_TRIG} AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), budget, 0);
+    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND mc.cards_id_fk=? AND ${HAS_TRIG} ORDER BY m.memories_id_pk DESC`)
         .all(roomId, card.id).reverse().filter(active), budget, roomMems.reduce((a, r) => a + tok(r.content), 0));
 
-    // Canon: curated always-true memories — injected every generation,
-    // bypassing triggers and the refresh counter, capped by their own
+    // Canon: memories with no trigger keywords are always-true — injected
+    // every generation, bypassing the refresh counter, capped by their own
     // budget. Shared canon + this card's canon both apply.
     const canonRows = cap(db.prepare(`SELECT m.content FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-        WHERE rm.rooms_id_fk=? AND m.canon=1 AND (NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk)
+        WHERE rm.rooms_id_fk=? AND ${NO_TRIG} AND (NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk)
             OR EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk AND mc.cards_id_fk=?))
         ORDER BY m.memories_id_pk`).all(roomId, card.id), mem?.mem_canon_budget ?? 800);
     const canonText = canonRows.length ? 'Canon:\n' + canonRows.map(m => '- ' + m.content).join('\n') : null;
@@ -424,7 +426,7 @@ export async function maybeSummarize(roomId) {
     const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
     const findArc = db.prepare("SELECT room_arcs_id_pk AS id FROM room_arcs WHERE rooms_id_fk=? AND status='open' AND LOWER(title)=LOWER(?)");
-    const insArc = db.prepare('INSERT INTO room_arcs (rooms_id_fk,title,summary,opened_messages_id_fk) VALUES (?,?,?,?)');
+    const insArc = db.prepare("INSERT INTO room_arcs (rooms_id_fk,title,summary,opened_messages_id_fk,origin) VALUES (?,?,?,?,'smart')");
     const upArc = db.prepare("UPDATE room_arcs SET summary=?, status='open', updated=datetime('now') WHERE room_arcs_id_pk=?");
     const closeArc = db.prepare("UPDATE room_arcs SET status='resolved', closed_messages_id_fk=?, updated=datetime('now') WHERE room_arcs_id_pk=?");
     for (const line of text.split('\n')) {

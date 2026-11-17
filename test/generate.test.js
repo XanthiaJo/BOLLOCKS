@@ -180,20 +180,24 @@ describe('generation (mock LLM)', () => {
         } finally { await ext.close(); }
     });
 
-    test('canon memories bypass triggers and land in their own block', async () => {
-        const mem = (await s.post('memories', { room, content: 'CANON TRUTH', type: 'fact', canon: 1, triggers: 'nevermatches' })).json.id;
+    test('untriggered memories are canon — always injected, in their own block', async () => {
+        const mem = (await s.post('memories', { room, content: 'CANON TRUTH', type: 'fact' })).json.id;
+        const trig = (await s.post('memories', { room, content: 'TRIGGERED FACT', type: 'fact', triggers: 'nevermatches' })).json.id;
         llm.requests.length = 0;
         await s.post('generate', { room, card });
         const sys = JSON.parse(llm.requests.at(-1).body).messages[0].content;
         assert.match(sys, /Canon:\n- CANON TRUTH/);
         assert.ok(!sys.includes('Memories:\n- CANON TRUTH')); // not double-injected
+        assert.ok(!sys.includes('TRIGGERED FACT')); // unmet keywords stay out of both blocks
         await s.post('memories/delete', { id: mem });
+        await s.post('memories/delete', { id: trig });
     });
 
     test('arcs: API lifecycle and open-thread injection', async () => {
         const arcId = (await s.post('arcs', { room, title: 'The stolen map', summary: 'Kira suspects the guild' })).json.id;
         const arcs = (await s.get(`arcs?room=${room}`)).json.arcs;
         assert.equal(arcs[0].status, 'open');
+        assert.equal(arcs[0].origin, 'user'); // API-created threads are manual
         const sysOf = async () => {
             llm.requests.length = 0;
             await s.post('generate', { room, card });
@@ -220,6 +224,7 @@ describe('generation (mock LLM)', () => {
             // [arc-open] created it; the [arc] beat overwrote the summary.
             assert.equal(arcs[0].title, 'The tea debt');
             assert.equal(arcs[0].status, 'open');
+            assert.equal(arcs[0].origin, 'smart'); // extraction-opened thread
             assert.match(arcs[0].summary, /biscuits/);
             // The memory bullet kept its [event] type instead of flattening to fact.
             const mems = await until(async () => {
