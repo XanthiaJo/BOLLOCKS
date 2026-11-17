@@ -235,16 +235,38 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 .acc-b{padding:8px 10px;display:none}
 .acc-b.open{display:block}
 
+/* Nav link strip — transparent wrapper on desktop (display:contents keeps
+   nav's gap applying to the links); on mobile it hides and the ☰ menu's
+   .mp-navmenu dropdown takes over. */
+.navlinks{display:contents}
+/* Hamburger — never on desktop, where the links show inline. */
+.mp-menutgl{display:none}
+.mp-navmenu{display:none;position:absolute;left:0;right:0;top:100%;background:var(--panel);border-bottom:1px solid var(--edge);padding:6px 0;z-index:60;box-shadow:0 12px 28px var(--veil-soft)}
+.mp-navmenu.open{display:block}
+.mp-navmenu a{display:block;padding:12px 18px;color:var(--muted);text-decoration:none;font-size:.95em}
+.mp-navmenu a:hover{background:var(--surface2);color:var(--text)}
+.mp-navmenu a.on{color:var(--white);border-left:3px solid var(--accent);background:var(--accent-bg)}
+
 /* Mobile drawer rules — MUST stay after the base #sidebar/#rsidebar rules:
    same-specificity selectors, so source order is what lets display:none
    hide closed sidebars. */
 @media (max-width:700px){ /* --mob */
-  nav{gap:8px;padding:8px 10px;overflow-x:auto;scrollbar-width:none}
-  nav::-webkit-scrollbar{display:none}
-  nav a{white-space:nowrap}
+  nav{gap:8px;padding:8px 10px}
+  /* site links collapse behind the ☰ menu; brand, panel toggles and the
+     user menu stay pinned */
+  .navlinks{display:none}
+  .mp-menutgl{display:block}
   #sidebar,#rsidebar{display:none}
   /* drawers overlay content under the nav; layout.js sets top + mutual exclusion */
   #sidebar.open,#rsidebar.open{display:flex;position:fixed;top:49px;bottom:0;z-index:40;box-shadow:0 8px 24px var(--veil-soft)}
   #sidebar.open{left:0;width:260px}
   #rsidebar.open{right:0;width:min(320px,85vw)}
+
+  /* settings rows stack: label + hint on their own lines, control below —
+     a label beside a 200px+ input can't fit on a phone. */
+  .settings .row{grid-template-columns:1fr}
+  .settings .row .lbl,.settings .row .hint{grid-column:1}
+  .settings .row>:last-child{grid-column:1;grid-row:auto;justify-self:start!important}
+  .settings .row input:not([type=checkbox]):not([type=number]),
+  .settings .row select,.settings .row textarea{width:100%!important}
 }
