@@ -10,7 +10,7 @@
 <main>
   <div class="cvhead">
     <h2 id="title">Memories</h2>
-    <span class="cvbtns"><button class="act" id="btn_new" onclick="newMem()">+ New memory</button></span>
+    <span class="cvbtns"><button class="act" id="btn_new" onclick="newItem()">+ New memory</button></span>
   </div>
   <div class="panel" id="newbox" style="display:none">
     <div class="edhead" data-save="saveNew" data-cancel="cancelNew"><h3>New memory</h3></div>
@@ -18,6 +18,13 @@
     <select id="newtype" style="width:200px;margin-top:4px">
       <option>fact</option><option>event</option><option>relationship</option><option>preference</option>
     </select>
+    <label class="cb" style="margin-top:6px" title="Canon memories are always injected into the prompt — no trigger keywords needed and unaffected by injection refresh."><input type="checkbox" id="newcanon"> canon — always true, always in the prompt</label>
+  </div>
+  <div class="panel" id="newarcbox" style="display:none">
+    <div class="edhead" data-save="saveNewArc" data-cancel="cancelNewArc"><h3>New thread</h3></div>
+    <input id="newarctitle" placeholder="Thread title — e.g. The missing map" style="width:100%">
+    <textarea id="newarcsummary" placeholder="What is underway — the current beat (optional)" style="min-height:50px;width:100%;margin-top:4px"></textarea>
+    <span class="hint">Open threads stay in the prompt until resolved — the AI keeps advancing them. Extraction can also open and close them on its own.</span>
   </div>
   <div class="panel" id="smartbar" style="display:none">
       <div><span class="lbl" style="margin-bottom:3px" title="Which memory profile (preset of smart-memory settings) this chat follows.">Memory profile for this chat</span></div>

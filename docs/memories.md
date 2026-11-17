@@ -147,9 +147,10 @@ flowchart TD
 ## Canon & arcs
 
 The `.ph` sections on the Smart memory settings page sketch a richer memory
-system. Two of them — **canon** and **arcs** — are implemented end-to-end;
-their settings-page inputs are wired to real profile columns but stay
-`disabled` until the features get real UI. Designed for minimal API cost.
+system. Two of them — **canon** and **arcs** — are implemented end-to-end:
+their settings are live profile fields, and the Memories page carries the
+feature UI (Threads tab + canon flag). The remaining `.ph` sections are still
+placeholders. Designed for minimal API cost.
 
 Terms: **canon** = curated always-true facts ("never contradict this");
 **arcs** = open story threads with a lifecycle ("this is unfolding — advance
