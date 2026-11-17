@@ -235,16 +235,31 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 .acc-b{padding:8px 10px;display:none}
 .acc-b.open{display:block}
 
+/* Nav link strip — transparent wrapper on desktop (display:contents keeps
+   nav's gap applying to the links); on mobile it becomes the scrollable part
+   so the brand, drawer toggles and user menu stay pinned. */
+.navlinks{display:contents}
+
 /* Mobile drawer rules — MUST stay after the base #sidebar/#rsidebar rules:
    same-specificity selectors, so source order is what lets display:none
    hide closed sidebars. */
 @media (max-width:700px){ /* --mob */
-  nav{gap:8px;padding:8px 10px;overflow-x:auto;scrollbar-width:none}
-  nav::-webkit-scrollbar{display:none}
-  nav a{white-space:nowrap}
+  nav{gap:8px;padding:8px 10px}
+  /* only the links scroll; brand, ☰/⚙ toggles and the user menu stay put */
+  .navlinks{display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
+  .navlinks::-webkit-scrollbar{display:none}
+  .navlinks a{white-space:nowrap}
   #sidebar,#rsidebar{display:none}
   /* drawers overlay content under the nav; layout.js sets top + mutual exclusion */
   #sidebar.open,#rsidebar.open{display:flex;position:fixed;top:49px;bottom:0;z-index:40;box-shadow:0 8px 24px var(--veil-soft)}
   #sidebar.open{left:0;width:260px}
   #rsidebar.open{right:0;width:min(320px,85vw)}
+
+  /* settings rows stack: label + hint on their own lines, control below —
+     a label beside a 200px+ input can't fit on a phone. */
+  .settings .row{grid-template-columns:1fr}
+  .settings .row .lbl,.settings .row .hint{grid-column:1}
+  .settings .row>:last-child{grid-column:1;grid-row:auto;justify-self:start!important}
+  .settings .row input:not([type=checkbox]):not([type=number]),
+  .settings .row select,.settings .row textarea{width:100%!important}
 }

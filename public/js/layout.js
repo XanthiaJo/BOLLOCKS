@@ -20,9 +20,11 @@
     const hasSidebar = !!(document.getElementById('sidebar') || document.getElementById('rsidebar'));
     const nav = document.createElement('nav');
     nav.innerHTML = '<span class="brand">🍒 B.O.L.L.O.C.K.S' + (hasSidebar ? '' : '<span class="ver" id="mpver"></span>') + '</span>' +
+        '<div class="navlinks">' +
         NAV.map(([label, href]) =>
             `<a href="${href}"${href === here ? ' class="on"' : ''}>${label}</a>`).join('') +
         '<span id="mpadminlink"></span>' +
+        '</div>' +
         '<span style="flex:1"></span>' +
         '<span class="usermenu">' +
         '<a id="mpuserbtn" class="navtoggle" title="Account">👤</a>' +
