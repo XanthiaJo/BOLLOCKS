@@ -12,9 +12,12 @@ function row(u){
         <div class="row"><span class="lbl">Email</span><input id="edemail" value="${esc(u.email)}" type="email" style="width:240px"></div>
         <div class="row"><span class="lbl">New password <small>(blank = unchanged)</small></span><input id="edpass" type="password" placeholder="leave blank to keep" style="width:200px"></div>
     </div>`;
+    const soleAdmin=u.admin&&users.filter(x=>x.admin).length===1;
     return `<div class="rprof"><div class="txt"><div class="n">${esc(u.handle)}${u.admin?' <small style="color:var(--accent)">admin</small>':''}</div>
         <div class="m">${u.email?esc(u.email)+' · ':''}${u.persona_name?'persona '+esc(u.persona_name):'no persona'}</div></div>
         <div class="btns">
+            <label class="cb" style="margin:0" title="${soleAdmin?'the last admin cannot be demoted':'site admin'}">
+              <input type="checkbox"${u.admin?' checked':''}${soleAdmin?' disabled':''} onchange="setAdmin(${u.id},this.checked)"> admin</label>
             <button class="sec" onclick="editUser(${u.id})">Edit</button>
             ${u.admin?'':`<button class="sec" onclick="delUser(${u.id},'${esc(u.handle)}')">Delete</button>`}
         </div></div>`;
@@ -35,6 +38,11 @@ async function saveNew(){
     cancelNew();load();
 }
 function editUser(id){editId=id;load()}
+async function setAdmin(id,v){
+    const r=await api('admin/users/update',{id,admin:v});
+    if(r.error)alert(r.error); // e.g. demoting the only admin — server refuses
+    load();
+}
 function cancelEdit(){editId=0;load()}
 async function saveEdit(){
     const u=users.find(x=>x.id===editId);if(!u)return;

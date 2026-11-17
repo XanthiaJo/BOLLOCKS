@@ -69,4 +69,22 @@ describe('users', () => {
         assert.equal((await s.post('login', { handle: 'bob', password: 'newpass1' }, { creds: false })).status, 200);
         await s.post('admin/users/password', { id: bob.id, password: 'changeme' }); // restore
     });
+
+    test('the last admin cannot be demoted; a second admin unlocks self-demotion', async () => {
+        const users = (await s.get('admin/users')).json.users;
+        const admin = users.find(u => u.handle === 'admin');
+        const bob = users.find(u => u.handle === 'bob');
+        assert.equal((await s.post('admin/users/update', { id: admin.id, admin: false })).status, 400);
+        assert.equal((await s.post('admin/users/update', { id: bob.id, admin: true })).status, 200);
+        assert.equal((await s.post('admin/users/update', { id: admin.id, admin: false })).status, 200);
+        // bob holds the only admin session now — use it to restore state
+        await s.login('bob');
+        await s.post('admin/users/update', { id: admin.id, admin: true });
+        await s.post('admin/users/update', { id: bob.id, admin: false });
+        await s.login('admin');
+        assert.deepEqual(
+            (await s.get('admin/users')).json.users.filter(u => u.admin).map(u => u.handle),
+            ['admin'],
+        );
+    });
 });

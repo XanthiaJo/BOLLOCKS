@@ -59,6 +59,16 @@ export default {
             db.prepare('UPDATE users SET handle=? WHERE users_id_pk=?').run(h, id);
         }
         if (b.email !== undefined) db.prepare('UPDATE users SET email=? WHERE users_id_pk=?').run(String(b.email).trim(), id);
+        if (b.admin !== undefined) {
+            const want = !!b.admin;
+            const cur = db.prepare('SELECT admin FROM users WHERE users_id_pk=?').get(id).admin;
+            // A demotion must never leave the site without an admin — that
+            // covers self-demotion with no other admin, the user's rule.
+            if (!want && cur &&
+                !db.prepare('SELECT 1 FROM users WHERE admin=1 AND users_id_pk<>?').get(id))
+                return send(res, 400, { error: 'cannot demote the only admin' });
+            db.prepare('UPDATE users SET admin=? WHERE users_id_pk=?').run(want ? 1 : 0, id);
+        }
         send(res, 200, { ok: true });
     },
     'POST /api/admin/users/password': async (req, res, u) => {

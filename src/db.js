@@ -105,8 +105,9 @@ export const verify = (pw, salt, h) =>
 
 export function createUser(handle, password) {
     const { salt, hash: h } = hash(password);
-    const id = db.prepare('INSERT INTO users (handle,password_hash,salt) VALUES (?,?,?)')
-        .run(handle, h, salt).lastInsertRowid;
+    const first = !db.prepare('SELECT 1 FROM users LIMIT 1').get();
+    const id = db.prepare('INSERT INTO users (handle,password_hash,salt,admin) VALUES (?,?,?,?)')
+        .run(handle, h, salt, first ? 1 : 0).lastInsertRowid;
     db.prepare("INSERT INTO prompt_profiles (users_id_fk,name,active) VALUES (?,'Default',1)").run(id);
     return id;
 }
@@ -213,6 +214,10 @@ export function migrateSchema() {
         if (!cols.includes(col)) db.exec(`ALTER TABLE cards ADD COLUMN ${col} ${def}`);
     const ucols = db.prepare('PRAGMA table_info(users)').all().map(c => c.name);
     if (!ucols.includes('email')) db.exec("ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''");
+    if (!ucols.includes('admin')) db.exec('ALTER TABLE users ADD COLUMN admin INTEGER DEFAULT 0');
+    // Bootstrap/repair: when nobody carries the flag, the first registered
+    // user is admin — preserves the pre-column rule and fixes zero-admin DBs.
+    db.exec('UPDATE users SET admin=1 WHERE users_id_pk=(SELECT MIN(users_id_pk) FROM users) AND NOT EXISTS (SELECT 1 FROM users WHERE admin=1)');
     // World lorebook model: books own entries; rooms link to one book.
     const wcols = db.prepare('PRAGMA table_info(world_entries)').all().map(c => c.name);
     if (!wcols.includes('world_books_id_fk')) db.exec('ALTER TABLE world_entries ADD COLUMN world_books_id_fk INTEGER REFERENCES world_books(world_books_id_pk)');
