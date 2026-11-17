@@ -18,11 +18,12 @@
 ## Features
 
 - **Group chat** with multiple AI characters and humans in one room
-- **Control over your own AI character's API key and personality** — every profile is per-user; cards can pick a profile or fall back to the room default
+- **Control over your own AI character's API key and personality** — every profile is per-user; cards can pin a profile or fall back to their owner's active one
 - **Personas** — your own player character; your messages carry its name and avatar
 - **Import existing SillyTavern characters** (V1/V2/V3 PNG + JSON) **and LoreBooks**
 - **World books** — keyword-triggered and constant lore entries, linkable per chat
-- **Memories** — permanent (manual, per-character or shared) and smart (AI-extracted room memories with type tags and trigger keywords)
+- **Memories** — manual (per-character or shared) and smart (AI-extracted room memories with type tags and trigger keywords); a memory with no triggers is canon — always injected
+- **Story threads** — room-scoped arcs the extraction pass opens/updates/closes, or you manage by hand; injected while open
 - **AI activation** — manual / every message / named / round-robin, plus per-member talkativeness
 - **Context caps** — per-chat and per-profile token limits; history middle-trims to fit
 - **Live updates** — messages, deletions and memory extraction stream to all clients
@@ -71,15 +72,21 @@ Lorebooks. Pick a book in the sidebar and its entries show as full cards — tit
 
 ## Memories
 
-Two kinds: **Permanent** memories you write yourself (shared with the room, or scoped to one character), and **Smart** memories the AI extracts from the conversation on its own. Type tags and trigger keywords show on each card; smart memories can be promoted to permanent.
+Two tabs: **Manual** — memories you write yourself (shared with the room, or scoped to one character) — and **Smart** — what the extraction pass has learned in the picked chat. Type tags and trigger keywords show on each card; clearing the keywords makes a memory canon (always in the prompt). Smart memories can be promoted to manual.
 
 ![Memories](docs/screenshots/memories.png)
 
-## Smart memory
+## Stories
 
-The dials for the extraction side: which connection profile does the reading, how often it runs, caps per memory type, injection budget. Saved as named profiles a room can follow.
+Room-scoped story threads, Manual/Smart tabs again — opened by you or by extraction. Open threads stay in every prompt until resolved or dropped; the extraction pass can open, update and close them on its own.
 
-![Smart memory](docs/screenshots/memsettings.png)
+![Stories](docs/screenshots/stories.png)
+
+## Memory profiles
+
+The dials for the extraction side: which connection profile does the reading, how often it runs, caps per memory type, injection budgets, thread tracking. Saved as named profiles a room can follow — following a profile is what switches smart memories on.
+
+![Memory profiles](docs/screenshots/memsettings.png)
 
 ## Connection
 
@@ -153,14 +160,10 @@ erDiagram
         int is_persona
         int api_profiles_id_fk FK
     }
-    MEMBERS {
-        int members_id_pk PK
-        int cards_id_fk FK
-        int talkativeness
-    }
     ROOM_MEMBERS {
         int rooms_id_fk PK,FK
-        int members_id_fk PK,FK
+        int cards_id_fk PK,FK
+        int talkativeness
     }
     ROOMS {
         int rooms_id_pk PK
@@ -170,7 +173,7 @@ erDiagram
         string bg
         int owner_users_id_fk FK
         int mem_profiles_id_fk FK
-        int mem_last_messages_id
+        int mem_last_messages_id_fk "watermark, no constraint"
         int mem_refresh_count
     }
     MESSAGES {
@@ -179,7 +182,7 @@ erDiagram
         int cards_id_fk FK
         string text
         string send_date
-        int supersedes
+        int supersedes_messages_id_fk FK
     }
     MEMORIES {
         int memories_id_pk PK
@@ -187,7 +190,6 @@ erDiagram
         string created
         string type
         string origin "user|smart"
-        string triggers
     }
     ROOM_MEMORIES {
         int rooms_id_fk PK,FK
@@ -197,11 +199,24 @@ erDiagram
         int memories_id_fk PK,FK
         int cards_id_fk PK,FK
     }
+    MEMORY_TRIGGERS {
+        int memories_id_fk PK,FK
+        string word PK
+    }
+    ROOM_ARCS {
+        int room_arcs_id_pk PK
+        int rooms_id_fk FK
+        string title
+        string summary
+        string status "open|resolved|dropped"
+        string origin "user|smart"
+        int opened_messages_id_fk FK
+        int closed_messages_id_fk FK
+    }
     MEM_PROFILES {
         int mem_profiles_id_pk PK
         int users_id_fk FK
         string name
-        int auto_mem
         int mem_every
         int mem_budget
         int mem_max
@@ -210,7 +225,11 @@ erDiagram
         int mem_unified
         int mem_triggers
         int mem_refresh
-        int mem_extraction_profile_id
+        int extraction_api_profiles_id_fk FK
+        int mem_canon_budget
+        int mem_max_arcs
+        int mem_arc_budget
+        int arc_api_profiles_id_fk FK
     }
     PROMPT_PROFILES {
         int prompt_profiles_id_pk PK
@@ -218,6 +237,7 @@ erDiagram
         string name
         string prompt_order
         int active
+        int include_time
     }
     PROMPT_LOGS {
         int prompt_logs_id_pk PK
@@ -264,21 +284,23 @@ erDiagram
     USERS ||--o{ WORLD_BOOKS : owns
     USERS ||--o{ MEM_PROFILES : owns
     USERS ||--o{ PROMPT_PROFILES : owns
-    CARDS ||--o{ MEMBERS : "is a member"
     CARDS ||--o{ MESSAGES : speaks
+    CARDS ||--o{ ROOM_MEMBERS : "sits in rooms"
     CARDS ||--o{ MEMORY_CARDS : "scoped memories"
     CARDS }o--o| API_PROFILES : "optional override"
     CARDS ||--o{ PROMPT_LOGS : generates
-    MEMBERS ||--o{ ROOM_MEMBERS : sits
     ROOMS ||--o{ ROOM_MEMBERS : has
     ROOMS ||--o{ MESSAGES : holds
     ROOMS ||--o{ ROOM_MEMORIES : shares
     ROOMS ||--o{ ROOM_BOOKS : links
+    ROOMS ||--o{ ROOM_ARCS : threads
     ROOMS ||--o{ PROMPT_LOGS : logs
     ROOMS }o--o| MEM_PROFILES : follows
     MEM_PROFILES }o--o| API_PROFILES : "extraction profile"
     MEMORIES ||--o{ ROOM_MEMORIES : linked
     MEMORIES ||--o{ MEMORY_CARDS : linked
+    MEMORIES ||--o{ MEMORY_TRIGGERS : keywords
+    ROOM_ARCS }o--o| MESSAGES : anchors
     WORLD_BOOKS ||--o{ ROOM_BOOKS : linked
     WORLD_BOOKS ||--o{ BOOK_ENTRIES : contains
     WORLD_ENTRIES ||--o{ BOOK_ENTRIES : member
@@ -290,14 +312,15 @@ erDiagram
 - **sessions** — bearer tokens (`sessions_token_pk`)
 - **api_profiles** — connections (`api_url`, `model`, `key`, `active`, `headers`, `context_size`, `max_response`)
 - **cards** — characters (owner, ST fields, `is_persona`, `api_profiles_id_fk` override, `avatar`)
-- **members** — a card's seat: `cards_id_fk` + `talkativeness` (persona card = human)
-- **room_members** — junction: which members sit in which rooms
-- **rooms** — chats (`ai_trigger`, `max_context`, `bg`, `mem_profiles_id_fk` → the memory profile it follows, `owner_users_id_fk`, extraction watermark + refresh counter)
-- **messages** — chat log (`rooms_id_fk`, `cards_id_fk` sender, `text`, `supersedes`)
-- **memories** — facts shared via junctions, not room/card columns: `type` (fact/event/relationship/preference), `origin` (`user` permanent vs `smart` extracted), `triggers` keyword gate
+- **room_members** — junction: which cards sit in which rooms, with per-room `talkativeness` (persona card = human)
+- **rooms** — chats (`ai_trigger`, `max_context`, `bg`, `mem_profiles_id_fk` → the memory profile it follows, `owner_users_id_fk`, `mem_last_messages_id_fk` extraction watermark + `mem_refresh_count`)
+- **messages** — chat log (`rooms_id_fk`, `cards_id_fk` sender, `text`, `supersedes_messages_id_fk` edit chain)
+- **memories** — facts shared via junctions, not room/card columns: `type` (fact/event/relationship/preference), `origin` (`user` manual vs `smart` extracted); no `memory_triggers` rows = canon (always injected)
 - **room_memories** — junction: which memories a room can inject
 - **memory_cards** — junction: narrows a memory to one character (unlinked = room-shared)
-- **mem_profiles** — named memory presets a room follows: extraction cadence/model/prompt, per-type caps, injection budget, trigger + unified-mode toggles
+- **memory_triggers** — one row per trigger keyword; keyword-gates injection
+- **room_arcs** — story threads (`status` open/resolved/dropped, `origin` user/smart, message anchors); open threads inject on every reply
+- **mem_profiles** — named memory presets a room follows (following = on): extraction cadence/model/prompt, per-type caps, canon + thread budgets, extraction/arc connection pickers
 - **prompt_profiles** — named prompt-assembly presets (`prompt_order` block sequence, `active`)
 - **prompt_logs** — newest 50 LLM calls per room (`kind` reply|extract, request JSON, raw response, token usage) — the prompt inspector's durable half
 - **world_books** — lorebooks (owner, name)
