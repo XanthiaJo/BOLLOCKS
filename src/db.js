@@ -312,22 +312,27 @@ export function migrateSchema() {
     if (uv !== 7) db.exec('PRAGMA user_version=7');
     const mecols = db.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
     if (!mecols.includes('type')) db.exec("ALTER TABLE memories ADD COLUMN type TEXT DEFAULT 'fact'");
-    // canon=1: always-true memory — injected every generation, bypassing
-    // trigger gating and the injection-refresh counter.
+    // canon=1: superseded — "canon" is now defined as having no trigger
+    // keywords (see the user_version=8 migration below). The column is kept
+    // for compatibility but no longer read.
     if (!mecols.includes('canon')) db.exec('ALTER TABLE memories ADD COLUMN canon INTEGER DEFAULT 0');
     // Story arcs: room-scoped open/resolved threads tracked by extraction
     // ([arc-open]/[arc]/[arc-close] tags) and injected while open.
+    // origin: 'user' (opened from the Stories page) vs 'smart' (extraction).
     db.exec(`CREATE TABLE IF NOT EXISTS room_arcs (
         room_arcs_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
         rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
         title TEXT NOT NULL,
         summary TEXT DEFAULT '',
         status TEXT DEFAULT 'open' CHECK(status IN ('open','resolved','dropped')),
+        origin TEXT DEFAULT 'user',
         opened_messages_id_fk INTEGER,
         closed_messages_id_fk INTEGER,
         created TEXT DEFAULT (datetime('now')),
         updated TEXT DEFAULT (datetime('now'))
     )`);
+    if (!db.prepare('PRAGMA table_info(room_arcs)').all().map(c => c.name).includes('origin'))
+        db.exec("ALTER TABLE room_arcs ADD COLUMN origin TEXT DEFAULT 'user'");
     // prompt_profiles: injection/prompt-assembly presets. prompt order moved
     // off mem_profiles — it positions card/world blocks too, so it was never
     // memory-scoped. The user's active profile applies to all their
@@ -546,11 +551,11 @@ export function migrateSchema() {
             CREATE TABLE memories_new (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
                 content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')),
                 type TEXT DEFAULT 'fact', origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart')),
-                triggers TEXT DEFAULT '');
-            INSERT INTO memories_new (memories_id_pk,content,created,type,origin,triggers)
+                triggers TEXT DEFAULT '', canon INTEGER DEFAULT 0);
+            INSERT INTO memories_new (memories_id_pk,content,created,type,origin,triggers,canon)
                 SELECT memories_id_pk, content, created, type,
                     CASE WHEN ${smartCond} THEN 'smart' ELSE 'user' END,
-                    ${triggersExpr} FROM memories;
+                    ${triggersExpr}, ${mecols2.includes('canon') ? 'IFNULL(canon,0)' : '0'} FROM memories;
             DROP TABLE memories; ALTER TABLE memories_new RENAME TO memories; COMMIT;`);
     } else if (!mecols2.includes('origin')) {
         // Fresh-ish DB without origin column (shouldn't happen, but be safe).
@@ -626,6 +631,12 @@ export function migrateSchema() {
             }
         db.exec('ALTER TABLE memories DROP COLUMN triggers');
     }
+    // One-time: "canon" is now defined by having no trigger keywords —
+    // clear triggers off rows that carried the old canon=1 flag so they
+    // stay always-injected. The memories.canon column itself is left in
+    // place but is no longer read anywhere.
+    if (uv < 8) db.exec('DELETE FROM memory_triggers WHERE memories_id_fk IN (SELECT memories_id_pk FROM memories WHERE canon=1)');
+    if (uv !== 8) db.exec('PRAGMA user_version=8');
     // Room owner: the user whose persona sits in the room (lowest user id,
     // matching the convention generation uses for memory extraction).
     const rcolsEnd = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);

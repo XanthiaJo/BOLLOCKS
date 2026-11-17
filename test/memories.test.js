@@ -34,11 +34,9 @@ describe('memories', () => {
         assert.equal(updated.triggers, 'window');
         assert.equal((await s.get(`lastmem?room=${room}`)).json.text, 'Updated'); // latest smart memory
 
-        // canon flag round-trips through create/update.
-        assert.equal((await s.post('memories/update', { id: roomMem, canon: 1 })).status, 200);
-        assert.equal((await s.get(`memories?card=-1&room=${room}`)).json.memories.find(m => m.id === roomMem).canon, 1);
-        assert.equal((await s.post('memories/update', { id: roomMem, canon: 0 })).status, 200);
-        assert.equal((await s.get(`memories?card=-1&room=${room}`)).json.memories.find(m => m.id === roomMem).canon, 0);
+        // Clearing trigger keywords promotes a memory to canon (always injected).
+        assert.equal((await s.post('memories/update', { id: roomMem, triggers: '' })).status, 200);
+        assert.equal((await s.get(`memories?card=-1&room=${room}`)).json.memories.find(m => m.id === roomMem).triggers, null);
 
         // Move card-scoped memory back to room scope.
         assert.equal((await s.post('memories/move', { id: cardMem, cardId: null })).status, 200);
