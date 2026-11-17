@@ -63,6 +63,13 @@ button.gen{background:var(--ok)}
   .mes .delm{display:block}
   .room .rbtns{display:inline}
   #composer{padding:8px;gap:6px}
+  /* touch targets — the 9px slider thumb and 22px icon buttons are
+     unreachable on a touchscreen */
+  .member .fgen,.member .frem{width:28px;height:28px;line-height:24px;font-size:12px}
+  .member input.talk{height:20px;background:transparent}
+  .member input.talk::-webkit-slider-runnable-track{height:4px;background:var(--track);border-radius:2px}
+  .member input.talk::-webkit-slider-thumb{width:16px;height:16px;margin-top:-6px}
+  .member input.talk::-moz-range-thumb{width:16px;height:16px}
 }
 </style>
 </head>
