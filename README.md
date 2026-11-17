@@ -117,79 +117,86 @@ erDiagram
     USERS {
         int users_id_pk PK
         string handle
-        string password_hash
-        string salt
-        string settings
     }
     SESSIONS {
         string sessions_token_pk PK
         int users_id_fk FK
-        string created
     }
     API_PROFILES {
         int api_profiles_id_pk PK
         int users_id_fk FK
-        string name
         string api_url
         string model
         string key
         int active
-        int strip_prefix
-        string headers
-        int context_size
-        int max_response
     }
     CARDS {
         int cards_id_pk PK
         int owner_users_id_fk FK
         string name
-        string description
-        string personality
-        string scenario
-        string first_message
-        string mes_example
-        string system_prompt
-        string post_history_instructions
-        string alternate_greetings
-        string tags
-        string creator
-        string creatorcomment
-        string character_version
-        string avatar
-        string card_json
         int is_persona
-        int api_profiles_id_fk FK
-    }
-    ROOM_MEMBERS {
-        int rooms_id_fk PK,FK
-        int cards_id_fk PK,FK
-        int talkativeness
+        int api_profiles_id_fk FK "optional pin"
     }
     ROOMS {
         int rooms_id_pk PK
         string name
         string ai_trigger
         int max_context
-        string bg
         int owner_users_id_fk FK
-        int mem_profiles_id_fk FK
-        int mem_last_messages_id_fk "watermark, no constraint"
-        int mem_refresh_count
+    }
+    ROOM_MEMBERS {
+        int rooms_id_fk PK,FK
+        int cards_id_fk PK,FK
+        int talkativeness
     }
     MESSAGES {
         int messages_id_pk PK
         int rooms_id_fk FK
-        int cards_id_fk FK
+        int cards_id_fk FK "null = system"
         string text
-        string send_date
         int supersedes_messages_id_fk FK
+    }
+
+    USERS ||--o{ SESSIONS : has
+    USERS ||--o{ API_PROFILES : owns
+    USERS ||--o{ CARDS : owns
+    CARDS }o--o| API_PROFILES : "may pin"
+    ROOMS ||--o{ ROOM_MEMBERS : seats
+    CARDS ||--o{ ROOM_MEMBERS : "sits in"
+    ROOMS ||--o{ MESSAGES : holds
+    CARDS ||--o{ MESSAGES : speaks
+    MESSAGES }o--o| MESSAGES : supersedes
+```
+
+### Memory & stories
+
+```mermaid
+erDiagram
+    MEM_PROFILES {
+        int mem_profiles_id_pk PK
+        int users_id_fk FK
+        string name
+        int mem_every
+        int mem_budget
+        int mem_max
+        string mem_extraction_prompt
+        int mem_triggers
+        int mem_refresh
+        int extraction_api_profiles_id_fk FK
+        int mem_canon_budget
+        int mem_max_arcs
+        int mem_arc_budget
+        int arc_api_profiles_id_fk FK
     }
     MEMORIES {
         int memories_id_pk PK
         string content
-        string created
         string type
         string origin "user|smart"
+    }
+    MEMORY_TRIGGERS {
+        int memories_id_fk PK,FK
+        string word PK "no rows = canon"
     }
     ROOM_MEMORIES {
         int rooms_id_fk PK,FK
@@ -199,38 +206,74 @@ erDiagram
         int memories_id_fk PK,FK
         int cards_id_fk PK,FK
     }
-    MEMORY_TRIGGERS {
-        int memories_id_fk PK,FK
-        string word PK
-    }
     ROOM_ARCS {
         int room_arcs_id_pk PK
         int rooms_id_fk FK
         string title
-        string summary
         string status "open|resolved|dropped"
         string origin "user|smart"
         int opened_messages_id_fk FK
         int closed_messages_id_fk FK
     }
-    MEM_PROFILES {
-        int mem_profiles_id_pk PK
-        int users_id_fk FK
-        string name
-        int mem_every
-        int mem_budget
-        int mem_max
-        string mem_extraction_prompt
-        int mem_context_threshold
-        int mem_unified
-        int mem_triggers
-        int mem_refresh
-        int extraction_api_profiles_id_fk FK
-        int mem_canon_budget
-        int mem_max_arcs
-        int mem_arc_budget
-        int arc_api_profiles_id_fk FK
+    ROOMS {
+        int mem_profiles_id_fk FK
     }
+
+    USERS ||--o{ MEM_PROFILES : owns
+    MEM_PROFILES }o--o| API_PROFILES : extraction
+    MEM_PROFILES }o--o| API_PROFILES : "arc pass"
+    ROOMS }o--o| MEM_PROFILES : "follows = on"
+    MEMORIES ||--o{ MEMORY_TRIGGERS : "keyword gates"
+    MEMORIES ||--o{ ROOM_MEMORIES : shared
+    MEMORIES ||--o{ MEMORY_CARDS : "scoped to"
+    ROOMS ||--o{ ROOM_MEMORIES : has
+    ROOMS ||--o{ ROOM_ARCS : threads
+    CARDS ||--o{ MEMORY_CARDS : scoped
+    ROOM_ARCS }o--o| MESSAGES : anchors
+```
+
+### Lore
+
+```mermaid
+erDiagram
+    WORLD_BOOKS {
+        int world_books_id_pk PK
+        int owner_users_id_fk FK
+        string name
+    }
+    WORLD_ENTRIES {
+        int world_entries_id_pk PK
+        string content
+        int constant "always injected"
+        int enabled
+        int ord
+    }
+    WORLD_ENTRY_KEYS {
+        int world_entries_id_fk PK,FK
+        string word PK
+        string kind PK "primary|secondary"
+    }
+    BOOK_ENTRIES {
+        int world_books_id_fk PK,FK
+        int world_entries_id_fk PK,FK
+    }
+    ROOM_BOOKS {
+        int rooms_id_fk PK,FK
+        int world_books_id_fk PK,FK
+    }
+
+    USERS ||--o{ WORLD_BOOKS : owns
+    WORLD_BOOKS ||--o{ BOOK_ENTRIES : contains
+    WORLD_ENTRIES ||--o{ BOOK_ENTRIES : member
+    WORLD_ENTRIES ||--o{ WORLD_ENTRY_KEYS : triggers
+    ROOMS ||--o{ ROOM_BOOKS : links
+    WORLD_BOOKS ||--o{ ROOM_BOOKS : linked
+```
+
+### Prompt plumbing
+
+```mermaid
+erDiagram
     PROMPT_PROFILES {
         int prompt_profiles_id_pk PK
         int users_id_fk FK
@@ -248,66 +291,12 @@ erDiagram
         string response
         int prompt_tokens
         int completion_tokens
-        string created
-    }
-    WORLD_BOOKS {
-        int world_books_id_pk PK
-        int owner_users_id_fk FK
-        string name
-        string created
-    }
-    ROOM_BOOKS {
-        int rooms_id_fk PK,FK
-        int world_books_id_fk PK,FK
-    }
-    BOOK_ENTRIES {
-        int world_books_id_fk PK,FK
-        int world_entries_id_fk PK,FK
-    }
-    WORLD_ENTRIES {
-        int world_entries_id_pk PK
-        string content
-        int constant
-        int enabled
-        int ord
-        string comment
-    }
-    WORLD_ENTRY_KEYS {
-        int world_entries_id_fk PK,FK
-        string word PK
-        string kind PK "primary|secondary"
     }
 
-    USERS ||--o{ SESSIONS : has
-    USERS ||--o{ API_PROFILES : owns
-    USERS ||--o{ CARDS : owns
-    USERS ||--o{ WORLD_BOOKS : owns
-    USERS ||--o{ MEM_PROFILES : owns
     USERS ||--o{ PROMPT_PROFILES : owns
-    CARDS ||--o{ MESSAGES : speaks
-    CARDS ||--o{ ROOM_MEMBERS : "sits in rooms"
-    CARDS ||--o{ MEMORY_CARDS : "scoped memories"
-    CARDS }o--o| API_PROFILES : "optional override"
-    CARDS ||--o{ PROMPT_LOGS : generates
-    ROOMS ||--o{ ROOM_MEMBERS : has
-    ROOMS ||--o{ MESSAGES : holds
-    ROOMS ||--o{ ROOM_MEMORIES : shares
-    ROOMS ||--o{ ROOM_BOOKS : links
-    ROOMS ||--o{ ROOM_ARCS : threads
     ROOMS ||--o{ PROMPT_LOGS : logs
-    ROOMS }o--o| MEM_PROFILES : follows
-    MEM_PROFILES }o--o| API_PROFILES : "extraction profile"
-    MEMORIES ||--o{ ROOM_MEMORIES : linked
-    MEMORIES ||--o{ MEMORY_CARDS : linked
-    MEMORIES ||--o{ MEMORY_TRIGGERS : keywords
-    ROOM_ARCS }o--o| MESSAGES : anchors
-    WORLD_BOOKS ||--o{ ROOM_BOOKS : linked
-    WORLD_BOOKS ||--o{ BOOK_ENTRIES : contains
-    WORLD_ENTRIES ||--o{ BOOK_ENTRIES : member
-    WORLD_ENTRIES ||--o{ WORLD_ENTRY_KEYS : triggers
-    MESSAGES }o--o| MESSAGES : supersedes
+    CARDS ||--o{ PROMPT_LOGS : generates
 ```
-
 - **users** — accounts (`handle`, `password_hash`/`salt`)
 - **sessions** — bearer tokens (`sessions_token_pk`)
 - **api_profiles** — connections (`api_url`, `model`, `key`, `active`, `headers`, `context_size`, `max_response`)
