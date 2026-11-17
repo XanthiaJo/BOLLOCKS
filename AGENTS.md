@@ -13,7 +13,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | File | Purpose | Key exports / sections |
 |---|---|---|
 | `server.js` | Thin HTTP shell: merges route tables, request gates, static file serving | `router` merge of `src/routes/*`; unauthenticated-API 401 gate; static-file gate |
-| `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona/user admin), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats), `update` (sidebar update check) | |
+| `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona + admin user management), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats), `update` (sidebar update check) | |
 | `lib/util.js` | Request/response helpers | `send`, `readBody`, `cookieToken`, `auth(req)` |
 | `lib/access.js` | Permission helpers for route handlers | `roomOwnerOnly`, `roomMember`, `memoryShared`, `isAdmin`, `worldEntryOk` |
 | `lib/sse.js` | Server-Sent Events fan-out | `streams` map; `push(roomId, evt)` |
@@ -33,6 +33,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | `world.html` | Lorebooks — single page: sidebar picks a book then its entries (`?id=<book>` deep-links a book); main edits the selected thing (book rename/create/ST import, or entry keys/secondary/content/constant/enabled/order). Link a book to a room in chat settings |
 | `memories.html` + `js/memories.js` | Memory browser: Permanent/Smart tabs, sidebar scope picker (room-shared or per-character; Smart stays room-scoped for now). `memsettings.html` + `js/memsettings.js` | Smart memory page (nav: "Smart memory"): profile list in sidebar → editor panel (`class="panel settings"` accordions). `js/memprofiles.js` | Shared profile-editor code loaded by both pages — it ends by calling the page's own `load()`. All styles live in `css/layout.css` |
 | `connection.html` + `js/connection.js` | Profiles page, tabbed: Connection (API profiles — OpenAI-compatible url/model/key/headers/context) and Injection (prompt_profiles — prompt-assembly presets incl. prompt order) |
+| `admin.html` + `js/admin.js` | User management (admins only — nav link appears via `me.admin`, page and routes both 403/bounce non-admins): list users, create, edit handle/email, reset password (kills sessions), promote/demote admin (last admin protected), delete via cascade |
 | `js/layout.js` | Shared shell injected into every page: top nav + sidebar toggles + version badge. Helpers: `mpOpenEditor`/`mpCloseEditor`/`mpFlashSaved`, `activateProf`, and `rprofRow()` — the single builder for sidebar picker rows (`.rprof` in layout.css is its style) |
 | `css/layout.css` | Shared styles for the shell and pages |
 
@@ -55,7 +56,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 4. **Static gate:** no session → every file except `login.html` redirects (302) to `/login.html`. Files are confined to `PUB` via `file.startsWith(PUB + path.sep)`.
 5. SSE: `GET /api/stream?room=N` registers `res` in `streams`; `push()` fans `data:` events to a room. Event types: `{type:'message'}`, `{type:'delete'}`.
 
-Route-handler conventions: routes are `export default { 'METHOD /path': handler }` maps in `src/routes/<domain>.js`; updates go through `/api/<thing>/update|delete` POST endpoints (no PUT/DELETE methods). Permission helpers live in `src/access.js`: `roomOwnerOnly(rid, u)` for room-admin routes, `roomMember(rid, u)` for anything reading/posting room content, `memoryShared(id, u)` for memory mutations, `worldEntryOk(id, u)` for lorebook entries, `isAdmin(u)` for user admin (first registered user is the site admin). Object ownership uses `…_users_id_fk === u.users_id_pk`. The `u` arg may be undefined for public routes — don't dereference it unguarded.
+Route-handler conventions: routes are `export default { 'METHOD /path': handler }` maps in `src/routes/<domain>.js`; updates go through `/api/<thing>/update|delete` POST endpoints (no PUT/DELETE methods). Permission helpers live in `src/access.js`: `roomOwnerOnly(rid, u)` for room-admin routes, `roomMember(rid, u)` for anything reading/posting room content, `memoryShared(id, u)` for memory mutations, `worldEntryOk(id, u)` for lorebook entries, `isAdmin(u)` for user admin (`users.admin` flag; the first registered user is backfilled as admin and the last admin can't be demoted). Object ownership uses `…_users_id_fk === u.users_id_pk`. The `u` arg may be undefined for public routes — don't dereference it unguarded.
 
 ## Data model
 
