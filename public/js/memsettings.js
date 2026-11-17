@@ -1,4 +1,4 @@
-// --- Memory settings page: profile list in the sidebar, editor in main ---
+// --- Memory profiles page: presets a chat's memory-writer follows ---
 /* global selProf, setSelProf, fillProf, BLANK_PROF, newMP, delMP, selectProf */
 let booted=false;
 const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
@@ -7,10 +7,10 @@ const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.status===401?location='/
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 initSidebar({
-  tabs:[{label:'Smart memory profiles',on:true,onclick:'newMP()'}],
-  sections:[{title:'Smart memory profiles',id:'plist'}],
+  tabs:[{label:'Memory profiles',on:true,onclick:'newMP()'}],
+  sections:[{title:'Memory profiles',id:'plist'}],
   buttons:[{label:'+ New profile',onclick:'newMP()'}],
-  footer:'Chats pick which smart-memory profile they follow in their chat settings or the <a href="/memories.html" style="color:var(--muted)">Memories</a> page\'s Smart tab. Select a profile to edit it.',
+  footer:'Profiles preset how the memory-writer runs — a chat follows one; create and edit them here.',
 });
 let memProfiles=[];let defPrompt='';
 async function load(){

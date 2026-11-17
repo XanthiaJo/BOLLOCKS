@@ -13,7 +13,7 @@ function fillProf(p){
   $('set_genbudget').value=p.mem_unlimited?-1:(p.mem_gen_budget||2000);$('set_unified').checked=!!p.mem_unified;$('set_triggers').checked=!!p.mem_triggers;$('set_autotune').checked=!!p.mem_autotune;$('set_refresh').value=p.mem_refresh||1;
   $('set_activity').checked=!!p.mem_activity;
   $('set_profile').value=p.mem_extraction_profile_id||0;
-  // Canon/arcs fields are wired but stay disabled until the features ship.
+  // Canon = memories with no trigger keywords; this caps their prompt block.
   $('set_canonbudget').value=p.mem_canon_budget||800;
   $('set_max_arcs').value=p.mem_max_arcs||10;
   $('set_arcbudget').value=p.mem_arc_budget||700;
