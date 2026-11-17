@@ -101,6 +101,7 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 - [x] Untriggered memories are canon: inject under their own `Canon:` block every turn, never double-inject; triggered memories stay out when keywords don't match
 - [x] Trigger matching is whole-word (`king` ≠ `looking`, `kings` fires) and scans the full fetched history, not just recent lines
 - [x] Arcs: API create/resolve/delete lifecycle (`origin='user'`); open threads inject under `Open threads:`; `[arc-open]`/`[arc]`/`[arc-close]` extraction tags drive `room_arcs` (`origin='smart'`)
+- [x] Arc consolidation: resolving writes a chronicler summary, folds the span's triggered smart memories (`room_arcs_id_fk`), and the folded detail's trigger pulls `Earlier events:` headline + indented detail into the prompt
 
 **`test/users.test.js`**
 

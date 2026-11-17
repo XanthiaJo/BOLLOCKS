@@ -681,6 +681,12 @@ export function migrateSchema() {
     ren('rooms', 'mem_last_messages_id', 'mem_last_messages_id_fk');
     ren('mem_profiles', 'mem_extraction_profile_id', 'extraction_api_profiles_id_fk');
     ren('mem_profiles', 'mem_arc_profile_id', 'arc_api_profiles_id_fk');
+    // memories.room_arcs_id_fk: folds a memory under the arc it was extracted
+    // in (submemory membership). SET NULL so deleting an arc unfolds its
+    // memories back to standalone injection. Runs late — after every
+    // memories rebuild above.
+    if (!colsOf('memories').includes('room_arcs_id_fk'))
+        db.exec('ALTER TABLE memories ADD COLUMN room_arcs_id_fk INTEGER REFERENCES room_arcs(room_arcs_id_pk) ON DELETE SET NULL');
     // Arc message anchors → nullable FKs (the arc survives its anchor
     // message being deleted).
     if (!sqlOf('room_arcs').includes('REFERENCES messages')) {

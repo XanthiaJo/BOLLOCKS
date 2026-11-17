@@ -266,6 +266,20 @@ All additive in `migrateSchema()`; the new `mem_*` columns ride
   are still ignored, but the scan no longer stops at the first bullet.
 - Open arcs over `mem_max_arcs` drop to `dropped`, least-recently-touched
   first.
+- **Consolidation (`consolidateArc`)** — when an arc leaves `open` (resolve,
+  drop-by-cap, `[arc-close]`, or `arcs/update` status change), a chronicler
+  pass summarizes the arc's message span (open→close anchors, head+tail
+  truncated) into `room_arcs.summary`, then folds `origin='smart'` memories
+  created during the span under it via `memories.room_arcs_id_fk`
+  (`ON DELETE SET NULL` — deleting an arc unfolds them). Only triggered
+  memories fold; canon stays top-level. The call uses
+  `arc_api_profiles_id_fk`, falling back to `extraction_api_profiles_id_fk`,
+  owner-owned as usual — no profile configured = consolidation off.
+- Injection: closed arcs with summaries render `Earlier events:` under the
+  same `arcs` block when a title word reappears in context **or** a folded
+  memory's trigger fires — matching details ride under the headline as
+  indented sub-lines. Folded memories never inject standalone, so a closed
+  chapter's details collapse into one line until re-evoked.
 
 ### Parser fix folded in
 
@@ -283,5 +297,6 @@ correctly.
   mechanism, canon is just its absence.
 - Arc `summary` overwrite vs. append — overwrite for now (one line per arc,
   cheap injection); a beats timeline would need its own cap.
-- A dedicated arc extraction pass on `arc_api_profiles_id_fk` — reserved, not
-  implemented; add if tag-folding proves unreliable.
+- `arc_api_profiles_id_fk` — now drives `consolidateArc` (chapter summaries
+  on close), with `extraction_api_profiles_id_fk` as fallback. Still unused
+  for a separate arc *extraction* pass; add if tag-folding proves unreliable.

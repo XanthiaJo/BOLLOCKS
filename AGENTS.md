@@ -69,8 +69,8 @@ Core tables:
 - `room_members` — junction joining cards into rooms; holds per-room `talkativeness`. Humans sit in rooms via their persona card.
 - `messages` — chat log per room (`cards_id_fk` NULL = system line); use `MSG_SQL` for the standard SELECT (adds `id`, `name`, `kind` ∈ say/ai/sys).
 - `world_books` → `book_entries` → `world_entries` → `world_entry_keys` (primary/secondary keyword rows); `room_books` links at most one book to a room.
-- `memories` (+`room_memories`, +`memory_cards`, +`memory_triggers`) — `origin='user'` permanent vs `origin='smart'` auto-extracted; `memory_triggers` rows keyword-gate injection (no rows = canon: always injected in its own early block, immune to refresh); `type` ∈ fact/event/relationship/preference.
-- `room_arcs` — room-scoped story threads (`status` ∈ open/resolved/dropped, `origin` ∈ user/smart); written by `[arc*]` extraction tags or `POST /api/arcs*`, injected while open.
+- `memories` (+`room_memories`, +`memory_cards`, +`memory_triggers`) — `origin='user'` permanent vs `origin='smart'` auto-extracted; `memory_triggers` rows keyword-gate injection (no rows = canon: always injected in its own early block, immune to refresh); `type` ∈ fact/event/relationship/preference; `room_arcs_id_fk` folds a memory under the arc it was extracted in (folded rows never inject standalone).
+- `room_arcs` — room-scoped story threads (`status` ∈ open/resolved/dropped, `origin` ∈ user/smart); written by `[arc*]` extraction tags or `POST /api/arcs*`, injected while open; on close `consolidateArc` summarizes the span into `summary` and folds the span's triggered smart memories under the arc — closed arcs inject an `Earlier events:` line when a title word or a folded memory's trigger hits.
 - `prompt_logs` — per-room LLM request/response log (`kind` ∈ reply/extract; newest 50 per room) surfaced via `GET /api/promptlog`.
 - `api_profiles` — per-user OpenAI-compatible connections (`active` flag, `headers` JSON, `context_size`, `max_response`, `strip_prefix`, `key`).
 - `mem_profiles` — named memory-setting presets a room follows (`mem_*` columns; see `MEM_PROFILE_FIELDS` in `generate.js`).
@@ -82,6 +82,7 @@ Core tables:
 
 - `generateReply(roomId, card)`: picks the connection (card's `api_profiles_id_fk`, else card-owner's active profile), applies `{{char}}`/`{{user}}` macros, injects keyword-triggered world entries + trigger-gated memories (budget-capped, chars/4 estimate), trims history to the smaller of room `max_context` / profile `context_size` (keeps greeting + tail), posts to `/chat/completions`, strips a leading `Name:` tag, records `genStats[roomId]`.
 - `maybeSummarize(roomId)`: if the room follows a memory profile (the link is the switch — the old `auto_mem` flag was dropped), every `mem_every` messages (or context-threshold hit) it asks the LLM to distill recent lines into typed bullet memories, enforces per-type and total caps, and can autotune the injection budget.
+- `consolidateArc(roomId, arcId)`: when an arc closes (resolve/drop/`[arc-close]`/`arcs/update`), a chronicler pass — `arc_api_profiles_id_fk`, falling back to `extraction_api_profiles_id_fk`, owner-owned — summarizes the open→close message span into `room_arcs.summary` and folds the span's smart triggered memories via `memories.room_arcs_id_fk`. Trigger matching (`wordHit`) is whole-word over the full fetched history + card fields — same haystack for memory triggers and world-entry keys.
 - Who replies: `POST /api/say` in `server.js` applies the room's `ai_trigger` policy (talkativeness roll per AI member) — generation itself is always server-side.
 
 ## Frontend conventions

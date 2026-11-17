@@ -229,6 +229,50 @@ describe('generation (mock LLM)', () => {
         assert.equal((await s.post('arcs/delete', { id: arcId })).status, 200);
     });
 
+    test('arc close consolidates the span and folds smart memories under it', async () => {
+        const ext = await mockLLM('Wren hid the poison in the tin. (triggers: poison)');
+        try {
+            const profId = (await s.post('profiles', { name: 'ExtractCons', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'ExtCons', every: 1, triggers: true, profileId: profId, arcProfileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Cons room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            const mcard = (await s.post('cards', { name: 'Narrator' })).json.id;
+            await s.post('members', { room: mroom, cardId: mcard });
+            const arcId = (await s.post('arcs', { room: mroom, title: 'The Poisoning' })).json.id;
+            await s.post('say', { room: mroom, text: 'Wren looked shifty.' });
+            // Extraction writes the span's smart memory first.
+            await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                return m?.length ? m : null;
+            }, 'smart memory');
+            // Resolving the arc consolidates: the chronicler's reply becomes
+            // the chapter summary and the span's triggered memory folds in.
+            await s.post('arcs/resolve', { id: arcId });
+            await until(async () => {
+                const a = (await s.get(`arcs?room=${mroom}`)).json.arcs[0];
+                return a?.summary?.includes('poison in the tin') ? a : null;
+            }, 'consolidated summary');
+            // Point generation back at the main mock to read its prompt.
+            const mockId = (await s.get('profiles')).json.profiles.find(p => p.name === 'Mock').id;
+            await s.post('profiles/activate', { id: mockId });
+            const sysOf = async () => {
+                llm.requests.length = 0;
+                await s.post('generate', { room: mroom, card: mcard });
+                return JSON.parse(llm.requests.find(r => r.url.endsWith('/chat/completions')).body).messages[0].content;
+            };
+            // No trigger in context → neither the chapter nor the detail injects.
+            assert.ok(!(await sysOf()).includes('poison'));
+            // The folded detail's trigger pulls the whole chapter back up,
+            // detail riding under the headline as an indented sub-line.
+            await s.post('say', { room: mroom, text: 'where did the poison go?' });
+            const fired = await sysOf();
+            assert.match(fired, /Earlier events:\n- The Poisoning — Wren hid the poison in the tin/);
+            assert.match(fired, /\n {2}- Wren hid the poison in the tin/);
+            await s.post('rooms/delete', { id: mroom });
+            await s.post('cards/delete', { id: mcard });
+        } finally { await ext.close(); }
+    });
+
     test('extraction parses [arc*] tags and keeps typed memory tags', async () => {
         const ext = await mockLLM('- [event] Wren offered tea.\n- [arc-open] The tea debt — Wren owes a service.\n- [arc] The tea debt — Wren promised biscuits too.');
         try {

@@ -10,6 +10,7 @@ function setTriggers(id, str) {
 import { db } from '../db.js';
 import { send, readBody } from '../lib/util.js';
 import { roomMember, memoryShared } from '../lib/access.js';
+import { consolidateArc } from '../generate.js';
 
 export default {
     'GET /api/lastmem': async (req, res, u) => {
@@ -102,23 +103,30 @@ export default {
     },
     'POST /api/arcs/update': async (req, res, u) => {
         const b = await readBody(req);
-        const arc = db.prepare('SELECT rooms_id_fk FROM room_arcs WHERE room_arcs_id_pk=?').get(b.id);
+        const arc = db.prepare('SELECT rooms_id_fk, status FROM room_arcs WHERE room_arcs_id_pk=?').get(b.id);
         if (!arc) return send(res, 404, { error: 'no arc' });
         if (!roomMember(arc.rooms_id_fk, u)) return send(res, 403, { error: 'not a room member' });
         const status = ['open', 'resolved', 'dropped'].includes(b.status) ? b.status : null;
         db.prepare(`UPDATE room_arcs SET title=COALESCE(NULLIF(?,''),title), summary=COALESCE(?,summary),
-            status=COALESCE(?,status), updated=datetime('now') WHERE room_arcs_id_pk=?`)
-            .run(b.title?.trim() ?? null, b.summary ?? null, status, b.id);
+            status=COALESCE(?,status), updated=datetime('now'),
+            closed_messages_id_fk=CASE WHEN ? IN ('resolved','dropped') AND status='open'
+                THEN (SELECT MAX(messages_id_pk) FROM messages WHERE rooms_id_fk=?) ELSE closed_messages_id_fk END
+            WHERE room_arcs_id_pk=?`)
+            .run(b.title?.trim() ?? null, b.summary ?? null, status, status, arc.rooms_id_fk, b.id);
+        if (status && status !== 'open' && arc.status === 'open')
+            consolidateArc(arc.rooms_id_fk, b.id).catch(e => console.error('[mem]', e.message));
         send(res, 200, { ok: true });
     },
     'POST /api/arcs/resolve': async (req, res, u) => {
         const b = await readBody(req);
-        const arc = db.prepare('SELECT rooms_id_fk FROM room_arcs WHERE room_arcs_id_pk=?').get(b.id);
+        const arc = db.prepare('SELECT rooms_id_fk, status FROM room_arcs WHERE room_arcs_id_pk=?').get(b.id);
         if (!arc) return send(res, 404, { error: 'no arc' });
         if (!roomMember(arc.rooms_id_fk, u)) return send(res, 403, { error: 'not a room member' });
         db.prepare(`UPDATE room_arcs SET status='resolved', updated=datetime('now'),
             closed_messages_id_fk=(SELECT MAX(messages_id_pk) FROM messages WHERE rooms_id_fk=?) WHERE room_arcs_id_pk=?`)
             .run(arc.rooms_id_fk, b.id);
+        if (arc.status === 'open')
+            consolidateArc(arc.rooms_id_fk, b.id).catch(e => console.error('[mem]', e.message));
         send(res, 200, { ok: true });
     },
     'POST /api/arcs/delete': async (req, res, u) => {

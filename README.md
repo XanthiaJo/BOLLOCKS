@@ -193,6 +193,7 @@ erDiagram
         string content
         string type
         string origin "user|smart"
+        int room_arcs_id_fk FK "folded under"
     }
     MEMORY_TRIGGERS {
         int memories_id_fk PK,FK
@@ -230,6 +231,7 @@ erDiagram
     ROOMS ||--o{ ROOM_ARCS : threads
     CARDS ||--o{ MEMORY_CARDS : scoped
     ROOM_ARCS }o--o| MESSAGES : anchors
+    ROOM_ARCS ||--o{ MEMORIES : "consolidates"
 ```
 
 ### Lore
@@ -308,7 +310,7 @@ erDiagram
 - **room_memories** — junction: which memories a room can inject
 - **memory_cards** — junction: narrows a memory to one character (unlinked = room-shared)
 - **memory_triggers** — one row per trigger keyword; keyword-gates injection
-- **room_arcs** — story threads (`status` open/resolved/dropped, `origin` user/smart, message anchors); open threads inject on every reply
+- **room_arcs** — story threads (`status` open/resolved/dropped, `origin` user/smart, message anchors); open threads inject on every reply; on close the arc's span is summarized and its smart memories fold under it (`memories.room_arcs_id_fk`), re-emerging via `Earlier events:` when re-evoked
 - **mem_profiles** — named memory presets a room follows (following = on): extraction cadence/model/prompt, per-type caps, canon + thread budgets, extraction/arc connection pickers
 - **prompt_profiles** — named prompt-assembly presets (`prompt_order` block sequence, `active`)
 - **prompt_logs** — newest 50 LLM calls per room (`kind` reply|extract, request JSON, raw response, token usage) — the prompt inspector's durable half
