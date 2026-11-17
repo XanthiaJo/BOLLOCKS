@@ -81,7 +81,7 @@ Core tables:
 ## Generation pipeline (generate.js)
 
 - `generateReply(roomId, card)`: picks the connection (card's `api_profiles_id_fk`, else card-owner's active profile), applies `{{char}}`/`{{user}}` macros, injects keyword-triggered world entries + trigger-gated memories (budget-capped, chars/4 estimate), trims history to the smaller of room `max_context` / profile `context_size` (keeps greeting + tail), posts to `/chat/completions`, strips a leading `Name:` tag, records `genStats[roomId]`.
-- `maybeSummarize(roomId)`: if the room's memory profile has `auto_mem`, every `mem_every` messages (or context-threshold hit) it asks the LLM to distill recent lines into typed bullet memories, enforces per-type and total caps, and can autotune the injection budget.
+- `maybeSummarize(roomId)`: if the room follows a memory profile (`auto_mem` deprecated), every `mem_every` messages (or context-threshold hit) it asks the LLM to distill recent lines into typed bullet memories, enforces per-type and total caps, and can autotune the injection budget.
 - Who replies: `POST /api/say` in `server.js` applies the room's `ai_trigger` policy (talkativeness roll per AI member) — generation itself is always server-side.
 
 ## Frontend conventions

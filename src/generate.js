@@ -75,9 +75,10 @@ export const PROMPT_BLOCKS = [
 ];
 
 /** Effective memory settings for a room: always the memory profile it follows
- *  via mem_profiles_id_fk. No link → the room's own columns, which default to
- *  auto_mem=0: smart memories are simply off. Room columns only carry per-room
- *  bits like the injection-refresh counter. */
+ *  via mem_profiles_id_fk. No link → the room's own columns: smart memories
+ *  are off. Room columns only carry per-room bits like the injection-refresh
+ *  counter. The mem_profiles.auto_mem column is deprecated — following a
+ *  profile is the enable switch. */
 export function memProfileFor(room) {
     const p = room?.mem_profiles_id_fk
         ? db.prepare('SELECT * FROM mem_profiles WHERE mem_profiles_id_pk=?').get(room.mem_profiles_id_fk)
@@ -360,8 +361,11 @@ export async function generateReply(roomId, card) {
  */
 export async function maybeSummarize(roomId) {
     const room = db.prepare('SELECT *, rooms_id_pk AS id FROM rooms WHERE rooms_id_pk=?').get(roomId);
+    // Smart memories run when the room follows a memory profile — the picker
+    // is the on/off switch (mem_profiles.auto_mem is deprecated; the
+    // owner-owned extraction profile check below still gates).
+    if (!room?.mem_profiles_id_fk) return;
     const mem = memProfileFor(room);
-    if (!mem?.auto_mem) return;
     const lastId = db.prepare('SELECT MAX(messages_id_pk) m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
     const interval = mem.mem_every || 10;
     const threshold = mem.mem_context_threshold || 80;

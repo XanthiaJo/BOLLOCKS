@@ -23,8 +23,7 @@
   <div class="panel" id="smartbar" style="display:none">
       <div><span class="lbl" style="margin-bottom:3px" title="Which memory profile (preset of smart-memory settings) this chat follows.">Memory profile for this chat</span></div>
       <select id="smart_mprof" onchange="pickMProf(this.value)" style="width:240px"></select>
-      <label class="cb" style="display:block;margin-top:6px"><input type="checkbox" id="smart_auto" onchange="toggleSmartAuto(this.checked)"> Enable Smart Memory</label>
-      <span class="hint">When on, a second AI periodically reads new messages in this chat and stores lasting memories. They're added to the prompt when a trigger keyword matches — memories with no keywords are canon and always injected.</span>
+      <span class="hint" style="display:block;margin-top:6px">With a profile set, a second AI periodically reads new messages in this chat and stores lasting memories. They're added to the prompt when a trigger keyword matches — memories with no keywords are canon and always injected.</span>
       <small id="smart_mprof_hint" style="display:block;color:var(--dim);margin-top:4px">Heavier settings live under the profile — edit them on the <a href="/memsettings.html" style="color:var(--muted)">Memory profiles</a> page.</small>
   </div>
   <div class="panel" id="list"></div>
@@ -33,6 +32,5 @@
 <script src="js/layout.js"></script>
 
 <script src="js/memories.js"></script>
-<script src="js/memprofiles.js"></script>
 </body>
 </html>
