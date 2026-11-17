@@ -236,19 +236,26 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 .acc-b.open{display:block}
 
 /* Nav link strip — transparent wrapper on desktop (display:contents keeps
-   nav's gap applying to the links); on mobile it becomes the scrollable part
-   so the brand, drawer toggles and user menu stay pinned. */
+   nav's gap applying to the links); on mobile it hides and the ☰ menu's
+   .mp-navmenu dropdown takes over. */
 .navlinks{display:contents}
+/* Hamburger — never on desktop, where the links show inline. */
+.mp-menutgl{display:none}
+.mp-navmenu{display:none;position:absolute;left:0;right:0;top:100%;background:var(--panel);border-bottom:1px solid var(--edge);padding:6px 0;z-index:60;box-shadow:0 12px 28px var(--veil-soft)}
+.mp-navmenu.open{display:block}
+.mp-navmenu a{display:block;padding:12px 18px;color:var(--muted);text-decoration:none;font-size:.95em}
+.mp-navmenu a:hover{background:var(--surface2);color:var(--text)}
+.mp-navmenu a.on{color:var(--white);border-left:3px solid var(--accent);background:var(--accent-bg)}
 
 /* Mobile drawer rules — MUST stay after the base #sidebar/#rsidebar rules:
    same-specificity selectors, so source order is what lets display:none
    hide closed sidebars. */
 @media (max-width:700px){ /* --mob */
   nav{gap:8px;padding:8px 10px}
-  /* only the links scroll; brand, ☰/⚙ toggles and the user menu stay put */
-  .navlinks{display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
-  .navlinks::-webkit-scrollbar{display:none}
-  .navlinks a{white-space:nowrap}
+  /* site links collapse behind the ☰ menu; brand, panel toggles and the
+     user menu stay pinned */
+  .navlinks{display:none}
+  .mp-menutgl{display:block}
   #sidebar,#rsidebar{display:none}
   /* drawers overlay content under the nav; layout.js sets top + mutual exclusion */
   #sidebar.open,#rsidebar.open{display:flex;position:fixed;top:49px;bottom:0;z-index:40;box-shadow:0 8px 24px var(--veil-soft)}
