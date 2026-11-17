@@ -70,7 +70,9 @@
         };
         return b;
     };
-    if (side) nav.prepend(mk(side, 'l'));
+    // Panel toggles sit with the trailing icons: 💬 before the user menu,
+    // ⚙ after it — the left side stays ☰+brand on every page.
+    if (side) nav.querySelector('.usermenu').before(mk(side, 'l'));
     if (rside) nav.appendChild(mk(rside, 'r'));
     // Hamburger for the site links — mobile only (CSS hides it on desktop).
     // Lives in the nav; the .mp-navmenu dropdown above renders them.
