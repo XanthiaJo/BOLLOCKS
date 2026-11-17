@@ -27,7 +27,7 @@ Do NOT default to [fact] — if the memory describes something that occurred or 
 Example input: "Blake: the Venice API review pile is killing me\\nCreamms: I'll take half of it tomorrow"
 Example output:
 - [event] Creamms offered to take half of Blake's review pile tomorrow.`;
-const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords in parentheses, e.g. "- [fact] Blake has a pending review pile. (triggers: pending, review)"';
+const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords in parentheses — the words most likely to re-evoke it, including synonyms, titles, and roles, e.g. "- [fact] The king is dead. (triggers: king, monarch, crown, throne)"';
 // Arc-tracking addendum for the built-in extraction prompt, appended when the
 // profile tracks arcs (mem_max_arcs > 0). Arc lines may appear alongside the
 // single memory bullet; [arc] advances and [arc-close] resolves a thread.
