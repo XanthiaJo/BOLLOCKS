@@ -25,6 +25,11 @@
             `<a href="${href}"${href === here ? ' class="on"' : ''}>${label}</a>`).join('') +
         '<span id="mpadminlink"></span>' +
         '</div>' +
+        '<div class="mp-navmenu" id="mpnavmenu">' +
+        NAV.map(([label, href]) =>
+            `<a href="${href}"${href === here ? ' class="on"' : ''}>${label}</a>`).join('') +
+        '<span id="mpadminlinkm"></span>' +
+        '</div>' +
         '<span style="flex:1"></span>' +
         '<span class="usermenu">' +
         '<a id="mpuserbtn" class="navtoggle" title="Account">👤</a>' +
@@ -51,8 +56,8 @@
     const mk = (el, side) => {
         const b = document.createElement('a');
         b.className = 'navtoggle';
-        b.textContent = side === 'l' ? '☰' : '⚙';
-        b.title = (side === 'l' ? 'Toggle left panel' : 'Toggle right panel');
+        b.textContent = side === 'l' ? '💬' : '⚙';
+        b.title = (side === 'l' ? 'Toggle chat list' : 'Toggle right panel');
         b.onclick = () => {
             if (!mob()) { el.classList.toggle('hide'); return; }
             const open = !el.classList.contains('open');
@@ -67,6 +72,23 @@
     };
     if (side) nav.prepend(mk(side, 'l'));
     if (rside) nav.appendChild(mk(rside, 'r'));
+    // Hamburger for the site links — mobile only (CSS hides it on desktop).
+    // Lives in the nav; the .mp-navmenu dropdown above renders them.
+    const navmenu = nav.querySelector('#mpnavmenu');
+    const menub = document.createElement('a');
+    menub.className = 'navtoggle mp-menutgl';
+    menub.textContent = '☰';
+    menub.title = 'Menu';
+    menub.onclick = e => {
+        e.stopPropagation();
+        const open = !navmenu.classList.contains('open');
+        navmenu.classList.toggle('open', open);
+        if (open) closeDrawers();
+    };
+    nav.prepend(menub);
+    document.addEventListener('click', e => {
+        if (!e.target.closest('.mp-navmenu,.mp-menutgl')) navmenu.classList.remove('open');
+    });
     const shell = document.createElement('div');
     shell.id = 'shell';
     if (side) shell.appendChild(side);
@@ -78,8 +100,8 @@
     for (const el of [side, rside]) el?.addEventListener('click', e => {
         if (mob() && e.target.closest('.room,.rprof') && !e.target.closest('.btns')) closeDrawers();
     });
-    addEventListener('resize', () => { if (!mob()) closeDrawers(); });
-    addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawers(); });
+    addEventListener('resize', () => { if (!mob()) { closeDrawers(); navmenu.classList.remove('open'); } });
+    addEventListener('keydown', e => { if (e.key === 'Escape') { closeDrawers(); navmenu.classList.remove('open'); } });
     const ubtn = document.getElementById('mpuserbtn');
     const udrop = document.getElementById('mpuserdrop');
     ubtn.onclick = e => { e.stopPropagation(); udrop.classList.toggle('open'); };
@@ -87,8 +109,9 @@
     // Admin gets an extra nav link once we know who's logged in.
     fetch('/api/me', { headers: { Authorization: 'Bearer ' + (localStorage.mp_token || '') } })
         .then(r => r.ok ? r.json() : null).then(d => {
-            if (d?.admin) document.getElementById('mpadminlink')
-                .insertAdjacentHTML('beforebegin', `<a href="/admin.html"${here === '/admin.html' ? ' class="on"' : ''}>Admin</a>`);
+            if (d?.admin) for (const slot of ['mpadminlink', 'mpadminlinkm'])
+                document.getElementById(slot)?.insertAdjacentHTML('beforebegin',
+                    `<a href="/admin.html"${here === '/admin.html' ? ' class="on"' : ''}>Admin</a>`);
         }).catch(() => {});
     fetch('/api/version').then(r => r.json()).then(d => {
         mpVer = d.version || '';
