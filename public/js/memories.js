@@ -1,4 +1,3 @@
-/* global rowToProf */
 const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
 const api=(p,b)=>fetch(`/api/${p}`,{method:'POST',headers:H(),body:JSON.stringify(b||{})}).then(r=>r.status===401?location='/login.html':r.json());
 const get=p=>fetch(`/api/${p}`,{headers:H()}).then(r=>r.status===401?location='/login.html':r.json());
@@ -85,10 +84,6 @@ async function load(){
     ? (followed?`This chat follows "${followed.name}" — edit it on the Memory profiles page.`
         :memProfiles.length?'Smart memories are off — pick a profile to enable.':'No profiles yet — create one on the Memory profiles page.')
     : (followedName?`This chat follows "${followedName}". `:'Smart memories are off. ')+'Only the room owner can change the memory profile.';
-  const smartP=followed||null;
-  // Non-owners see the followed profile's flag (from the room payload), not their own.
-  $('smart_auto').checked=rm?.is_owner?!!smartP?.auto_mem:!!rm?.mem_profile_auto;
-  $('smart_auto').disabled=!rm?.is_owner?true:!smartP;
   $('smart_mprof').disabled=!rm?.is_owner;
   $('rchat').innerHTML=(rooms||[]).map(r=>
     rprofRow({name:esc(r.name),meta:'shared memories',sel:r.id===ROOM,onclick:`pickRoom(${r.id})`})
@@ -103,7 +98,6 @@ async function load(){
 }
 function pick(id,name){cardId=id;scopeName=name;load()}
 function pickRoom(id){ROOM=id;localStorage.mp_room=ROOM;cardId=0;scopeName='';load()}
-async function toggleSmartAuto(on){const id=Number($('smart_mprof').value);if(!id)return;const p=memProfiles.find(x=>x.mem_profiles_id_pk===id);if(!p)return;await api('memprofiles/update',{...rowToProf(p),auto:on?1:0});load()}
 async function pickMProf(v){await api('room/memsettings',{room:ROOM,memProfile:Number(v)||0});load()}
 function newMem(){$('newbox').style.display='block';$('newmem').focus()}
 function cancelNew(){$('newmem').value='';$('newtrig').value='';$('newbox').style.display='none'}
@@ -116,4 +110,4 @@ function permPicker(m){if(permPickId!==m.id)return'';
 async function moveToPerm(id,cid){const m=allMems.find(x=>x.id===id);if(!m)return;
   await api('memories',{content:m.content,type:m.type||'fact',triggers:m.triggers||'',room:ROOM,cardId:cid||0});
   await api('memories/delete',{id});permPickId=0;load()}
-// Bootstrapped by memprofiles.js, which calls load() last.
+load();

@@ -26,8 +26,8 @@ There are two kinds of memory, distinguished by `origin`:
 
 ### Smart memories (AI-extracted)
 
-- Created automatically by `maybeSummarize()` after every `mem_every` messages when `auto_mem=1`.
-- **Profile link:** a room follows a smart-memory profile via `rooms.mem_profiles_id_fk`. Profiles stay user-owned presets (`mem_profiles.users_id_fk`); a room may only follow a profile owned by the room's owner, and only the room owner can change the link (`POST /api/room/memsettings`). No link → smart memories are **off** (no fallback to a default profile). Deleting a profile re-points only the owner's own rooms at another of their profiles.
+- Created automatically by `maybeSummarize()` after every `mem_every` messages, when the room follows a profile.
+- **Profile link:** a room follows a smart-memory profile via `rooms.mem_profiles_id_fk` — **the link itself is the on/off switch** (the profile dropdown; `auto_mem` is a deprecated unread column). Profiles stay user-owned presets (`mem_profiles.users_id_fk`); a room may only follow a profile owned by the room's owner, and only the room owner can change the link (`POST /api/room/memsettings`). No link → smart memories are **off** (no fallback to a default profile). Deleting a profile re-points only the owner's own rooms at another of their profiles.
 - Extraction runs only through the room owner's configured extraction profile (`mem_extraction_profile_id` on the memory profile). No fallback: if it is unset, missing, or belongs to someone other than the room owner, extraction is skipped.
 - **Smart memories belong to the chat (room) only** - they are always stored as shared room memories (no `memory_cards` row).
   - Rationale: deciding whether an extracted fact belongs to a specific character vs. the chat as a whole is ambiguous and error-prone. Keep smart memories room-scoped; users can promote a fact to a character's permanent memory manually if desired.
@@ -96,7 +96,7 @@ flowchart TD
 
     %% Smart extraction
     Chat([Chat message sent]) --> MaybeSum["MaybeSummarize room"]
-    MaybeSum --> CheckAuto{auto_mem=1?}
+    MaybeSum --> CheckAuto{follows a profile?}
     CheckAuto -- no --> Skip[Skip]
     CheckAuto -- yes --> CheckInterval{"messages since watermark >= mem_every?"}
     CheckInterval -- no --> Skip

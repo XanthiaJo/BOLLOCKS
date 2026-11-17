@@ -11,11 +11,12 @@ initSidebar({
   footer:'Manual threads are ones you opened. Smart threads are opened, advanced, and closed by the memory-writer.',
 });
 let curTab=localStorage.mp_storytab||'user';if(!['user','smart'].includes(curTab))curTab='user';
-let allArcs=[],editId=0,roomName='';
+let allArcs=[],memProfiles=[],editId=0,roomName='';
 function tab(t){curTab=t;editId=0;localStorage.mp_storytab=t;renderList()}
 function renderList(){
   $('t_manual').classList.toggle('on',curTab==='user');
   $('t_smart').classList.toggle('on',curTab==='smart');
+  $('smartbar').style.display=curTab==='smart'?'block':'none';
   $('btn_new').style.display=curTab==='user'?'':'none';
   if(curTab!=='user')$('newarcbox').style.display='none';
   const arcs=allArcs.filter(a=>(a.origin||'user')===curTab);
@@ -53,10 +54,24 @@ function cancelNewArc(){$('newarctitle').value='';$('newarcsummary').value='';$(
 async function saveNewArc(){const t=$('newarctitle').value.trim();if(!t)return;
   await api('arcs',{room:ROOM,title:t,summary:$('newarcsummary').value.trim()});cancelNewArc();load()}
 async function load(){
-  const {rooms}=await get('rooms');
+  const [{rooms},mps]=await Promise.all([get('rooms'),get('memprofiles')]);
+  memProfiles=mps?.profiles||[];
   if ((rooms||[]).length && !(rooms||[]).some(r=>r.id===ROOM)) { ROOM=rooms[0].id; localStorage.mp_room=ROOM; }
   const rm=(rooms||[]).find(r=>r.id===ROOM);
   roomName=rm?.name||'Chat';
+  // Smart tab: picker showing which profile this chat follows.
+  const followed=(rm?.mem_profiles_id_fk)&&(memProfiles.find(x=>x.mem_profiles_id_pk===rm.mem_profiles_id_fk))||null;
+  const mprofOpts=(memProfiles||[]).map(p=>`<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
+  const mprofVal=String(rm?.mem_profiles_id_fk ?? 0);
+  // Non-owners can't see the owner's profile list — show the followed name only.
+  const followedName=followed?.name||rm?.mem_profile_name||null;
+  $('smart_mprof').innerHTML=rm?.is_owner?`<option value="0">Disabled</option>`+mprofOpts:`<option>${esc(followedName||'Disabled')}</option>`;
+  $('smart_mprof').value=mprofVal;
+  $('smart_mprof_hint').textContent=rm?.is_owner
+    ? (followed?`This chat follows "${followed.name}" — edit it on the Memory profiles page.`
+        :memProfiles.length?'Smart memory is off — pick a profile to enable.':'No profiles yet — create one on the Memory profiles page.')
+    : (followedName?`This chat follows "${followedName}". `:'Smart memory is off. ')+'Only the room owner can change the memory profile.';
+  $('smart_mprof').disabled=!rm?.is_owner;
   $('rchat').innerHTML=(rooms||[]).map(r=>
     rprofRow({name:esc(r.name),meta:'story threads',sel:r.id===ROOM,onclick:`pickRoom(${r.id})`})
     ).join('')||'<small>No chats yet.</small>';
@@ -65,4 +80,5 @@ async function load(){
   renderList();
 }
 function pickRoom(id){ROOM=id;localStorage.mp_room=ROOM;editId=0;load()}
+async function pickMProf(v){await api('room/memsettings',{room:ROOM,memProfile:Number(v)||0});load()}
 load();
