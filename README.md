@@ -94,9 +94,13 @@ Two tabs. **Connection** is the OpenAI-compatible endpoint — URL, model, key (
 
 ![Connection](docs/screenshots/connection.png)
 
+## Admin
+
+Admins only — the link appears in the nav when you're one. List users, create accounts, edit handle/email, reset passwords (old sessions die immediately), promote or demote other admins — and delete users with everything they own. The last admin can't be demoted, so you can't lock yourself out.
+
 # Where it's going
 
-User management, a proper room settings view, smarter memory organization and more — see [docs/roadmap.md](docs/roadmap.md).
+A proper room settings view, smarter memory organization and more — see [docs/roadmap.md](docs/roadmap.md).
 
 # Nerdy Details
 
@@ -117,6 +121,11 @@ erDiagram
     USERS {
         int users_id_pk PK
         string handle
+        string password_hash
+        string salt
+        string email
+        int admin
+        string settings
     }
     SESSIONS {
         string sessions_token_pk PK
@@ -299,7 +308,7 @@ erDiagram
     ROOMS ||--o{ PROMPT_LOGS : logs
     CARDS ||--o{ PROMPT_LOGS : generates
 ```
-- **users** — accounts (`handle`, `password_hash`/`salt`)
+- **users** — accounts (`handle`, `password_hash`/`salt`, `email`, `admin` flag)
 - **sessions** — bearer tokens (`sessions_token_pk`)
 - **api_profiles** — connections (`api_url`, `model`, `key`, `active`, `headers`, `context_size`, `max_response`)
 - **cards** — characters (owner, ST fields, `is_persona`, `api_profiles_id_fk` override, `avatar`)
