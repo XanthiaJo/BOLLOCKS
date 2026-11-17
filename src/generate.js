@@ -125,6 +125,12 @@ export async function generateReply(roomId, card) {
         JOIN cards c ON c.cards_id_pk=rm.cards_id_fk WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 AND c.cards_id_pk!=?`)
         .all(roomId, card.id);
 
+    // Trigger matching: whole-word (with an optional plural s) — substring
+    // hits like "king" in "making" don't fire, "kings" does. Both world
+    // entries and memory triggers scan the same haystack: the full fetched
+    // history plus the generating card's fields.
+    const wordHit = (hay, w) =>
+        new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + 's?\\b').test(hay);
     // Keyword-triggered world entries: constant entries always in; keyed
     // entries fire when a key appears in recent chat or the card's fields.
     const scanText = (history.map(m => `${m.name} ${m.text}`).join('\n')
@@ -138,8 +144,8 @@ export async function generateReply(roomId, card) {
             const rows = db.prepare('SELECT word,kind FROM world_entry_keys WHERE world_entries_id_fk=?').all(e.world_entries_id_pk);
             const prim = rows.filter(r => r.kind==='primary').map(r => r.word);
             const sec = rows.filter(r => r.kind==='secondary').map(r => r.word);
-            return prim.some(k => k && scanText.includes(k.toLowerCase()))
-                && sec.every(k => !k || scanText.includes(k.toLowerCase()));
+            return prim.some(k => k && wordHit(scanText, k.toLowerCase()))
+                && sec.every(k => !k || wordHit(scanText, k.toLowerCase()));
         });
     const worldText = world.length
         ? 'World info:\n' + world.map(e => e.content).join('\n\n')
@@ -155,9 +161,8 @@ export async function generateReply(roomId, card) {
     const refreshKey = room?.mem_refresh_count || 0;
     const injectMem = refreshN <= 1 || refreshKey % refreshN === 0;
     const cap = (rows, max, acc = 0) => { let used = acc; return rows.filter(r => (used += tok(r.content)) <= max); };
-    const recentText = history.slice(-3).map(m => m.text).join(' ').toLowerCase();
     const active = r => !r.triggers || r.triggers.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
-        .some(t => recentText.includes(t));
+        .some(t => wordHit(scanText, t));
     const TRIG_SQL = `(SELECT GROUP_CONCAT(mt.word,',') FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk) AS triggers`;
     const HAS_TRIG = `EXISTS (SELECT 1 FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk)`;
     const NO_TRIG = `NOT ${HAS_TRIG}`;

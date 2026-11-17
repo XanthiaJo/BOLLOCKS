@@ -70,6 +70,26 @@ describe('generation (mock LLM)', () => {
         await s.post('memories/delete', { id: mem });
     });
 
+    test('memory triggers match whole words across the full fetched history', async () => {
+        const mem = (await s.post('memories', { room, content: 'KING FACT', type: 'fact', triggers: 'king' })).json.id;
+        const sysOf = async () => {
+            llm.requests.length = 0;
+            await s.post('generate', { room, card });
+            return JSON.parse(llm.requests.at(-1).body).messages[0].content;
+        };
+        // Substring inside another word ("looking") must not fire.
+        await s.post('say', { room, text: 'I am looking at the door' });
+        assert.ok(!(await sysOf()).includes('KING FACT'));
+        // Whole-word plural fires…
+        await s.post('say', { room, text: 'long live the kings' });
+        assert.ok((await sysOf()).includes('KING FACT'));
+        // …and still fires once the trigger is >3 messages back — the scan
+        // window is the whole fetched history, not the last few lines.
+        for (let i = 0; i < 5; i++) await s.post('say', { room, text: 'unrelated chatter ' + i });
+        assert.ok((await sysOf()).includes('KING FACT'));
+        await s.post('memories/delete', { id: mem });
+    });
+
     test('profile prompt_order reorders the system prompt', async () => {
         const mps = (await s.get('promptprofiles')).json;
         assert.equal(mps.promptBlocks.length, 13);
