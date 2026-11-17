@@ -76,6 +76,8 @@ describe('users', () => {
         const bob = users.find(u => u.handle === 'bob');
         assert.equal((await s.post('admin/users/update', { id: admin.id, admin: false })).status, 400);
         assert.equal((await s.post('admin/users/update', { id: bob.id, admin: true })).status, 200);
+        // The list must read the flag column — not derive admin from first-user.
+        assert.equal((await s.get('admin/users')).json.users.find(u => u.id === bob.id).admin, 1);
         assert.equal((await s.post('admin/users/update', { id: admin.id, admin: false })).status, 200);
         // bob holds the only admin session now — use it to restore state
         await s.login('bob');
