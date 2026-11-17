@@ -37,6 +37,51 @@ export default {
     },
     'GET /api/users': async (req, res, u) =>
         send(res, 200, { users: db.prepare('SELECT users_id_pk AS id,handle FROM users ORDER BY users_id_pk').all() }),
+    'GET /api/admin/users': async (req, res, u) => {
+        if (!isAdmin(u)) return send(res, 403, { error: 'admin only' });
+        const rows = db.prepare(`SELECT u.users_id_pk AS id, u.handle, u.email,
+            (u.users_id_pk = (SELECT MIN(users_id_pk) FROM users)) AS admin,
+            c.cards_id_pk AS persona_id, c.name AS persona_name
+            FROM users u LEFT JOIN cards c ON c.owner_users_id_fk=u.users_id_pk AND c.is_persona=1
+            ORDER BY u.users_id_pk`).all();
+        send(res, 200, { users: rows });
+    },
+    'POST /api/admin/users/update': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!isAdmin(u)) return send(res, 403, { error: 'admin only' });
+        const id = b.id || b.world_books_id_pk;
+        if (!db.prepare('SELECT 1 FROM users WHERE users_id_pk=?').get(id)) return send(res, 404, { error: 'no such user' });
+        if (b.handle !== undefined) {
+            const h = String(b.handle).trim();
+            if (!h) return send(res, 400, { error: 'handle required' });
+            if (db.prepare('SELECT 1 FROM users WHERE handle=? COLLATE NOCASE AND users_id_pk<>?').get(h, id))
+                return send(res, 409, { error: 'handle taken' });
+            db.prepare('UPDATE users SET handle=? WHERE users_id_pk=?').run(h, id);
+        }
+        if (b.email !== undefined) db.prepare('UPDATE users SET email=? WHERE users_id_pk=?').run(String(b.email).trim(), id);
+        if (b.admin !== undefined) {
+            const want = !!b.admin;
+            const cur = db.prepare('SELECT admin FROM users WHERE users_id_pk=?').get(id).admin;
+            // A demotion must never leave the site without an admin — that
+            // covers self-demotion with no other admin, the user's rule.
+            if (!want && cur &&
+                !db.prepare('SELECT 1 FROM users WHERE admin=1 AND users_id_pk<>?').get(id))
+                return send(res, 400, { error: 'cannot demote the only admin' });
+            db.prepare('UPDATE users SET admin=? WHERE users_id_pk=?').run(want ? 1 : 0, id);
+        }
+        send(res, 200, { ok: true });
+    },
+    'POST /api/admin/users/password': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!isAdmin(u)) return send(res, 403, { error: 'admin only' });
+        const id = b.id || b.world_books_id_pk;
+        if (!b.password) return send(res, 400, { error: 'password required' });
+        if (!db.prepare('SELECT 1 FROM users WHERE users_id_pk=?').get(id)) return send(res, 404, { error: 'no such user' });
+        const { salt, hash: h } = hash(b.password);
+        db.prepare('UPDATE users SET password_hash=?, salt=? WHERE users_id_pk=?').run(h, salt, id);
+        db.prepare('DELETE FROM sessions WHERE users_id_fk=?').run(id); // stale sessions die
+        send(res, 200, { ok: true });
+    },
     'POST /api/users/delete': async (req, res, u) => {
         const b = await readBody(req);
         if (!isAdmin(u)) return send(res, 403, { error: 'admin only' });
