@@ -22,6 +22,7 @@
     nav.innerHTML = '<span class="brand">🍒 B.O.L.L.O.C.K.S' + (hasSidebar ? '' : '<span class="ver" id="mpver"></span>') + '</span>' +
         NAV.map(([label, href]) =>
             `<a href="${href}"${href === here ? ' class="on"' : ''}>${label}</a>`).join('') +
+        '<span id="mpadminlink"></span>' +
         '<span style="flex:1"></span>' +
         '<span class="usermenu">' +
         '<a id="mpuserbtn" class="navtoggle" title="Account">👤</a>' +
@@ -81,6 +82,12 @@
     const udrop = document.getElementById('mpuserdrop');
     ubtn.onclick = e => { e.stopPropagation(); udrop.classList.toggle('open'); };
     document.addEventListener('click', e => { if (!e.target.closest('.usermenu')) udrop.classList.remove('open'); });
+    // Admin gets an extra nav link once we know who's logged in.
+    fetch('/api/me', { headers: { Authorization: 'Bearer ' + (localStorage.mp_token || '') } })
+        .then(r => r.ok ? r.json() : null).then(d => {
+            if (d?.admin) document.getElementById('mpadminlink')
+                .insertAdjacentHTML('beforebegin', `<a href="/admin.html"${here === '/admin.html' ? ' class="on"' : ''}>Admin</a>`);
+        }).catch(() => {});
     fetch('/api/version').then(r => r.json()).then(d => {
         mpVer = d.version || '';
         mpVerSha = d.sha || null;
