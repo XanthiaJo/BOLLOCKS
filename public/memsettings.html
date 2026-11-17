@@ -72,9 +72,10 @@
     </div>
 
     <h4>Active Threads</h4>
-    <div class="ph">
-      <div class="row"><span class="lbl" title="How many open story threads are tracked at once." title="How many open story threads are tracked at once.">Max tracked arcs</span><input type="number" id="set_max_arcs" min="0" max="100" value="10" disabled style="width:80px"></div>
-      <div class="row"><span class="lbl" title="Token cap for open-threads context in prompts." title="Token cap for open-threads context in prompts.">Thread injection budget</span><input type="number" id="set_arcbudget" min="0" max="4000" value="700" disabled style="width:80px"></div>
+    <span class="hint">Story arcs tracked per chat — managed on the Memories page's Threads tab, or opened/closed automatically by extraction. 0 = extraction ignores threads.</span>
+    <div>
+      <div class="row"><span class="lbl" title="How many open story threads are tracked at once. Oldest-touched threads drop first." title="How many open story threads are tracked at once. Oldest-touched threads drop first.">Max tracked arcs</span><input type="number" id="set_max_arcs" min="0" max="100" value="10" style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for open-threads context in prompts." title="Token cap for open-threads context in prompts.">Thread injection budget</span><input type="number" id="set_arcbudget" min="0" max="4000" value="700" style="width:80px"></div>
     </div>
 
     <h4>Consolidation</h4>
@@ -90,9 +91,10 @@
     </div>
 
     <h4>Canon</h4>
-    <div class="ph">
-      <div class="row"><span class="lbl" title="Token cap for canon (always-true world facts) in prompts." title="Token cap for canon (always-true world facts) in prompts.">Canon injection budget</span><input type="number" id="set_canonbudget" min="0" max="4000" value="800" disabled style="width:80px"></div>
-      <div class="lbl" title="Format canon facts are injected with.">Canon template</div><textarea disabled style="min-height:50px"></textarea>
+    <span class="hint">Memories flagged canon on the Memories page are always injected — no triggers, no refresh gaps. This is their token cap.</span>
+    <div>
+      <div class="row"><span class="lbl" title="Token cap for canon (always-true world facts) in prompts." title="Token cap for canon (always-true world facts) in prompts.">Canon injection budget</span><input type="number" id="set_canonbudget" min="0" max="4000" value="800" style="width:80px"></div>
+      <div class="ph"><div class="lbl" title="Format canon facts are injected with.">Canon template</div><textarea disabled placeholder="(not implemented yet)" style="min-height:50px"></textarea></div>
     </div>
 
     <h4>Profiles</h4>
