@@ -39,8 +39,7 @@ export default {
         send(res, 200, { users: db.prepare('SELECT users_id_pk AS id,handle FROM users ORDER BY users_id_pk').all() }),
     'GET /api/admin/users': async (req, res, u) => {
         if (!isAdmin(u)) return send(res, 403, { error: 'admin only' });
-        const rows = db.prepare(`SELECT u.users_id_pk AS id, u.handle, u.email,
-            (u.users_id_pk = (SELECT MIN(users_id_pk) FROM users)) AS admin,
+        const rows = db.prepare(`SELECT u.users_id_pk AS id, u.handle, u.email, u.admin,
             c.cards_id_pk AS persona_id, c.name AS persona_name
             FROM users u LEFT JOIN cards c ON c.owner_users_id_fk=u.users_id_pk AND c.is_persona=1
             ORDER BY u.users_id_pk`).all();
