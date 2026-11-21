@@ -92,7 +92,6 @@ async function loadRoom() {
                 ? `<span class="mname">${m.card_name}</span>` +
                   `<input type="range" class="talk" data-mine="${m.mine ? 1 : 0}" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setTalk(${m.cards_id_fk},this.value)">` +
                   `<span class="tv">${m.talkativeness ?? 50}%</span>` +
-                  `<button class="fgen" title="Generate" onclick="genCard(${m.cards_id_fk},this)">▶</button>` +
                   `<button class="frem" title="Remove" onclick="remMember(${m.cards_id_fk},null,this)">✕</button>`
                 : `<span>${m.card_name || m.persona_name || m.handle || '?'} <small>${m.kind}</small></span>` +
                   `<button class="frem" title="Remove" onclick="remMember(null,${m.users_id_fk},this)">✕</button>`) +
