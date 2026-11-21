@@ -17,6 +17,16 @@ textarea{min-height:90px;font-family:inherit;width:100%}
 #editor{display:none;border:1px solid var(--edge);border-radius:6px;padding:14px;background:var(--panel);margin-bottom:14px}
 #editor h3{margin-top:0}
 #editor input{width:100%}
+/* The editor is one long column — keep its header (title, card nav,
+   Cancel/Save, field chips) pinned while fields scroll beneath it. */
+#editor .edhead{flex-wrap:wrap;position:sticky;top:0;z-index:6;background:var(--panel);padding:8px 0 4px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.cnav{padding:2px 10px;flex:none}
+#fieldnav{flex:0 0 100%;order:99;display:flex;gap:5px;overflow-x:auto;padding:4px 0 2px}
+.fchip{flex:none;width:auto;margin:0;padding:4px 10px;font-size:.78em;background:var(--surface2);border:1px solid var(--line2);border-radius:12px;color:var(--muted);cursor:pointer}
+@media (max-width:700px){ /* --mob */
+  #editor textarea{min-height:140px}
+  main{margin:8px auto;padding:0 10px}
+}
 </style>
 </head>
 <body>
@@ -40,7 +50,7 @@ textarea{min-height:90px;font-family:inherit;width:100%}
 <main>
   <div class="cvhead"><h2>Characters</h2></div>
   <div id="editor">
-    <div class="edhead" data-save="saveCard" data-cancel="cancelEd"><h3 id="edtitle">New character</h3></div>
+    <div class="edhead" data-save="saveCard" data-cancel="cancelEd"><h3 id="edtitle">New character</h3><button class="sec cnav" title="Previous card" onclick="cardNav(-1)">‹</button><button class="sec cnav" title="Next card" onclick="cardNav(1)">›</button><div id="fieldnav"></div></div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
       <img id="ed_av" src="" onload="this.style.visibility='visible'" onerror="this.style.visibility='hidden'" style="width:140px;height:140px;object-fit:cover;border-radius:10px;background:var(--surface2);cursor:pointer" title="Change picture" onclick="$('avpick').click()">
       <div><div class="cap" style="margin-top:0">Picture</div>

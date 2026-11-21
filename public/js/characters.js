@@ -18,7 +18,26 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 initSidebar({tabs:[{label:'Characters',on:true,onclick:'newCard()'}],sections:[{title:'Characters',id:'list'}],buttons:[{label:'+ New character',onclick:'newCard()'}]});
-let me='',allCards=[];
+let me='',allCards=[],curIdx=-1;
+// Field jump-nav: the editor is one long column — on a phone that means
+// deep scrolling between fields. Chips (one per .cap label) scroll+focus.
+const fieldEls=[];
+function buildFieldNav(){
+  const caps=[...document.querySelectorAll('#editor .cap')];
+  fieldEls.length=0;
+  $('fieldnav').innerHTML=caps.map((c,i)=>{
+    fieldEls.push(c);
+    return `<button class="fchip" onclick="jumpField(${i})">${esc(c.childNodes[0].textContent.trim())}</button>`;
+  }).join('');
+}
+function jumpField(i){
+  const cap=fieldEls[i];if(!cap)return;
+  const m=document.querySelector('main');
+  const sticky=cap.closest('#editor').querySelector('.edhead');
+  m.scrollTo({top:cap.getBoundingClientRect().top-m.getBoundingClientRect().top+m.scrollTop-sticky.offsetHeight-8,behavior:'smooth'});
+  cap.nextElementSibling?.focus?.({preventScroll:true});
+}
+function cardNav(d){if(!allCards.length)return;editIdx((curIdx+d+allCards.length)%allCards.length)}
 async function load(){
   const [{cards},who]=await Promise.all([get('cards'),get('me')]);
   me=who.handle;allCards=cards||[];
@@ -39,7 +58,7 @@ async function loadProfs(){
     profs.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
 }
 
-function editIdx(i){edit(allCards[i])}
+function editIdx(i){curIdx=i;edit(allCards[i])}
 function edit(c){
   const mine=c.owner===me;
   document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=!mine);
@@ -80,7 +99,7 @@ function cropConfirm(){
 }
 function clearEd(){$('edtitle').textContent='New character';['ed_id','ed_name','ed_desc','ed_personality','ed_scenario','ed_first','ed_mesex','ed_sysp','ed_phi','ed_tags','ed_creator'].forEach(i=>$(i).value='');$('ed_profile').value='';$('ed_av').src='';$('ed_av').dataset.pending=''}
 function cancelEd(){const id=Number($('ed_id').value)||0;const c=id?allCards.find(c=>c.id===id):null;c?edit(c):clearEd()}
-function newCard(){clearEd();document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=false);mpOpenEditor('inline')}
+function newCard(){curIdx=-1;clearEd();document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=false);mpOpenEditor('inline')}
 
 async function saveCard(){
   const id=$('ed_id').value;
@@ -107,5 +126,6 @@ async function importCard(input){
   if(r.error)return alert(r.error);
   alert('imported '+r.name);load();
 }
+buildFieldNav();
 Promise.all([load(),loadProfs()]).then(newCard);
 
