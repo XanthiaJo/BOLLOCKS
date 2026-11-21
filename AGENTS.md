@@ -13,7 +13,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | File | Purpose | Key exports / sections |
 |---|---|---|
 | `server.js` | Thin HTTP shell: merges route tables, request gates, static file serving | `router` merge of `src/routes/*`; unauthenticated-API 401 gate; static-file gate |
-| `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona + admin user management), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats), `update` (sidebar update check) | |
+| `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona + admin user management), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats — `/roll` and `/ruling` slash commands resolve server-side in `say` and post as system messages; dice in `src/lib/dice.js`), `update` (sidebar update check) | |
 | `lib/util.js` | Request/response helpers | `send`, `readBody`, `cookieToken`, `auth(req)` |
 | `lib/access.js` | Permission helpers for route handlers | `roomOwnerOnly`, `roomMember`, `memoryShared`, `isAdmin`, `worldEntryOk` |
 | `lib/sse.js` | Server-Sent Events fan-out | `streams` map; `push(roomId, evt)` |

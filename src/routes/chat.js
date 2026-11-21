@@ -1,8 +1,9 @@
 // Live chat routes: SSE stream, say, generate, delete, genstats.
 import { db, MSG_SQL } from '../db.js';
 import { send, readBody } from '../lib/util.js';
-import { roomMember } from '../lib/access.js';
+import { roomMember, roomOwnerOnly } from '../lib/access.js';
 import { streams, push } from '../lib/sse.js';
+import { rollDice, formatRoll } from '../lib/dice.js';
 import { generateReply, genStats, maybeSummarize } from '../generate.js';
 
 export default {
@@ -34,12 +35,37 @@ export default {
     },
     'POST /api/say': async (req, res, u) => {
         const b = await readBody(req);
-        if (!roomMember(b.room || 1, u)) return send(res, 403, { error: 'not a room member' });
+        const roomId = b.room || 1;
+        if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
         const cardId = b.cardId ?? db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk)?.cards_id_pk ?? null;
-        const r = db.prepare(`INSERT INTO messages (rooms_id_fk,cards_id_fk,text)
-            VALUES (?,?,?)`).run(b.room || 1, cardId, b.text);
-        const msg = db.prepare(MSG_SQL + ' WHERE m.messages_id_pk=?').get(r.lastInsertRowid);
-        push(b.room || 1, { type: 'message', message: msg });
+        // Slash commands: resolved server-side and posted as system messages
+        // (cards_id_fk NULL) — impartial, deterministic, and readable by
+        // memory extraction as authoritative outcomes. The command line
+        // itself is never stored.
+        const cmd = String(b.text ?? '').match(/^\/(\w+)(?:\s+([\s\S]*))?$/);
+        let msg;
+        if (cmd) {
+            const who = (cardId && db.prepare('SELECT name FROM cards WHERE cards_id_pk=?').get(cardId)?.name) || u.handle;
+            let text;
+            if (cmd[1] === 'roll') {
+                const vs = cmd[2]?.match(/^(.*?)\s+(?:vs|dc)\s+(\d+)\s*$/i);
+                const r = rollDice(vs ? vs[1] : cmd[2]);
+                if (!r) return send(res, 400, { error: 'usage: /roll NdS±K [vs TARGET]' });
+                text = formatRoll(who, r, vs ? Number(vs[2]) : null);
+            } else if (cmd[1] === 'ruling') {
+                if (!roomOwnerOnly(roomId, u)) return send(res, 403, { error: 'only the room owner can issue rulings' });
+                if (!cmd[2]?.trim()) return send(res, 400, { error: 'usage: /ruling <decision>' });
+                text = `Ruling: ${cmd[2].trim()}`;
+            } else return send(res, 400, { error: `unknown command /${cmd[1]}` });
+            const r = db.prepare('INSERT INTO messages (rooms_id_fk,cards_id_fk,text) VALUES (?,NULL,?)').run(roomId, text);
+            msg = db.prepare(MSG_SQL + ' WHERE m.messages_id_pk=?').get(r.lastInsertRowid);
+            b.text = msg.text; // named-trigger matching should see the result
+        } else {
+            const r = db.prepare(`INSERT INTO messages (rooms_id_fk,cards_id_fk,text)
+                VALUES (?,?,?)`).run(roomId, cardId, b.text);
+            msg = db.prepare(MSG_SQL + ' WHERE m.messages_id_pk=?').get(r.lastInsertRowid);
+        }
+        push(roomId, { type: 'message', message: msg });
         send(res, 200, msg);
         // AI trigger policy for this room.
         const roomRow = db.prepare('SELECT ai_trigger FROM rooms WHERE rooms_id_pk=?').get(msg.rooms_id_fk);
