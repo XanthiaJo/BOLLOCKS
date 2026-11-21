@@ -71,6 +71,8 @@ function addMsg(m, stick) {
 }
 
 async function loadRoom() {
+    typing.clear();
+    renderTyping();
     // Self-heal a stale room id (e.g. room 1 when only room 2 exists).
     try {
         const { rooms: rr } = await get('rooms');
@@ -109,9 +111,11 @@ async function loadRoom() {
         const d = JSON.parse(e.data);
         if (d.type === 'message' && d.message.rooms_id_fk === room) {
             addMsg(d.message);
+            if (typing.delete(d.message.name)) renderTyping(); // their reply arrived
             get(`lastmem?room=${room}`).then(renderLastMem);
             renderToks();
         }
+        if (d.type === 'typing') noteTyping(d);
         if (d.type === 'delete') document.querySelector(`li[data-mid="${d.id}"]`)?.remove();
         if (d.type === 'mem') {
             if (d.notify !== false) mpFlashSaved(d.phase === 'done' ? (d.count ? `${d.count} new memories` : 'Memories updated') : 'Extracting memories…');
@@ -237,6 +241,27 @@ async function newRoom() {
 }
 
 let persona = null;
+let meId = 0;
+// Typing indicator: names currently composing, keyed so AI entries (server-
+// cleared) and human pings (auto-expire) coexist. AI entries get a long
+// safety timeout in case the server dies mid-generation.
+const typing = new Map();
+function renderTyping() {
+    const names = [...typing.keys()];
+    $('typing').textContent = !names.length ? ''
+        : names.length === 1 ? `${names[0]} is typing…`
+        : `${names.slice(0, -1).join(', ')} and ${names.at(-1)} are typing…`;
+}
+function noteTyping(d) {
+    if (d.user && d.user === meId) return; // own ping echoes back
+    if (!d.name || d.off) typing.delete(d.name);
+    else {
+        clearTimeout(typing.get(d.name)?.timer);
+        typing.set(d.name, { timer: setTimeout(() => { typing.delete(d.name); renderTyping(); }, d.ai ? 90000 : 4000) });
+    }
+    renderTyping();
+}
+let lastTypePing = 0;
 // Slash-command palette: typing "/…" opens completions above the composer.
 // Server resolves these in /api/say — /roll for contested outcomes, /ruling
 // for owner adjudication (hidden from non-owners; server 403s anyway).
@@ -371,8 +396,16 @@ async function start() {
     });
     $('in').addEventListener('input', cmdFilter);
     $('in').addEventListener('blur', () => { $('cmdmenu').hidden = true; });
+    $('in').addEventListener('input', () => {
+        const now = Date.now();
+        if ($('in').value.trim() && now - lastTypePing > 2000) {
+            lastTypePing = now;
+            api('typing', { room, cardId: persona?.id || null }).catch(() => {});
+        }
+    });
     const m = await get('me');
     me = m.handle || 'you';
+    meId = m.id || 0;
     persona = m.persona || null;
     const { rooms } = await get('rooms');
     if (rooms && rooms.length && !rooms.some(r => r.id === room)) {

@@ -96,6 +96,7 @@ export default {
             (async () => {
                 try {
                     for (const card of picks) {
+                        push(msg.rooms_id_fk, { type: 'typing', name: card.name, ai: 1 });
                         try {
                             const text = await generateReply(msg.rooms_id_fk, card);
                             if (!text?.trim()) continue;
@@ -104,6 +105,7 @@ export default {
                             const m2 = db.prepare(MSG_SQL + ' WHERE m.messages_id_pk=?').get(r2.lastInsertRowid);
                             push(msg.rooms_id_fk, { type: 'message', message: m2 });
                         } catch (e) { console.error('[gen]', e.message); }
+                        finally { push(msg.rooms_id_fk, { type: 'typing', name: card.name, off: 1 }); }
                     }
                 } finally {
                     genBusy.delete(msg.rooms_id_fk);
@@ -113,6 +115,18 @@ export default {
         } else {
             maybeSummarize(msg.rooms_id_fk).catch(e => console.error('[mem]', e.message));
         }
+    },
+    'POST /api/typing': async (req, res, u) => {
+        // Typing presence ping — clients throttle their sends; the event is
+        // fanned out with the sender's user id so each client can hide its own.
+        const b = await readBody(req);
+        const roomId = b.room || 1;
+        if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
+        const name = (b.cardId && db.prepare('SELECT name FROM cards WHERE cards_id_pk=?').get(b.cardId)?.name)
+            || db.prepare('SELECT name FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(u.users_id_pk)?.name
+            || u.handle;
+        push(roomId, { type: 'typing', name, human: 1, user: u.users_id_pk });
+        send(res, 200, { ok: true });
     },
     'POST /api/messages/delete': async (req, res, u) => {
         const b = await readBody(req);
@@ -132,6 +146,7 @@ export default {
         const npc = db.prepare(`SELECT c.*, c.cards_id_pk AS id FROM room_members rm JOIN cards c ON c.cards_id_pk=rm.cards_id_fk
             WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 ${b.card ? 'AND c.cards_id_pk=?' : ''} ORDER BY rm.cards_id_fk`).all(roomId, ...(b.card ? [b.card] : []))[0];
         if (!npc) return send(res, 404, { error: 'no AI member' });
+        push(roomId, { type: 'typing', name: npc.name, ai: 1 });
         try {
             const text = await generateReply(roomId, npc);
             const r = db.prepare(`INSERT INTO messages (rooms_id_fk,cards_id_fk,text) VALUES (?,?,?)`)
@@ -142,6 +157,8 @@ export default {
             maybeSummarize(roomId).catch(e => console.error('[mem]', e.message));
         } catch (err) {
             send(res, 500, { error: String(err?.message || err) });
+        } finally {
+            push(roomId, { type: 'typing', name: npc.name, off: 1 });
         }
     },
 };
