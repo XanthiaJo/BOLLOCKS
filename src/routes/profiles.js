@@ -18,7 +18,10 @@ export default {
                     ...(() => { try { return JSON.parse(headers || '{}'); } catch { return {}; } })() },
             });
             const d = await r.json();
-            send(res, 200, { models: (d.data || []).map(m => m.id).sort() });
+            // OpenAI shape is {data:[{id}]}, but some endpoints answer
+            // {models:[...]} or plain string arrays — take whatever exists.
+            const list = Array.isArray(d) ? d : (d.data || d.models || []);
+            send(res, 200, { models: list.map(m => typeof m === 'string' ? m : (m.id || m.name)).filter(Boolean).sort() });
         } catch (e) { send(res, 502, { error: String(e.message || e) }); }
     },
     'GET /api/profiles': async (req, res, u) => {
