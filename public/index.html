@@ -25,7 +25,12 @@
 .mes .t code{background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:.92em}
 .mes.ai .n{color:var(--ai)}
 .mes.sys .t{color:var(--dim);font-style:italic}
-#composer{padding:10px 16px;display:flex;gap:8px;border-top:1px solid var(--line);flex:none}
+#composer{padding:10px 16px;display:flex;gap:8px;border-top:1px solid var(--line);flex:none;position:relative}
+#cmdmenu{position:absolute;bottom:calc(100% + 6px);left:16px;background:var(--panel);border:1px solid var(--line2);border-radius:6px;min-width:300px;box-shadow:0 6px 18px rgba(0,0,0,.5);z-index:60;overflow:hidden}
+#cmdmenu .cmd{padding:7px 10px;cursor:pointer;display:flex;gap:10px;align-items:baseline}
+#cmdmenu .cmd.sel,#cmdmenu .cmd:hover{background:var(--surface2)}
+#cmdmenu .cmd code{color:var(--muted);white-space:nowrap}
+#cmdmenu .cmd small{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #composer input{flex:1;margin:0}
 #composer button{width:auto;margin:0;white-space:nowrap}
 button.gen{background:var(--ok)}
@@ -116,7 +121,8 @@ button.gen{background:var(--ok)}
     <ul id="msgs"></ul>
     <button id="newmsgs" onclick="jumpLatest()">↓ new</button>
     <div id="composer">
-      <textarea id="in" placeholder="Type a message" autofocus rows="1" onkeydown="inKey(event)" style="resize:none;overflow:hidden;padding:10px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;flex:1;font:inherit" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
+      <div id="cmdmenu" hidden></div>
+      <textarea id="in" placeholder="Type a message — / for commands" autofocus rows="1" onkeydown="inKey(event)" style="resize:none;overflow:hidden;padding:10px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;flex:1;font:inherit" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
       <button onclick="say()">Send</button>
       <button class="gen" onclick="gen()">NPC ▸</button>
     </div>
