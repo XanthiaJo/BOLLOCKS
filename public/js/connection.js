@@ -69,13 +69,39 @@ function renderOrder(){const el=$('order_list');if(!el)return;
 function moveOrder(i,d){const j=i+d;if(j<0||j>=orderKeys.length)return;
   [orderKeys[i],orderKeys[j]]=[orderKeys[j],orderKeys[i]];renderOrder()}
 
-async function fetchModels(){
-  const r=await api('models',{profileId:$('ed_id').value?Number($('ed_id').value):null,
-    apiUrl:$('ed_url').value.trim(),key:$('ed_key').value.trim(),headers:$('ed_headers').value.trim()||'{}'});
-  if(r.error)return alert(r.error);
-  $('modelist').innerHTML=(r.models||[]).map(m=>`<option value="${m}">`).join('');
-  $('ed_model').focus();
+// Model picker: the Models button lists what the endpoint offers in a real
+// dropdown under the input (a <datalist> never reliably opens on focus).
+// Typing filters the open list; click or Enter picks; Esc/blur closes.
+let modelList=[];
+function renderModelMenu(filter){
+  const q=filter?$('ed_model').value.trim().toLowerCase():'';
+  const hits=modelList.filter(m=>m.toLowerCase().includes(q));
+  $('modelmenu').innerHTML=(hits.length?hits:modelList).slice(0,200)
+    .map(m=>`<div class="opt" data-m="${esc(m)}" onmousedown="pickModel(this.dataset.m);event.preventDefault()" title="${esc(m)}">${esc(m)}</div>`).join('')
+    ||'<div class="opt note">no matches</div>';
+  $('modelmenu').hidden=false;
 }
+function pickModel(m){$('ed_model').value=m;$('modelmenu').hidden=true;$('ed_model').focus()}
+async function fetchModels(){
+  $('modelmenu').innerHTML='<div class="opt note">loading…</div>';$('modelmenu').hidden=false;
+  let r;
+  try{
+    r=await api('models',{profileId:$('ed_id').value?Number($('ed_id').value):null,
+      apiUrl:$('ed_url').value.trim(),key:$('ed_key').value.trim(),headers:$('ed_headers').value.trim()||'{}'});
+  }catch(e){$('modelmenu').hidden=true;return alert('Model list failed: '+(e?.message||e))}
+  if(r?.error){$('modelmenu').hidden=true;return alert(r.error)}
+  modelList=r?.models||[];
+  if(!modelList.length){$('modelmenu').innerHTML='<div class="opt note">endpoint returned no models</div>';return}
+  $('ed_model').focus();
+  renderModelMenu(false);
+}
+$('ed_model').addEventListener('input',()=>{if(modelList.length)renderModelMenu(true)});
+$('ed_model').addEventListener('keydown',e=>{
+  if($('modelmenu').hidden)return;
+  if(e.key==='Escape'){e.preventDefault();$('modelmenu').hidden=true}
+  if(e.key==='Enter'){const q=$('ed_model').value.trim().toLowerCase(),m=modelList.find(x=>x.toLowerCase()===q)||modelList.find(x=>x.toLowerCase().includes(q));if(m){e.preventDefault();pickModel(m)}}
+});
+$('ed_model').addEventListener('blur',()=>{$('modelmenu').hidden=true});
 function clearEd(){
   $('edtitle').textContent='New profile';$('ed_id').value='';$('ed_name').value='';$('ed_url').value='';$('ed_model').value='';$('ed_key').value='';$('ed_headers').value='';$('ed_ctx').value='';$('ed_maxr').value='';
   $('injtitle').textContent='New injection profile';$('inj_id').value='';$('inj_name').value='';$('inj_time').checked=false;orderKeys=orderFrom(null);renderOrder();

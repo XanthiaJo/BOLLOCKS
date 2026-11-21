@@ -5,7 +5,10 @@
 <link rel="stylesheet" href="css/layout.css">
 <style>
 #content{padding:0}
-
+#modelmenu{position:absolute;top:calc(100% + 4px);left:0;right:0;max-height:260px;overflow-y:auto;background:var(--panel);border:1px solid var(--line2);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.5);z-index:60}
+#modelmenu .opt{padding:6px 10px;cursor:pointer;font-size:.85em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#modelmenu .opt:hover,#modelmenu .opt.sel{background:var(--surface2)}
+#modelmenu .opt.note{color:var(--dim);cursor:default}
 </style>
 </head>
 <body>
@@ -18,7 +21,7 @@
     <input type="hidden" id="ed_id">
     <div class="row"><span class="lbl">Profile name</span><span class="hint">A label for this connection.</span><input id="ed_name" placeholder="OpenRouter free" style="width:320px"></div>
     <div class="row"><span class="lbl">API URL</span><span class="hint">OpenAI-compatible endpoint — the /v1 base.</span><input id="ed_url" placeholder="https://openrouter.ai/api/v1" style="width:320px"></div>
-    <div class="row"><span class="lbl">Model</span><span class="hint">Model id to request. Click Models to list what the endpoint offers.</span><span style="display:flex;gap:6px;justify-self:end"><input id="ed_model" list="modelist" placeholder="openrouter/free" style="width:240px"><datalist id="modelist"></datalist><button onclick="fetchModels()" style="white-space:nowrap">Models ▾</button></span></div>
+    <div class="row"><span class="lbl">Model</span><span class="hint">Model id to request. Click Models to list what the endpoint offers, then type to filter.</span><span style="display:flex;gap:6px;justify-self:end"><span style="position:relative"><input id="ed_model" placeholder="openrouter/free" style="width:240px" autocomplete="off"><div id="modelmenu" hidden></div></span><button onclick="fetchModels()" style="white-space:nowrap">Models ▾</button></span></div>
     <div class="row"><span class="lbl">API key</span><span class="hint">Stored server-side, never reaches other clients. Leave blank to keep the existing key.</span><input id="ed_key" type="password" placeholder="sk-…" style="width:320px"></div>
     <div class="row"><span class="lbl">Extra headers</span><span class="hint">JSON or "name: value" lines — merged into every request (e.g. OpenRouter HTTP-Referer).</span><input id="ed_headers" placeholder='{"HTTP-Referer": "https://…"}' style="width:320px"></div>
     <h4>Chat Completion</h4>
