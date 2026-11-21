@@ -78,6 +78,19 @@
       <div class="row"><span class="lbl" title="Token cap for open-threads context in prompts." title="Token cap for open-threads context in prompts.">Thread injection budget</span><input type="number" id="set_arcbudget" min="0" max="4000" value="700" style="width:80px"></div>
     </div>
 
+    <h4>Scene state</h4>
+    <span class="hint">A "what is true right now" snapshot — locations, held objects, ongoing conditions. The memory-writer refreshes it wholesale (the old snapshot is discarded); it always injects when present.</span>
+    <div>
+      <label class="row cbrow"><span class="lbl">Track scene state</span><span class="hint">Refresh a live scene snapshot each memory-writer run — who is where, holding what, doing what.</span><input type="checkbox" id="set_state"></label>
+      <div class="row"><span class="lbl" title="Refresh the snapshot every N extraction runs.">Refresh every N extractions</span><span class="hint">1 = refresh every extraction run; higher = cheaper but staler. Default: 1.</span><input type="number" id="set_state_every" min="1" max="50" value="1" style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Cap on live snapshot lines kept per chat.">Max scene entries</span><span class="hint">Cap on snapshot lines kept per chat — the memory-writer's output is trimmed to this. Default: 30.</span><input type="number" id="set_max_state" min="0" max="200" value="30" style="width:80px"></div>
+      <div class="row"><span class="lbl" title="Token cap for the Scene block in prompts." title="Token cap for the Scene block in prompts.">Scene injection budget</span><span class="hint">Token cap for the Scene block in each reply's prompt. Default: 400.</span><input type="number" id="set_statebudget" min="0" max="4000" value="400" style="width:80px"></div>
+      <div class="lbl" title="The instruction sent to the memory LLM for the scene-state pass. Leave blank for default.">Scene-state prompt template</div>
+      <span class="hint">Custom instructions for the scene tracker. Leave blank for the built-in prompt — <a href="#" onclick="toggleDefPrompt(this,'def_stateprompt',defStatePrompt);return false" style="color:var(--muted)">show it</a>.</span>
+      <pre id="def_stateprompt" style="display:none;white-space:pre-wrap;font-size:.78em;color:var(--dim);background:var(--input);padding:8px;border-radius:4px;margin:2px 0 6px"></pre>
+      <textarea id="set_stateprompt" placeholder="(default scene-state prompt)" style="min-height:60px"></textarea>
+    </div>
+
     <h4>Consolidation</h4>
     <div class="ph">
       <div class="row"><span class="lbl" title="Merge N pending fact-memories into one consolidated entry." title="Merge N pending fact-memories into one consolidated entry.">Consolidate [fact] after N unprocessed</span><input value="4" disabled style="width:80px"></div>

@@ -92,7 +92,7 @@ describe('generation (mock LLM)', () => {
 
     test('profile prompt_order reorders the system prompt', async () => {
         const mps = (await s.get('promptprofiles')).json;
-        assert.equal(mps.promptBlocks.length, 13);
+        assert.equal(mps.promptBlocks.length, 14);
         const prof = mps.profiles[0];
         // 'history' stays last so the reversed sections still land in system.
         const rev = mps.promptBlocks.map(b => b.key).filter(k => k !== 'history').reverse().concat('history');
@@ -174,6 +174,38 @@ describe('generation (mock LLM)', () => {
         assert.equal(await count(), n); // no reply
         await s.post('say', { room, text: 'hey Kira, ping' });
         await until(async () => (await count()) === n + 1 ? true : null, 'named-trigger reply');
+        await s.post('room/trigger', { room, mode: 'manual' });
+    });
+
+    test("trigger 'all' chains replies — the second AI sees the first reply", async () => {
+        // Fresh room so no earlier 'Mock reply!' pollutes the assertion.
+        const room2 = (await s.post('rooms', { name: 'Chain room' })).json.id;
+        const c2 = (await s.post('cards', { name: 'Moss' })).json.id;
+        try {
+            await s.post('members', { room: room2, cardId: card });
+            await s.post('members', { room: room2, cardId: c2 });
+            await s.post('room/trigger', { room: room2, mode: 'all' });
+            await s.post('members/talkativeness', { room: room2, cardId: card, value: 100 });
+            await s.post('members/talkativeness', { room: room2, cardId: c2, value: 100 });
+            llm.requests.length = 0;
+            const before = (await s.get(`room?id=${room2}`)).json.messages.length;
+            await s.post('say', { room: room2, text: 'hello both' });
+            const msgs = await until(async () => {
+                const m = (await s.get(`room?id=${room2}`)).json.messages;
+                return m.length === before + 3 ? m : null;
+            }, 'two chained AI replies');
+            assert.equal(msgs.at(-2).kind, 'ai');
+            assert.equal(msgs.at(-1).kind, 'ai');
+            // Sequential: exactly two completions calls; the first prompt has
+            // no prior reply, the second carries the first reply in history.
+            const reqs = llm.requests.filter(r => r.url.endsWith('/chat/completions')).map(r => r.body);
+            assert.equal(reqs.length, 2);
+            assert.ok(!reqs[0].includes('Mock reply!'), 'first prompt has no prior AI reply');
+            assert.ok(reqs[1].includes('Mock reply!'), 'second prompt sees the first reply');
+        } finally {
+            await s.post('rooms/delete', { id: room2 });
+            await s.post('cards/delete', { id: c2 });
+        }
     });
 
     test("extraction strips the '(triggers: …)' label — it's not a keyword", async () => {
@@ -315,6 +347,47 @@ describe('generation (mock LLM)', () => {
             await new Promise(r => setTimeout(r, 200)); // let any extra inserts land
             assert.equal((await s.get(`memories?card=0&room=${mroom}`)).json.memories.length, 1);
             assert.equal(mems[0].content, 'Wren keeps biscuits in the blue tin.');
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
+
+    test('scene-state rows inject as a Scene block, never canon', async () => {
+        const st = (await s.post('memories', { room, content: 'Wren is in the kitchen', type: 'state' })).json.id;
+        llm.requests.length = 0;
+        await s.post('generate', { room, card });
+        const sys = JSON.parse(llm.requests.at(-1).body).messages[0].content;
+        assert.match(sys, /Scene:\n- Wren is in the kitchen/);
+        assert.ok(!sys.includes('Canon:\n- Wren is in the kitchen'));
+        await s.post('memories/delete', { id: st });
+    });
+
+    test('scene-state pass writes a snapshot that replaces the previous one', async () => {
+        // One mock serves both calls: extraction parses these as facts, the
+        // state pass re-parses the same lines as a [state] snapshot.
+        const ext = await mockLLM('- Wren is in the kitchen.\n- The blue tin is on the counter.');
+        try {
+            const profId = (await s.post('profiles', { name: 'State', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'State', auto: true, every: 1,
+                state: 1, stateEvery: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'State room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            const states = async () =>
+                ((await s.get(`memories?card=0&room=${mroom}`)).json.memories || []).filter(m => m.type === 'state');
+            await s.post('say', { room: mroom, text: 'scene one' });
+            const first = await until(async () => {
+                const st = await states();
+                return st.length === 2 ? st : null;
+            }, 'first snapshot');
+            const firstIds = new Set(first.map(m => m.memories_id_pk));
+            await s.post('say', { room: mroom, text: 'scene two' });
+            // Second run: the snapshot must stay 2 entries — run one's rows
+            // are deleted, not stacked (visible rows are all new ids).
+            const after = await until(async () => {
+                const st = await states();
+                return st.length === 2 && st.every(m => !firstIds.has(m.memories_id_pk)) ? st : null;
+            }, 'refreshed snapshot');
+            assert.ok(after.some(m => m.content === 'Wren is in the kitchen.'));
+            assert.ok(after.every(m => !m.triggers)); // state is never trigger-gated
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });

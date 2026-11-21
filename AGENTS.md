@@ -13,7 +13,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | File | Purpose | Key exports / sections |
 |---|---|---|
 | `server.js` | Thin HTTP shell: merges route tables, request gates, static file serving | `router` merge of `src/routes/*`; unauthenticated-API 401 gate; static-file gate |
-| `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona + admin user management), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats), `update` (sidebar update check) | |
+| `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona + admin user management), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats — `/roll` and `/ruling` slash commands resolve server-side in `say` and post as system messages; dice in `src/lib/dice.js`), `update` (sidebar update check) | |
 | `lib/util.js` | Request/response helpers | `send`, `readBody`, `cookieToken`, `auth(req)` |
 | `lib/access.js` | Permission helpers for route handlers | `roomOwnerOnly`, `roomMember`, `memoryShared`, `isAdmin`, `worldEntryOk` |
 | `lib/sse.js` | Server-Sent Events fan-out | `streams` map; `push(roomId, evt)` |
@@ -84,7 +84,7 @@ Core tables:
 - `generateReply(roomId, card)`: picks the connection (card's `api_profiles_id_fk`, else card-owner's active profile), applies `{{char}}`/`{{user}}` macros, injects keyword-triggered world entries + trigger-gated memories (budget-capped, chars/4 estimate), trims history to the smaller of room `max_context` / profile `context_size` (keeps greeting + tail), posts to `/chat/completions`, strips a leading `Name:` tag, records `genStats[roomId]`.
 - `maybeSummarize(roomId)`: if the room follows a memory profile (the link is the switch — the old `auto_mem` flag was dropped), every `mem_every` messages (or context-threshold hit) it asks the LLM to distill recent lines into typed bullet memories, enforces per-type and total caps, and can autotune the injection budget.
 - `consolidateArc(roomId, arcId)`: when an arc closes (resolve/drop/`[arc-close]`/`arcs/update`), a chronicler pass — `arc_api_profiles_id_fk`, falling back to `extraction_api_profiles_id_fk`, owner-owned — summarizes the open→close message span into `room_arcs.summary` and folds the span's smart triggered memories via `memories.room_arcs_id_fk`. Trigger matching (`wordHit`) is whole-word over the full fetched history + card fields — same haystack for memory triggers and world-entry keys.
-- Who replies: `POST /api/say` in `server.js` applies the room's `ai_trigger` policy (talkativeness roll per AI member) — generation itself is always server-side.
+- Who replies: `POST /api/say` in `routes/chat.js` applies the room's `ai_trigger` policy (talkativeness roll per AI member; 'named' requires a mention; 'roundrobin' rolls one random AI). Picked AIs reply **one at a time in a shuffled order** — each reply is inserted before the next AI prompts, so later speakers see it in history. One reply chain per room at a time (`genBusy`); generation itself is always server-side.
 
 ## Frontend conventions
 

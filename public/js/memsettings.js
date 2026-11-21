@@ -12,10 +12,10 @@ initSidebar({
   buttons:[{label:'+ New profile',onclick:'newMP()'}],
   footer:'Profiles preset how the memory-writer runs — a chat follows one; create and edit them here.',
 });
-let memProfiles=[];let defPrompt='';
+let memProfiles=[];let defPrompt='';let defStatePrompt='';
 async function load(){
   const [{profiles},mps]=await Promise.all([get('profiles'),get('memprofiles')]);
-  memProfiles=mps?.profiles||[];defPrompt=mps?.defaultPrompt||'';
+  memProfiles=mps?.profiles||[];defPrompt=mps?.defaultPrompt||'';defStatePrompt=mps?.defaultStatePrompt||'';
   const profOpts='<option value="0">— none (extraction off) —</option>'+(profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   $('set_profile').innerHTML=profOpts;
   $('plist').innerHTML=(memProfiles||[]).map(p=>

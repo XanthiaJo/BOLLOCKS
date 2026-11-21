@@ -159,6 +159,15 @@ mechanically as a memory with **no trigger keywords**, not a flag; **arcs** =
 open story threads with a lifecycle ("this is unfolding — advance it").
 Canon is static; arcs open, progress, close.
 
+**Scene state** = `type='state'` smart memories holding a "what is true
+right now" snapshot — locations, held objects, ongoing conditions. A
+dedicated memory-writer pass (`mem_state` on the profile, every
+`mem_state_every` extraction runs, paced by `rooms.mem_extract_count`)
+rewrites the snapshot wholesale: the previous `[state]` rows are deleted,
+not accumulated. State rows carry no triggers, never fold into arcs, are
+excluded from the canon query and the global `mem_max` cap, and inject as
+their own `Scene:` prompt block (capped by `mem_state_budget`).
+
 ### Who does what
 
 Two cost centers behave differently: **generation calls** (background LLM
@@ -175,7 +184,12 @@ sequenceDiagram
     participant R as Reply LLM<br/>(card's api_profile)
 
     U->>S: POST /api/say
-    S->>D: INSERT message
+    alt chat line
+        S->>D: INSERT message
+    else /roll or /ruling
+        S->>S: resolve server-side<br/>(crypto dice / owner check)
+        S->>D: INSERT system message<br/>(cards_id_fk NULL)
+    end
 
     Note over S,W: WRITE path — background, cheap/local model OK
     S->>S: maybeSummarize(room)
@@ -187,16 +201,38 @@ sequenceDiagram
     end
 
     Note over S,R: READ path — every reply, main model
-    S->>S: generateReply(room, card)
-    S->>D: canon (always) + constant/triggered world<br/>+ memories (trigger-gated, budget-capped)<br/>+ open arcs (budget-capped)
-    S->>R: system prompt (stable → volatile) + history + nudge
-    R-->>S: reply text
-    S->>D: INSERT message + prompt_logs row
-    S-->>U: SSE {type:'message'}
+    loop each picked AI (rolled order, one chain per room)
+        S->>S: generateReply(room, card)
+        S->>D: canon (always) + constant/triggered world<br/>+ memories (trigger-gated, budget-capped)<br/>+ open arcs (budget-capped)<br/>+ history (includes earlier replies this chain)
+        S->>R: system prompt (stable → volatile) + history + nudge
+        R-->>S: reply text
+        S->>D: INSERT message + prompt_logs row
+        S-->>U: SSE {type:'message'}
+    end
 ```
 
 Canon lives entirely in the read path — pure SQL, no model call. Arcs exist
 on both sides: written by the memory-writer, injected on every reply.
+
+### Conflict resolution conventions
+
+Multiplayer rooms can contradict themselves — two humans describe the same
+thing differently, or an outcome is genuinely contested. The convention, in
+precedence order:
+
+1. **Rulings win.** `/ruling <decision>` (room owner only) posts a system
+   message `Ruling: …` that extraction and the scene-state pass treat as
+   authoritative.
+2. **Rolls settle contests.** `/roll NdS±K [vs TARGET]` is resolved by the
+   server (`node:crypto`, not the model) and posted as a system message like
+   `Blake rolls 1d20+5 → 17 (12 + 5) vs 15 — success`. The command line
+   itself is never stored — the *result* is the chat history.
+3. **Recency wins otherwise.** Ordinary contradictions resolve to the most
+   recent message — both extraction prompts state this explicitly.
+
+System messages flow through the same pipeline as normal chat: SSE fan-out,
+AI triggers, memory extraction, scene snapshots — a ruling or roll result
+reaches context exactly the way a spoken line does.
 
 ### Schema
 
