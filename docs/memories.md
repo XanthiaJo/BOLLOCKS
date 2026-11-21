@@ -159,6 +159,15 @@ mechanically as a memory with **no trigger keywords**, not a flag; **arcs** =
 open story threads with a lifecycle ("this is unfolding — advance it").
 Canon is static; arcs open, progress, close.
 
+**Scene state** = `type='state'` smart memories holding a "what is true
+right now" snapshot — locations, held objects, ongoing conditions. A
+dedicated memory-writer pass (`mem_state` on the profile, every
+`mem_state_every` extraction runs, paced by `rooms.mem_extract_count`)
+rewrites the snapshot wholesale: the previous `[state]` rows are deleted,
+not accumulated. State rows carry no triggers, never fold into arcs, are
+excluded from the canon query and the global `mem_max` cap, and inject as
+their own `Scene:` prompt block (capped by `mem_state_budget`).
+
 ### Who does what
 
 Two cost centers behave differently: **generation calls** (background LLM

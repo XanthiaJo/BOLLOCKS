@@ -232,6 +232,8 @@ export function migrateSchema() {
     if (!rcols.includes('bg')) db.exec("ALTER TABLE rooms ADD COLUMN bg TEXT DEFAULT ''");
     if (!rcols.includes('mem_last_messages_id')) db.exec('ALTER TABLE rooms ADD COLUMN mem_last_messages_id INTEGER DEFAULT 0');
     if (!rcols.includes('mem_refresh_count')) db.exec('ALTER TABLE rooms ADD COLUMN mem_refresh_count INTEGER DEFAULT 0');
+    // Extraction-run counter — paces the scene-state pass ("every N runs").
+    if (!rcols.includes('mem_extract_count')) db.exec('ALTER TABLE rooms ADD COLUMN mem_extract_count INTEGER DEFAULT 0');
     if (!rcols.includes('mem_profiles_id_fk')) db.exec('ALTER TABLE rooms ADD COLUMN mem_profiles_id_fk INTEGER DEFAULT 0');
     if (!rcols.includes('max_context')) db.exec('ALTER TABLE rooms ADD COLUMN max_context INTEGER DEFAULT 0');
     // One-time: sensible memory defaults — unified injection on by default,
@@ -367,6 +369,13 @@ export function migrateSchema() {
         mem_max_arcs: 'INTEGER DEFAULT 10',
         mem_arc_budget: 'INTEGER DEFAULT 700',
         mem_arc_profile_id: 'INTEGER DEFAULT 0',
+        // Scene-state snapshot settings — "what is true right now"
+        // (locations, held objects, conditions), refreshed wholesale.
+        mem_state: 'INTEGER DEFAULT 0',
+        mem_state_every: 'INTEGER DEFAULT 1',
+        mem_max_state: 'INTEGER DEFAULT 30',
+        mem_state_budget: 'INTEGER DEFAULT 400',
+        mem_state_prompt: "TEXT DEFAULT ''",
     })) if (!mpcols.includes(col)) db.exec(`ALTER TABLE mem_profiles ADD COLUMN ${col} ${def}`);
     // members = entity (card/user + talkativeness); room_members = junction.
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='room_members'").get()) {
@@ -718,7 +727,7 @@ export function migrateSchema() {
         // Copy only columns both shapes share — ancient rooms tables may
         // lack columns entirely (defaults fill the gaps).
         const ROOM_COLS = ['rooms_id_pk', 'name', 'ai_trigger', 'bg', 'mem_last_messages_id_fk',
-            'mem_refresh_count', 'mem_profiles_id_fk', 'max_context', 'owner_users_id_fk'];
+            'mem_refresh_count', 'mem_extract_count', 'mem_profiles_id_fk', 'max_context', 'owner_users_id_fk'];
         const rhave = ROOM_COLS.filter(c => colsOf('rooms').includes(c));
         const rsel = rhave.map(c => c === 'mem_profiles_id_fk' ? 'NULLIF(mem_profiles_id_fk,0)' : c).join(',');
         db.exec(`PRAGMA foreign_keys=OFF;
@@ -729,6 +738,7 @@ export function migrateSchema() {
                 bg TEXT DEFAULT '',
                 mem_last_messages_id_fk INTEGER DEFAULT 0, -- stale-tolerant pointer; deliberately no REFERENCES
                 mem_refresh_count INTEGER DEFAULT 0,
+                mem_extract_count INTEGER DEFAULT 0,
                 mem_profiles_id_fk INTEGER REFERENCES mem_profiles(mem_profiles_id_pk) ON DELETE SET NULL,
                 max_context INTEGER DEFAULT 0,
                 owner_users_id_fk INTEGER REFERENCES users(users_id_pk));
@@ -745,7 +755,8 @@ export function migrateSchema() {
             'mem_extraction_prompt', 'mem_context_threshold', 'mem_response_length', 'mem_gen_budget',
             'mem_unlimited', 'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh',
             'mem_activity', 'extraction_api_profiles_id_fk', 'mem_canon_budget', 'mem_max_arcs',
-            'mem_arc_budget', 'arc_api_profiles_id_fk'];
+            'mem_arc_budget', 'arc_api_profiles_id_fk', 'mem_state', 'mem_state_every',
+            'mem_max_state', 'mem_state_budget', 'mem_state_prompt'];
         const mcols = MP_COLS.filter(c => colsOf('mem_profiles').includes(c));
         const msel = mcols.map(c => (c === 'extraction_api_profiles_id_fk' || c === 'arc_api_profiles_id_fk') ? `NULLIF(${c},0)` : c).join(',');
         db.exec(`PRAGMA foreign_keys=OFF;
@@ -774,7 +785,12 @@ export function migrateSchema() {
                 mem_canon_budget INTEGER DEFAULT 800,
                 mem_max_arcs INTEGER DEFAULT 10,
                 mem_arc_budget INTEGER DEFAULT 700,
-                arc_api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk) ON DELETE SET NULL);
+                arc_api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk) ON DELETE SET NULL,
+                mem_state INTEGER DEFAULT 0,
+                mem_state_every INTEGER DEFAULT 1,
+                mem_max_state INTEGER DEFAULT 30,
+                mem_state_budget INTEGER DEFAULT 400,
+                mem_state_prompt TEXT DEFAULT '');
             INSERT INTO mem_profiles_new (${mcols.join(',')}) SELECT ${msel} FROM mem_profiles;
             DROP TABLE mem_profiles; ALTER TABLE mem_profiles_new RENAME TO mem_profiles;
             PRAGMA foreign_keys=ON`);

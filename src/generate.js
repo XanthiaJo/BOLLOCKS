@@ -35,13 +35,19 @@ const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords i
 // unresolved situation that stays open until something settles it.
 const MEM_ARCS_SUFFIX = ` Threads: a thread is NOT a memory — it is an open situation left pending until it resolves: a debt owed, a repair in progress, an investigation, a brewing conflict, a promise awaiting fulfilment. If the excerpt opens, advances, or resolves one, additionally output "- [arc-open] Title — what is underway", "- [arc] Title — the new development", or "- [arc-close] Title — how it settled". Reuse an open thread's title exactly when updating or closing it. The test: an event is closed when it happens ("Buddy broke the wheel" is [event]); a thread needs a resolution ("the wheel must be replaced before inspection" is a thread). Transient states — injuries, sanctions, pending fixes, ongoing suspicions — belong to threads, never [fact]: arcs close; facts linger as stale truth.`;
 
+// Scene-state snapshot prompt — a dedicated pass that answers "what is true
+// right now" (locations, held objects, ongoing conditions). Unlike extracted
+// memories it is not cumulative: each pass replaces the previous snapshot.
+export const MEM_STATE_PROMPT = `You track the current scene state of a roleplay chat. From the latest messages, describe what is true RIGHT NOW: where each person is, where important objects are and who holds them, ongoing activities or conditions. This is a snapshot — describe only the current state, not history or events. Output one entry per line in the format "- [state] current state fact". If the scene state is unchanged or nothing is trackable, reply with just "-".`;
+
 // Fields a memory profile can override on a room's mem_* settings.
 const MEM_PROFILE_FIELDS = ['mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
     'mem_max_event', 'mem_max_relationship', 'mem_max_preference', 'mem_extraction_prompt',
     'mem_context_threshold', 'mem_response_length', 'mem_gen_budget', 'mem_unlimited',
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
     'extraction_api_profiles_id_fk', 'mem_canon_budget', 'mem_max_arcs', 'mem_arc_budget',
-    'arc_api_profiles_id_fk'];
+    'arc_api_profiles_id_fk', 'mem_state', 'mem_state_every', 'mem_max_state',
+    'mem_state_budget', 'mem_state_prompt'];
 
 // Named system-prompt sections in cache-optimal order (stable content first —
 // see the assembly comment in generateReply). The user's active
@@ -68,6 +74,8 @@ export const PROMPT_BLOCKS = [
         example: 'Memories:\n- [fact] Aria distrusts the harbor guild.\n- [event] Blake offered to carry the map case.' },
     { key: 'arcs', label: 'Open threads',
         example: 'Open threads:\n- The stolen map — Aria suspects the harbor guild took it' },
+    { key: 'scene', label: 'Scene state',
+        example: 'Scene:\n- Aria holds the stolen map.\n- The common room fire has burned low.' },
     { key: 'instructions', label: 'Instructions',
         example: "You are Aria and ONLY Aria — an NPC in a shared roleplay. The other characters listed are separate people speaking for themselves; do NOT speak for them or imitate them. Write ONLY Aria's next message." },
     { key: 'history', label: 'Chat history',
@@ -176,7 +184,7 @@ export async function generateReply(roomId, card) {
     // every generation, bypassing the refresh counter, capped by their own
     // budget. Shared canon + this card's canon both apply.
     const canonRows = cap(db.prepare(`SELECT m.content FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-        WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND ${NO_TRIG} AND (NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk)
+        WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND m.type!='state' AND ${NO_TRIG} AND (NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk)
             OR EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk AND mc.cards_id_fk=?))
         ORDER BY m.memories_id_pk`).all(roomId, card.id), mem?.mem_canon_budget ?? 800);
     const canonText = canonRows.length ? 'Canon:\n' + canonRows.map(m => '- ' + m.content).join('\n') : null;
@@ -205,6 +213,14 @@ export async function generateReply(roomId, card) {
             + (pastArcs.length ? (arcRows.length ? '\n\n' : '') + 'Earlier events:\n' + pastArcs.map(a => a.content).join('\n') : '')
         : null;
 
+    // Scene state: the latest "what is true right now" snapshot — locations,
+    // held objects, ongoing conditions. Always injected when present (it is
+    // by definition relevant), never trigger-gated, own token budget.
+    const sceneRows = cap(db.prepare(`SELECT m.content FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+        WHERE rm.rooms_id_fk=? AND m.type='state' AND m.room_arcs_id_fk IS NULL ORDER BY m.memories_id_pk`).all(roomId),
+        mem?.mem_state_budget ?? 400);
+    const sceneText = sceneRows.length ? 'Scene:\n' + sceneRows.map(m => '- ' + m.content).join('\n') : null;
+
     const memText = (injectMem && (roomMems.length || mems.length))
         ? (mem?.mem_unified
             ? ['Memories:\n' + [...roomMems.map(m => '- ' + m.content), ...mems.map(m => '- ' + m.content)].join('\n')].join('')
@@ -231,6 +247,7 @@ export async function generateReply(roomId, card) {
         world: worldText,
         memories: memText,
         arcs: arcText,
+        scene: sceneText,
         instructions: `You are ${card.name} and ONLY ${card.name} — an NPC in a shared roleplay. ` +
             `The other characters listed are separate people speaking for themselves; ` +
             `do NOT speak for them or imitate them. Write ONLY ${card.name}'s next message.` +
@@ -503,7 +520,10 @@ export async function maybeSummarize(roomId) {
     }
     // Only advance the watermark once extraction actually ran — a failed
     // call retries on the next message instead of silently skipping.
-    db.prepare('UPDATE rooms SET mem_last_messages_id_fk=? WHERE rooms_id_pk=?').run(lastId, roomId);
+    db.prepare('UPDATE rooms SET mem_last_messages_id_fk=?, mem_extract_count=mem_extract_count+1 WHERE rooms_id_pk=?').run(lastId, roomId);
+    // Scene-state snapshot rides the extraction connection and cadence —
+    // every mem_state_every extraction runs it rewrites "what is true now".
+    if (mem.mem_state) await maybeUpdateState(roomId, mem, conn);
     if (mem.mem_activity) {
         console.log(`[mem] activity: extraction ran for room ${roomId} (${intervalMet ? 'interval' : 'context threshold'})`);
     }
@@ -525,12 +545,12 @@ export async function maybeSummarize(roomId) {
     // Global cap (mem_max) as a safety net across all types.
     const totalCap = mem.mem_max || 0;
     if (totalCap > 0) {
-        db.prepare(`DELETE FROM memories WHERE origin='smart' AND memories_id_pk IN
+        db.prepare(`DELETE FROM memories WHERE origin='smart' AND type!='state' AND memories_id_pk IN
             (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-             WHERE rm.rooms_id_fk=? AND m.origin='smart'
+             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type!='state'
              AND m.memories_id_pk NOT IN
                 (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
-                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
+                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type!='state' ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
             .run(roomId, roomId, totalCap);
     }
     // Cap open arcs — oldest-touched threads are dropped first.
@@ -553,6 +573,66 @@ export async function maybeSummarize(roomId) {
         const used = db.prepare(`SELECT COALESCE(SUM(LENGTH(m.content)/4.0),0) AS s FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart'`).get(roomId)?.s || 0;
         const b = mem.mem_budget || 800;
         if (used > b && b < 8000) db.prepare('UPDATE mem_profiles SET mem_budget=? WHERE mem_profiles_id_pk=?').run(Math.ceil(used), mem.mem_profiles_id_pk);
+    }
+}
+
+// Scene-state snapshot — answers "what is true right now" (locations, held
+// objects, ongoing conditions). Unlike accumulated memories a snapshot is
+// not cumulative: each pass deletes the previous live [state] rows and
+// writes a fresh set. Runs on the extraction connection every
+// mem_state_every extraction runs; state rows are room-shared, carry no
+// triggers (always relevant → always injected), and skip arc folding.
+async function maybeUpdateState(roomId, mem, conn) {
+    const room = db.prepare('SELECT mem_extract_count FROM rooms WHERE rooms_id_pk=?').get(roomId);
+    const every = Math.max(1, mem.mem_state_every || 1);
+    if ((room.mem_extract_count || 0) % every !== 0) return;
+    // State describes NOW — take the tail of the conversation, not the
+    // extraction watermark window.
+    const excerpt = db.prepare(MSG_SQL + ' WHERE m.rooms_id_fk=? ORDER BY m.messages_id_pk DESC LIMIT 30')
+        .all(roomId).reverse();
+    if (!excerpt.length) return;
+    const reqBody = {
+        model: conn.model || 'local',
+        messages: [
+            { role: 'system', content: mem.mem_state_prompt?.trim() || MEM_STATE_PROMPT },
+            { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
+        ],
+        temperature: 0.2, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
+    };
+    try {
+        const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
+                ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })() },
+            body: JSON.stringify(reqBody),
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const text = data?.choices?.[0]?.message?.content?.trim() || '';
+        logPrompt(roomId, null, 'state', reqBody, text, data?.usage);
+        // State lines: strip bullet + any type tag, keep the text as-is —
+        // parens stay content (state never stores triggers; it is always
+        // injected, so trigger-gating would wrongly hide it).
+        const fresh = text.split('\n')
+            .map(l => l.replace(/^\s*[-*•]\s*/, '').replace(/^\[(fact|event|relationship|preference|state)\]\s*/i, '').trim())
+            .filter(f => f.length > 5 && f !== '-');
+        if (!fresh.length) return; // keep the last good snapshot rather than wipe
+        const cap = Math.max(0, mem.mem_max_state ?? 30);
+        const lines = cap > 0 ? fresh.slice(0, cap) : [];
+        db.exec('BEGIN');
+        try {
+            // Wholesale replace: the old snapshot is stale truth — deleting
+            // it is the lifecycle (raw pass output stays in prompt_logs).
+            db.prepare(`DELETE FROM memories WHERE type='state' AND origin='smart' AND memories_id_pk IN
+                (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)`).run(roomId);
+            const ins = db.prepare("INSERT INTO memories (content,type,origin) VALUES (?, 'state', 'smart')");
+            const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
+            for (const fact of lines) linkRoom.run(roomId, ins.run(fact).lastInsertRowid);
+            db.exec('COMMIT');
+            if (mem.mem_activity) console.log(`[mem] activity: state snapshot refreshed for room ${roomId} (${lines.length} entries)`);
+        } catch (e) { db.exec('ROLLBACK'); throw e; }
+    } catch (e) {
+        if (mem.mem_activity) console.log(`[mem] activity: state snapshot failed for room ${roomId} (${e.message})`);
     }
 }
 
