@@ -18,6 +18,7 @@ const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
 // blank. The triggers suffix is appended only to the built-in prompt.
 export const MEM_EXTRACT_PROMPT = `You extract lasting memories from roleplay chat logs. All memories are shared with the whole chat.
 Character sheets included in the input are the AUTHORITATIVE current state for each character — trust them over older chat claims. If the excerpt shows a character's state changing (something fixed, removed, acquired, moved), record the NEW state, not the old.
+System lines — "Ruling: …" decisions and "… rolls … → N" dice results — are authoritative outcomes, never contested. When participants disagree about what is true, the most recent message wins.
 Output exactly ONE bullet point — the single most important lasting memory from this excerpt. "- " prefix, one line, starting with exactly one type tag — pick the most specific that fits:
 - [event] — something that HAPPENED and is DONE: a self-contained action or beat, closed the moment it occurs. "Karima opened the fridge" is an event — nothing stays pending afterward.
 - [relationship] — how characters FEEL about each other or a thing. "Ellie adores teasing SirRackington" is a relationship.
@@ -38,7 +39,7 @@ const MEM_ARCS_SUFFIX = ` Threads: a thread is NOT a memory — it is an open si
 // Scene-state snapshot prompt — a dedicated pass that answers "what is true
 // right now" (locations, held objects, ongoing conditions). Unlike extracted
 // memories it is not cumulative: each pass replaces the previous snapshot.
-export const MEM_STATE_PROMPT = `You track the current scene state of a roleplay chat. From the latest messages, describe what is true RIGHT NOW: where each person is, where important objects are and who holds them, ongoing activities or conditions. This is a snapshot — describe only the current state, not history or events. Output one entry per line in the format "- [state] current state fact". If the scene state is unchanged or nothing is trackable, reply with just "-".`;
+export const MEM_STATE_PROMPT = `You track the current scene state of a roleplay chat. From the latest messages, describe what is true RIGHT NOW: where each person is, where important objects are and who holds them, ongoing activities or conditions. This is a snapshot — describe only the current state, not history or events. System lines — "Ruling: …" decisions and "… rolls … → N" dice results — are authoritative outcomes. When participants disagree about what is true, the most recent message wins. Output one entry per line in the format "- [state] current state fact". If the scene state is unchanged or nothing is trackable, reply with just "-".`;
 
 // Fields a memory profile can override on a room's mem_* settings.
 const MEM_PROFILE_FIELDS = ['mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',

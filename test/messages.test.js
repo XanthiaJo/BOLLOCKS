@@ -2,7 +2,7 @@
 // live fan-out that keeps every client in sync.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { boot, tmp, pub } from './helpers.js';
+import { boot, tmp, pub, asUser } from './helpers.js';
 
 let s;
 before(async () => { s = await boot(tmp('data')); await s.login('admin'); });
@@ -49,5 +49,29 @@ describe('messages and SSE', () => {
         await s.post('messages/delete', { id: msg.json.id });
         await readFor('"type":"delete"', 'delete event');
         await reader.cancel();
+    });
+
+    test('/roll posts a server-resolved system message; the command is never stored', async () => {
+        const msg = await s.post('say', { room: 1, text: '/roll 2d6+1' });
+        assert.equal(msg.json.kind, 'sys');
+        assert.match(msg.json.text, /rolls 2d6\+1 → \d+ \(\d, \d \+ 1\)/);
+        assert.ok(!(await s.get('room?id=1')).json.messages.some(m => m.text === '/roll 2d6+1'));
+        const vs = await s.post('say', { room: 1, text: '/roll 1d20+5 vs 15' });
+        assert.match(vs.json.text, /rolls 1d20\+5 → \d+ \(\d+ \+ 5\) vs 15 — (success|fail)/);
+        assert.equal((await s.post('say', { room: 1, text: '/roll nonsense' })).status, 400);
+        assert.equal((await s.post('say', { room: 1, text: '/bogus' })).status, 400);
+    });
+
+    test('/ruling is owner-only and posts an authoritative system line', async () => {
+        const room = (await s.post('rooms', { name: 'Ruling Room' })).json.id;
+        const ok = await s.post('say', { room, text: '/ruling the cellar door was barred' });
+        assert.equal(ok.json.kind, 'sys');
+        assert.equal(ok.json.text, 'Ruling: the cellar door was barred');
+        const alice = (await s.get('users')).json.users.find(u => u.handle === 'alice');
+        await s.post('members', { room, userId: alice.id });
+        await asUser(s, 'alice')(async () => {
+            assert.equal((await s.post('say', { room, text: '/ruling it was unlocked' })).status, 403);
+        });
+        await s.post('rooms/delete', { id: room });
     });
 });

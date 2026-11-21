@@ -237,15 +237,47 @@ async function newRoom() {
 }
 
 let persona = null;
+// Slash-command palette: typing "/…" opens completions above the composer.
+// Server resolves these in /api/say — /roll for contested outcomes, /ruling
+// for owner adjudication (hidden from non-owners; server 403s anyway).
+const COMMANDS = [
+    { cmd: '/roll', usage: '/roll NdS±K [vs TARGET]', hint: 'resolve a contested outcome — the server rolls' },
+    { cmd: '/ruling', usage: '/ruling <decision>', hint: 'post an authoritative ruling', owner: true },
+];
+let cmdMatches = [], cmdSel = 0;
+const cmdOpen = () => !$('cmdmenu').hidden;
+function cmdFilter() {
+    const m = $('in').value.match(/^\/(\w*)$/);
+    cmdMatches = m ? COMMANDS.filter(c => c.cmd.startsWith('/' + m[1]) && (!c.owner || roomIsOwner)) : [];
+    if (!cmdMatches.length) { $('cmdmenu').hidden = true; return; }
+    cmdSel = Math.min(cmdSel, cmdMatches.length - 1);
+    $('cmdmenu').innerHTML = cmdMatches.map((c, i) =>
+        `<div class="cmd${i === cmdSel ? ' sel' : ''}" onmousedown="pickCmd(${i});event.preventDefault()"><code>${esc(c.usage)}</code><small>${esc(c.hint)}</small></div>`).join('');
+    $('cmdmenu').hidden = false;
+}
+function pickCmd(i) {
+    $('in').value = cmdMatches[i].cmd + ' ';
+    $('cmdmenu').hidden = true;
+    $('in').focus();
+}
+function cmdNav(d) { cmdSel = (cmdSel + d + cmdMatches.length) % cmdMatches.length; cmdFilter(); }
+
 // Enter-sends is a per-device pref (mp_entersend): default off on touch
 // devices where Enter is for newlines, on for pointer devices.
 const enterSend = () => $('entersend')?.checked ?? true;
 function inKey(e) {
+    if (cmdOpen()) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); cmdNav(1); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); cmdNav(-1); return; }
+        if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); pickCmd(cmdSel); return; }
+        if (e.key === 'Escape') { e.preventDefault(); $('cmdmenu').hidden = true; return; }
+    }
     if (e.key === 'Enter' && !e.shiftKey && enterSend()) { e.preventDefault(); say(); }
 }
 async function say() {
     const text = $('in').value.trim();
     if (!text) return;
+    $('cmdmenu').hidden = true;
     $('in').value = '';
     $('in').style.height = 'auto';
     const m = await api('say', { room, cardId: persona?.id || null, text });
@@ -337,6 +369,8 @@ async function start() {
             $('newmsgs')?.classList.remove('on');
         }
     });
+    $('in').addEventListener('input', cmdFilter);
+    $('in').addEventListener('blur', () => { $('cmdmenu').hidden = true; });
     const m = await get('me');
     me = m.handle || 'you';
     persona = m.persona || null;
