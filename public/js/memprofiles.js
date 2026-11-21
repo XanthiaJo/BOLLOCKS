@@ -32,39 +32,5 @@ async function saveProf(){
   if(!selProf)return;await api('memprofiles/update',collectProf());load()}
 function newMP(){setSelProf(-1);load()}
 async function delMP(id){if(id<=0){setSelProf(0);load();return}if(confirm('Delete this memory profile? Chats following it switch to another profile.')){if(selProf===id)setSelProf(0);await api('memprofiles/delete',{id});load()}}
-function setupAcc(){
-  const panel=document.getElementById('profpanel');
-  if(!panel) return;
-  let openSet=new Set(); try{ openSet=new Set(JSON.parse(localStorage.mp_mem_acc||'[]')); }catch{}
-  const saveAcc=()=>{ localStorage.mp_mem_acc=JSON.stringify([...panel.querySelectorAll('.acc-h.open')].map(h=>h.dataset.acc)); };
-  const h4s=[...panel.querySelectorAll('h4')];
-  for(const h of h4s){
-    const wrap=document.createElement('div'); wrap.className='acc';
-    const header=document.createElement('div'); header.className='acc-h';
-    header.dataset.acc=h.textContent.trim();
-    const title=document.createElement('div'); title.className='acc-t';
-    title.innerHTML=esc(h.textContent);
-    const arrow=document.createElement('span'); arrow.className='arrow'; arrow.textContent='▸';
-    header.append(title,arrow);
-    const body=document.createElement('div'); body.className='acc-b';
-    let node=h.nextSibling; const toMove=[];
-    while(node && !(node.nodeType===1 && node.tagName==='H4')){ toMove.push(node); node=node.nextSibling; }
-    h.parentNode.insertBefore(wrap,h);
-    wrap.appendChild(header); wrap.appendChild(body);
-    for(const n of toMove) body.appendChild(n);
-    // An intro caption (a hint immediately after the h4) belongs on the
-    // header so it shows even while the section is collapsed.
-    if(body.firstElementChild?.classList.contains('hint')) title.append(body.firstElementChild);
-    // Sections where every control is disabled are placeholders — say so.
-    if(!title.querySelector('.hint') && !body.querySelector('input:not([disabled]),select:not([disabled]),textarea:not([disabled])')){
-      const note=document.createElement('span'); note.className='hint';
-      note.textContent='Not implemented yet — these are placeholders for planned features.';
-      title.append(note);
-    }
-    h.remove();
-    if(openSet.has(header.dataset.acc)){ header.classList.add('open'); body.classList.add('open'); }
-    header.onclick=()=>{ header.classList.toggle('open'); body.classList.toggle('open'); saveAcc(); };
-  }
-}
-setupAcc();
+setupAcc(document.getElementById('profpanel'), 'mp_mem_acc');
 load();

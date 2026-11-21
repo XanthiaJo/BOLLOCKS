@@ -269,4 +269,8 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
   .settings .row>:last-child{grid-column:1;grid-row:auto;justify-self:start!important}
   .settings .row input:not([type=checkbox]):not([type=number]),
   .settings .row select,.settings .row textarea{width:100%!important}
+
+  /* 16px minimum on text controls — anything smaller makes iOS/Android
+     zoom the page on focus, which is the main pain editing on a phone. */
+  input,textarea,select{font-size:16px}
 }

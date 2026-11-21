@@ -35,7 +35,7 @@ const profName=c=>c.api_profiles_id_fk?(' · '+(profs.find(p=>p.id===c.api_profi
 async function loadProfs(){
   const {profiles}=await get('profiles');
   profs=profiles||[];
-  $('ed_profile').innerHTML='<option value="">� default �</option>'+
+  $('ed_profile').innerHTML='<option value="">default</option>'+
     profs.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
 }
 
@@ -107,5 +107,6 @@ async function importCard(input){
   if(r.error)return alert(r.error);
   alert('imported '+r.name);load();
 }
+setupAcc(document.getElementById('editor'), 'mp_card_acc', ['Basics', 'Description']);
 Promise.all([load(),loadProfs()]).then(newCard);
 
