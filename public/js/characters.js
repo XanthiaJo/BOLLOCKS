@@ -18,9 +18,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 initSidebar({tabs:[{label:'Characters',on:true,onclick:'newCard()'}],sections:[{title:'Characters',id:'list'}],buttons:[{label:'+ New character',onclick:'newCard()'}]});
-let me='',allCards=[],curIdx=-1;
-// ‹ › in the editor header flips cards without a sidebar drawer round-trip.
-function cardNav(d){if(!allCards.length)return;editIdx((curIdx+d+allCards.length)%allCards.length)}
+let me='',allCards=[];
 async function load(){
   const [{cards},who]=await Promise.all([get('cards'),get('me')]);
   me=who.handle;allCards=cards||[];
@@ -41,7 +39,7 @@ async function loadProfs(){
     profs.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
 }
 
-function editIdx(i){curIdx=i;edit(allCards[i])}
+function editIdx(i){edit(allCards[i])}
 function edit(c){
   const mine=c.owner===me;
   document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=!mine);
@@ -82,7 +80,7 @@ function cropConfirm(){
 }
 function clearEd(){$('edtitle').textContent='New character';['ed_id','ed_name','ed_desc','ed_personality','ed_scenario','ed_first','ed_mesex','ed_sysp','ed_phi','ed_tags','ed_creator'].forEach(i=>$(i).value='');$('ed_profile').value='';$('ed_av').src='';$('ed_av').dataset.pending=''}
 function cancelEd(){const id=Number($('ed_id').value)||0;const c=id?allCards.find(c=>c.id===id):null;c?edit(c):clearEd()}
-function newCard(){curIdx=-1;clearEd();document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=false);mpOpenEditor('inline')}
+function newCard(){clearEd();document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=false);mpOpenEditor('inline')}
 
 async function saveCard(){
   const id=$('ed_id').value;
