@@ -19,7 +19,7 @@ const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
 export const MEM_EXTRACT_PROMPT = `You extract lasting memories from roleplay chat logs. All memories are shared with the whole chat.
 Character sheets included in the input are the AUTHORITATIVE current state for each character — trust them over older chat claims. If the excerpt shows a character's state changing (something fixed, removed, acquired, moved), record the NEW state, not the old.
 Output exactly ONE bullet point — the single most important lasting memory from this excerpt. "- " prefix, one line, starting with exactly one type tag — pick the most specific that fits:
-- [event] — something that HAPPENED (an action, occurrence, scene beat). "Karima opened the fridge" is an event.
+- [event] — something that HAPPENED and is DONE: a self-contained action or beat, closed the moment it occurs. "Karima opened the fridge" is an event — nothing stays pending afterward.
 - [relationship] — how characters FEEL about each other or a thing. "Ellie adores teasing SirRackington" is a relationship.
 - [preference] — a like/dislike/want. "Blake hates green" is a preference.
 - [fact] — LAST RESORT: only static truths that aren't events, feelings or preferences — identity, possessions, rules, ongoing states. "SirRackington is a server rack" is a fact.
@@ -31,7 +31,9 @@ const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords i
 // Arc-tracking addendum for the built-in extraction prompt, appended when the
 // profile tracks arcs (mem_max_arcs > 0). Arc lines may appear alongside the
 // single memory bullet; [arc] advances and [arc-close] resolves a thread.
-const MEM_ARCS_SUFFIX = ' If the excerpt opens, advances, or resolves an ongoing storyline, additionally output "- [arc-open] Title — what is underway", "- [arc] Title — new development", or "- [arc-close] Title". Reuse an open thread\'s title exactly when updating or closing it.';
+// The core teaching is event-vs-thread: a memory is history, a thread is an
+// unresolved situation that stays open until something settles it.
+const MEM_ARCS_SUFFIX = ` Threads: a thread is NOT a memory — it is an open situation left pending until it resolves: a debt owed, a repair in progress, an investigation, a brewing conflict, a promise awaiting fulfilment. If the excerpt opens, advances, or resolves one, additionally output "- [arc-open] Title — what is underway", "- [arc] Title — the new development", or "- [arc-close] Title — how it settled". Reuse an open thread's title exactly when updating or closing it. The test: an event is closed when it happens ("Buddy broke the wheel" is [event]); a thread needs a resolution ("the wheel must be replaced before inspection" is a thread). Transient states — injuries, sanctions, pending fixes, ongoing suspicions — belong to threads, never [fact]: arcs close; facts linger as stale truth.`;
 
 // Fields a memory profile can override on a room's mem_* settings.
 const MEM_PROFILE_FIELDS = ['mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
