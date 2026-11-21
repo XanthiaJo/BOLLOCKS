@@ -19,24 +19,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 initSidebar({tabs:[{label:'Characters',on:true,onclick:'newCard()'}],sections:[{title:'Characters',id:'list'}],buttons:[{label:'+ New character',onclick:'newCard()'}]});
 let me='',allCards=[],curIdx=-1;
-// Field jump-nav: the editor is one long column — on a phone that means
-// deep scrolling between fields. Chips (one per .cap label) scroll+focus.
-const fieldEls=[];
-function buildFieldNav(){
-  const caps=[...document.querySelectorAll('#editor .cap')];
-  fieldEls.length=0;
-  $('fieldnav').innerHTML=caps.map((c,i)=>{
-    fieldEls.push(c);
-    return `<button class="fchip" onclick="jumpField(${i})">${esc(c.childNodes[0].textContent.trim())}</button>`;
-  }).join('');
-}
-function jumpField(i){
-  const cap=fieldEls[i];if(!cap)return;
-  const m=document.querySelector('main');
-  const sticky=cap.closest('#editor').querySelector('.edhead');
-  m.scrollTo({top:cap.getBoundingClientRect().top-m.getBoundingClientRect().top+m.scrollTop-sticky.offsetHeight-8,behavior:'smooth'});
-  cap.nextElementSibling?.focus?.({preventScroll:true});
-}
+// ‹ › in the editor header flips cards without a sidebar drawer round-trip.
 function cardNav(d){if(!allCards.length)return;editIdx((curIdx+d+allCards.length)%allCards.length)}
 async function load(){
   const [{cards},who]=await Promise.all([get('cards'),get('me')]);
@@ -54,7 +37,7 @@ const profName=c=>c.api_profiles_id_fk?(' · '+(profs.find(p=>p.id===c.api_profi
 async function loadProfs(){
   const {profiles}=await get('profiles');
   profs=profiles||[];
-  $('ed_profile').innerHTML='<option value="">� default �</option>'+
+  $('ed_profile').innerHTML='<option value="">default</option>'+
     profs.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
 }
 
@@ -126,6 +109,6 @@ async function importCard(input){
   if(r.error)return alert(r.error);
   alert('imported '+r.name);load();
 }
-buildFieldNav();
+setupAcc(document.getElementById('editor'), 'mp_card_acc', ['Basics', 'Description']);
 Promise.all([load(),loadProfs()]).then(newCard);
 
