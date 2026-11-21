@@ -1,7 +1,7 @@
 // Connection routes: API profiles, memory profiles, /models proxy.
 import { db } from '../db.js';
 import { send, readBody } from '../lib/util.js';
-import { MEM_EXTRACT_PROMPT, PROMPT_BLOCKS } from '../generate.js';
+import { MEM_EXTRACT_PROMPT, MEM_STATE_PROMPT, PROMPT_BLOCKS } from '../generate.js';
 
 export default {
     'POST /api/models': async (req, res, u) => {
@@ -64,7 +64,7 @@ export default {
     // Smart-memory profiles: named presets of the mem_* room settings.
     'GET /api/memprofiles': async (req, res, u) => {
         const profiles = db.prepare('SELECT * FROM mem_profiles WHERE users_id_fk=? ORDER BY mem_profiles_id_pk').all(u.users_id_pk);
-        send(res, 200, { profiles, defaultPrompt: MEM_EXTRACT_PROMPT });
+        send(res, 200, { profiles, defaultPrompt: MEM_EXTRACT_PROMPT, defaultStatePrompt: MEM_STATE_PROMPT });
     },
     'POST /api/memprofiles': async (req, res, u) => {
         const b = await readBody(req);
@@ -74,13 +74,15 @@ export default {
             b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
             b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
             b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId || null,
-            b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId || null];
+            b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId || null,
+            b.state ? 1 : 0, b.stateEvery ?? 1, b.maxState ?? 30, b.stateBudget ?? 400, b.statePrompt || ''];
         const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,mem_every,mem_budget,mem_max,
             mem_max_fact,mem_max_event,mem_max_relationship,mem_max_preference,mem_extraction_prompt,
             mem_context_threshold,mem_response_length,mem_gen_budget,mem_unlimited,mem_unified,mem_triggers,
             mem_autotune,mem_refresh,mem_activity,extraction_api_profiles_id_fk,
-            mem_canon_budget,mem_max_arcs,mem_arc_budget,arc_api_profiles_id_fk)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+            mem_canon_budget,mem_max_arcs,mem_arc_budget,arc_api_profiles_id_fk,
+            mem_state,mem_state_every,mem_max_state,mem_state_budget,mem_state_prompt)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
             .run(u.users_id_pk, b.name, ...vals).lastInsertRowid;
         send(res, 200, { id });
     },
@@ -91,7 +93,8 @@ export default {
             mem_extraction_prompt=?, mem_context_threshold=?, mem_response_length=?,
             mem_gen_budget=?, mem_unlimited=?, mem_unified=?, mem_triggers=?,
             mem_autotune=?, mem_refresh=?, mem_activity=?, extraction_api_profiles_id_fk=?,
-            mem_canon_budget=?, mem_max_arcs=?, mem_arc_budget=?, arc_api_profiles_id_fk=?
+            mem_canon_budget=?, mem_max_arcs=?, mem_arc_budget=?, arc_api_profiles_id_fk=?,
+            mem_state=?, mem_state_every=?, mem_max_state=?, mem_state_budget=?, mem_state_prompt=?
             WHERE mem_profiles_id_pk=? AND users_id_fk=?`)
             .run(String(b.name ?? '').trim(), b.every ?? 10, b.budget ?? 800, b.max ?? 50,
                 b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
@@ -99,6 +102,7 @@ export default {
                 b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
                 b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId || null,
                 b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId || null,
+                b.state ? 1 : 0, b.stateEvery ?? 1, b.maxState ?? 30, b.stateBudget ?? 400, b.statePrompt || '',
                 b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
