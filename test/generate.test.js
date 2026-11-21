@@ -174,6 +174,38 @@ describe('generation (mock LLM)', () => {
         assert.equal(await count(), n); // no reply
         await s.post('say', { room, text: 'hey Kira, ping' });
         await until(async () => (await count()) === n + 1 ? true : null, 'named-trigger reply');
+        await s.post('room/trigger', { room, mode: 'manual' });
+    });
+
+    test("trigger 'all' chains replies — the second AI sees the first reply", async () => {
+        // Fresh room so no earlier 'Mock reply!' pollutes the assertion.
+        const room2 = (await s.post('rooms', { name: 'Chain room' })).json.id;
+        const c2 = (await s.post('cards', { name: 'Moss' })).json.id;
+        try {
+            await s.post('members', { room: room2, cardId: card });
+            await s.post('members', { room: room2, cardId: c2 });
+            await s.post('room/trigger', { room: room2, mode: 'all' });
+            await s.post('members/talkativeness', { room: room2, cardId: card, value: 100 });
+            await s.post('members/talkativeness', { room: room2, cardId: c2, value: 100 });
+            llm.requests.length = 0;
+            const before = (await s.get(`room?id=${room2}`)).json.messages.length;
+            await s.post('say', { room: room2, text: 'hello both' });
+            const msgs = await until(async () => {
+                const m = (await s.get(`room?id=${room2}`)).json.messages;
+                return m.length === before + 3 ? m : null;
+            }, 'two chained AI replies');
+            assert.equal(msgs.at(-2).kind, 'ai');
+            assert.equal(msgs.at(-1).kind, 'ai');
+            // Sequential: exactly two completions calls; the first prompt has
+            // no prior reply, the second carries the first reply in history.
+            const reqs = llm.requests.filter(r => r.url.endsWith('/chat/completions')).map(r => r.body);
+            assert.equal(reqs.length, 2);
+            assert.ok(!reqs[0].includes('Mock reply!'), 'first prompt has no prior AI reply');
+            assert.ok(reqs[1].includes('Mock reply!'), 'second prompt sees the first reply');
+        } finally {
+            await s.post('rooms/delete', { id: room2 });
+            await s.post('cards/delete', { id: c2 });
+        }
     });
 
     test("extraction strips the '(triggers: …)' label — it's not a keyword", async () => {

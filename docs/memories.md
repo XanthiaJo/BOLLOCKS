@@ -201,12 +201,14 @@ sequenceDiagram
     end
 
     Note over S,R: READ path — every reply, main model
-    S->>S: generateReply(room, card)
-    S->>D: canon (always) + constant/triggered world<br/>+ memories (trigger-gated, budget-capped)<br/>+ open arcs (budget-capped)
-    S->>R: system prompt (stable → volatile) + history + nudge
-    R-->>S: reply text
-    S->>D: INSERT message + prompt_logs row
-    S-->>U: SSE {type:'message'}
+    loop each picked AI (rolled order, one chain per room)
+        S->>S: generateReply(room, card)
+        S->>D: canon (always) + constant/triggered world<br/>+ memories (trigger-gated, budget-capped)<br/>+ open arcs (budget-capped)<br/>+ history (includes earlier replies this chain)
+        S->>R: system prompt (stable → volatile) + history + nudge
+        R-->>S: reply text
+        S->>D: INSERT message + prompt_logs row
+        S-->>U: SSE {type:'message'}
+    end
 ```
 
 Canon lives entirely in the read path — pure SQL, no model call. Arcs exist

@@ -6,6 +6,11 @@ import { streams, push } from '../lib/sse.js';
 import { rollDice, formatRoll } from '../lib/dice.js';
 import { generateReply, genStats, maybeSummarize } from '../generate.js';
 
+// Rooms with a reply chain currently generating — a say arriving mid-chain
+// doesn't start a second one; it's already in history, so the running
+// chain's next pick sees it like any other context.
+const genBusy = new Set();
+
 export default {
     'GET /api/genstats': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room') || 1);
@@ -67,9 +72,13 @@ export default {
         }
         push(roomId, { type: 'message', message: msg });
         send(res, 200, msg);
-        // AI trigger policy for this room.
+        // AI trigger policy for this room. Picks reply one at a time in a
+        // rolled (shuffled) order: each reply is inserted before the next AI
+        // prompts, so later speakers see it in history and the group reads
+        // as a conversation, not parallel monologues. Extraction waits for
+        // the chain to finish so it sees all the replies.
         const roomRow = db.prepare('SELECT ai_trigger FROM rooms WHERE rooms_id_pk=?').get(msg.rooms_id_fk);
-        if (roomRow?.ai_trigger && roomRow.ai_trigger !== 'manual') {
+        if (roomRow?.ai_trigger && roomRow.ai_trigger !== 'manual' && !genBusy.has(msg.rooms_id_fk)) {
             const ais = db.prepare(`SELECT c.*, c.cards_id_pk AS id, rm.talkativeness FROM room_members rm JOIN cards c ON c.cards_id_pk=rm.cards_id_fk
                 WHERE rm.rooms_id_fk=? AND IFNULL(c.is_persona,0)=0 ORDER BY rm.cards_id_fk`).all(msg.rooms_id_fk);
             // Talkativeness: per-member 0–100% chance to reply (named always fires).
@@ -78,19 +87,32 @@ export default {
             if (roomRow.ai_trigger === 'all') picks = ais.filter(roll);
             else if (roomRow.ai_trigger === 'named')
                 picks = ais.filter(c => new RegExp('\\b' + c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(b.text || ''));
-            else if (roomRow.ai_trigger === 'roundrobin') picks = ais.slice(0, 1);
-            for (const card of picks)
-                generateReply(msg.rooms_id_fk, card)
-                    .then(text => {
-                        if (!text?.trim()) return;
-                        const r2 = db.prepare(`INSERT INTO messages (rooms_id_fk,cards_id_fk,text) VALUES (?,?,?)`)
-                            .run(msg.rooms_id_fk, card.id, text);
-                        const m2 = db.prepare(MSG_SQL + ' WHERE m.messages_id_pk=?').get(r2.lastInsertRowid);
-                        push(msg.rooms_id_fk, { type: 'message', message: m2 });
-                    })
-                    .catch(e => console.error('[gen]', e.message));
+            else if (roomRow.ai_trigger === 'roundrobin') picks = ais.length ? [ais[Math.floor(Math.random() * ais.length)]] : [];
+            for (let i = picks.length - 1; i > 0; i--) { // roll for who speaks first
+                const j = Math.floor(Math.random() * (i + 1));
+                [picks[i], picks[j]] = [picks[j], picks[i]];
+            }
+            genBusy.add(msg.rooms_id_fk);
+            (async () => {
+                try {
+                    for (const card of picks) {
+                        try {
+                            const text = await generateReply(msg.rooms_id_fk, card);
+                            if (!text?.trim()) continue;
+                            const r2 = db.prepare(`INSERT INTO messages (rooms_id_fk,cards_id_fk,text) VALUES (?,?,?)`)
+                                .run(msg.rooms_id_fk, card.id, text);
+                            const m2 = db.prepare(MSG_SQL + ' WHERE m.messages_id_pk=?').get(r2.lastInsertRowid);
+                            push(msg.rooms_id_fk, { type: 'message', message: m2 });
+                        } catch (e) { console.error('[gen]', e.message); }
+                    }
+                } finally {
+                    genBusy.delete(msg.rooms_id_fk);
+                    maybeSummarize(msg.rooms_id_fk).catch(e => console.error('[mem]', e.message));
+                }
+            })();
+        } else {
+            maybeSummarize(msg.rooms_id_fk).catch(e => console.error('[mem]', e.message));
         }
-        maybeSummarize(msg.rooms_id_fk).catch(e => console.error('[mem]', e.message));
     },
     'POST /api/messages/delete': async (req, res, u) => {
         const b = await readBody(req);
