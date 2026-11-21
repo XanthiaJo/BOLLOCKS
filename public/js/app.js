@@ -308,6 +308,7 @@ async function say() {
     $('in').style.height = 'auto';
     const m = await api('say', { room, cardId: persona?.id || null, text });
     if (m?.id) addMsg(m, true); // own message always snaps — SSE may be a dead socket
+    else if (m?.error) alert(m.error);
 }
 // NPC ▸ opens a picker of the room's AI members — explicit is friendlier
 // than server-picks-the-first, and much easier to hit on a phone.

@@ -4,7 +4,7 @@
 // extraction as an authoritative outcome.
 import { randomInt } from 'node:crypto';
 
-const DICE_RE = /^(\d{1,3})\s*d\s*(\d{1,4})\s*([+-]\s*\d{1,4})?$/i;
+const DICE_RE = /^(\d{1,3})?\s*d\s*(\d{1,4})\s*([+-]\s*\d{1,4})?$/i;
 
 /** Parse "NdS±K" and roll it. Returns { expr, rolls, mod, total } or null. */
 export function rollDice(expr) {
