@@ -32,6 +32,11 @@
 #cmdmenu .cmd.sel,#cmdmenu .cmd:hover{background:var(--surface2)}
 #cmdmenu .cmd code{color:var(--muted);white-space:nowrap}
 #cmdmenu .cmd small{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#npcmenu{position:absolute;bottom:calc(100% + 6px);right:16px;background:var(--panel);border:1px solid var(--line2);border-radius:6px;min-width:200px;box-shadow:0 6px 18px rgba(0,0,0,.5);z-index:60;overflow:hidden}
+#npcmenu .opt{padding:7px 10px;cursor:pointer;display:flex;gap:8px;align-items:center;font-size:.9em}
+#npcmenu .opt:hover{background:var(--surface2)}
+#npcmenu .opt img{width:20px;height:20px;border-radius:50%;object-fit:cover;flex:none}
+#npcmenu .note{padding:7px 10px;font-size:.85em;color:var(--dim)}
 #composer input{flex:1;margin:0}
 #composer button{width:auto;margin:0;white-space:nowrap}
 button.gen{background:var(--ok)}
@@ -126,7 +131,8 @@ button.gen{background:var(--ok)}
       <div id="cmdmenu" hidden></div>
       <textarea id="in" placeholder="Type a message — / for commands" autofocus rows="1" onkeydown="inKey(event)" style="resize:none;overflow:hidden;padding:10px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;flex:1;font:inherit" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
       <button onclick="say()">Send</button>
-      <button class="gen" onclick="gen()">NPC ▸</button>
+      <button class="gen" onclick="npcMenu()">NPC ▸</button>
+      <div id="npcmenu" hidden></div>
     </div>
   </div>
 </div>

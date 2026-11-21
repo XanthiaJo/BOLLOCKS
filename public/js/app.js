@@ -3,7 +3,7 @@ let me = '';
 let room = Number(localStorage.mp_room || 1);
 let es = null;
 let roomIsOwner = false;
-let allUsers = [], allCards = [], memberCur = new Set();
+let allUsers = [], allCards = [], memberCur = new Set(), roomMembers = [];
 
 const AS = '';
 const $ = id => document.getElementById(id);
@@ -100,6 +100,8 @@ async function loadRoom() {
         .join('') + `<div class="member" style="margin-top:6px"><select id="addpick" style="flex:1;font-size:.85em"></select>` +
             `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
     renderLastMem(r.lastMem);
+    roomMembers = r.members || [];
+    $('npcmenu').hidden = true;
     memberCur = new Set((r.members || []).flatMap(m => [m.cards_id_fk ? 'c' + m.cards_id_fk : null, m.users_id_fk ? 'u' + m.users_id_fk : null]).filter(Boolean));
     const [{ users }, { cards }] = await Promise.all([get('users'), get('cards')]);
     allUsers = users || []; allCards = cards || [];
@@ -308,18 +310,31 @@ async function say() {
     const m = await api('say', { room, cardId: persona?.id || null, text });
     if (m?.id) addMsg(m, true); // own message always snaps — SSE may be a dead socket
 }
-async function gen() {
-    const r = await api('generate', { room });
-    if (r.error) alert(r.error);
-    renderToks();
+// NPC ▸ opens a picker of the room's AI members — explicit is friendlier
+// than server-picks-the-first, and much easier to hit on a phone.
+function npcMenu() {
+    const el = $('npcmenu');
+    if (!el.hidden) { el.hidden = true; return; }
+    const ais = roomMembers.filter(m => m.kind === 'ai' && m.cards_id_fk);
+    el.innerHTML = ais.length
+        ? ais.map(m => `<div class="opt" onmousedown="pickNpc(${m.cards_id_fk});event.preventDefault()"><img src="/api/avatar?id=${m.cards_id_fk}" onerror="this.style.display='none'"><span>${m.card_name}</span></div>`).join('')
+        : '<div class="note">no AI members in this room</div>';
+    el.hidden = false;
+    setTimeout(() => document.addEventListener('mousedown', function h(e) {
+        if (!el.contains(e.target)) { el.hidden = true; document.removeEventListener('mousedown', h); }
+    }), 0);
+}
+async function pickNpc(cardId) {
+    $('npcmenu').hidden = true;
+    await genCard(cardId);
 }
 async function genCard(cardId, btn) {
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     try {
         const r = await api('generate', { room, card: cardId });
         if (r.error) alert(r.error);
     } finally {
-        btn.disabled = false;
+        if (btn) btn.disabled = false;
     }
     renderToks();
 }
