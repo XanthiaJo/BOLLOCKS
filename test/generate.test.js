@@ -441,4 +441,28 @@ describe('generation (mock LLM)', () => {
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
+
+    test('extraction auto-dedupes an untagged retelling of a live event', async () => {
+        const ext = await mockLLM('- [event] Sir Rackington cleared Buddy and named Blake the flapjack thief. (triggers: flapjack, crumbs, blake, culprit)');
+        try {
+            const profId = (await s.post('profiles', { name: 'Ded', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Ded', every: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Ded room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            const oldId = (await s.post('memories', { room: mroom, content: 'A flapjack vanished overnight, leaving crumbs near Buddy.', type: 'event', triggers: 'flapjack,crumbs,buddy,mystery' })).json.id;
+            await s.post('memories/update', { id: oldId, origin: 'smart' });
+            // No [supersede] tag in the mock — the script must chain the
+            // retelling on trigger overlap by itself.
+            await s.post('say', { room: mroom, text: 'case closed' });
+            const mems = await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                const old = m?.find(x => x.memories_id_pk === oldId);
+                return old?.superseded_by_memories_id_fk ? m : null;
+            }, 'deduped memory');
+            const old = mems.find(m => m.memories_id_pk === oldId);
+            const neu = mems.find(m => m.memories_id_pk === old.superseded_by_memories_id_fk);
+            assert.match(neu.content, /named Blake the flapjack thief/);
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
 });

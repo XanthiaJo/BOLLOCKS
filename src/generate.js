@@ -1,5 +1,6 @@
 import { db, activeProfile, MSG_SQL } from './db.js';
 import { push } from './lib/sse.js';
+import { dedupeNew } from './lib/memdedupe.js';
 
 // Latest prompt composition per room — exposed for the chat sidebar.
 export const genStats = {};
@@ -547,6 +548,10 @@ export async function maybeSummarize(roomId) {
             const target = supersedes && supersedable[supersedes - 1];
             if (target) db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?')
                 .run(mid, target.id);
+            // Untagged retellings of a still-live event chain the same way —
+            // the writer saw the duplicates and didn't tag, so the script
+            // decides by trigger overlap instead.
+            dedupeNew(roomId, mid);
             // One memory per extraction run — but keep scanning the rest of
             // the output for [arc*] lines.
         }

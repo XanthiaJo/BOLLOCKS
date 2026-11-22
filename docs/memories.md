@@ -181,12 +181,17 @@ block (capped by `mem_state_budget`).
 **Supersede** = `memories.superseded_by_memories_id_fk` marks a smart
 memory retired by a newer one. The extraction prompt lists the room's
 current smart memories numbered; a bullet written `- [supersede N]
-new fact` stores the new memory and points the old row at it. Superseded
-rows stop injecting everywhere (memory block, canon, arc details), don't
-occupy the per-type/`mem_max` cap slots, and stay in the list with a
-`superseded` badge for audit. The FK is `ON DELETE SET NULL` — deleting
+new fact` stores the new memory and points the old row at it. Untagged
+retellings are caught anyway: each new smart `event` is compared against
+the room's live events by IDF-weighted trigger overlap (`memdedupe.js`,
+shared rare words count, ubiquitous room vocabulary doesn't) and scores
+above `DEDUPE_MIN` chain the same way — `POST /api/memories/dedupe`
+re-runs that sweep pairwise for cleanup. Superseded rows stop injecting
+everywhere (memory block, canon, arc details), don't occupy the
+per-type/`mem_max` cap slots, and collapse under the replacement's
+`history ▸` toggle for audit. The FK is `ON DELETE SET NULL` — deleting
 the replacement revives the original. Only `origin='smart'` rows are
-offered as targets; user memories are never retired by extraction.
+offered or swept as targets; user memories are never retired.
 
 ### Who does what
 

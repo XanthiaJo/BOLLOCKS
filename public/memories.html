@@ -23,6 +23,8 @@
   <div class="panel" id="smartbar" style="display:none">
       <div><span class="lbl" style="margin-bottom:3px" title="Which memory profile (preset of smart-memory settings) this chat follows.">Memory profile for this chat</span></div>
       <select id="smart_mprof" onchange="pickMProf(this.value)" style="width:240px"></select>
+      <button onclick="dedupeMems()" title="Retire event memories a newer telling replaces — old versions collapse under the new one's history">Dedupe</button>
+      <span id="dedupe_hint" class="hint"></span>
       <span class="hint" style="display:block;margin-top:6px">With a profile set, a second AI periodically reads new messages in this chat and stores lasting memories. They're added to the prompt when a trigger keyword matches — memories with no keywords are canon and always injected.</span>
       <small id="smart_mprof_hint" style="display:block;color:var(--dim);margin-top:4px">Heavier settings live under the profile — edit them on the <a href="/memsettings.html" style="color:var(--muted)">Memory profiles</a> page.</small>
   </div>
