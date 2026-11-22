@@ -411,3 +411,7 @@ function draftFields(ids) {
 function fillFields(d) {
     for (const [i, v] of Object.entries(d || {})) { const el = document.getElementById(i); if (!el) continue; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; }
 }
+
+/* trigList('a,b,c') -> 'a, b, c' — memory_triggers stores a bare
+   comma-joined string; always render it through this. */
+function trigList(s) { return (s || '').split(',').join(', '); }

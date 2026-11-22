@@ -112,6 +112,7 @@ control right), `.lbl`, `h4` section captions, `.cbrow` checkbox rows.
 | `initEdHeads(root)` | wire `[Cancel][Save]` on `.edhead` blocks |
 | `mpOpenEditor/mode`, `mpCloseEditor`, `mpFlashSaved(msg)` | panel editor lifecycle + save toast |
 | `draftFields(ids)` / `fillFields(d)` | preserve unsaved inputs across re-renders (call before/after `renderList()`) |
+| `trigList(s)` | render a trigger string (`'a,b'` → `'a, b'`); always display triggers through it |
 | `activateProf(id)` | activate a profile row |
 | `mob()` | mobile breakpoint check |
 
