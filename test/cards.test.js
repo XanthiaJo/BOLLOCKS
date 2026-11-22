@@ -53,6 +53,20 @@ describe('cards and avatars', () => {
             await s.post('cards/delete', { id: (await s.get('cards')).json.cards.find(c => c.name === name).id });
     });
 
+    test('refs: every place a character is mentioned', async () => {
+        const wren = (await s.get('cards')).json.cards.find(c => c.name === 'Wren');
+        const r = await s.get(`cards/refs?id=${wren.id}`);
+        assert.equal(r.status, 200);
+        assert.ok(r.json.rooms.some(x => x.name === 'The House'));
+        // Content mention, trigger word, state_key, and card-scoped pin all surface.
+        assert.ok(r.json.memories.some(m => m.content.includes('Wren considers')));
+        assert.ok(r.json.memories.some(m => m.state_key === 'Wren'));
+        assert.ok(r.json.memories.some(m => m.scoped === wren.id));
+        // The seeded constant lorebook entry names her.
+        assert.ok(r.json.entries.some(e => e.constant === 1 && e.content.includes('Wren')));
+        assert.equal((await s.get('cards/refs?id=99999')).status, 404);
+    });
+
     test('deleting a card with messages and scoped memories works', async () => {
         // Wren is seated in The House, has a message, and a card-scoped
         // memory — previously this 500ed on a FOREIGN KEY constraint.
