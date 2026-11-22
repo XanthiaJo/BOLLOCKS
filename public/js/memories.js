@@ -38,7 +38,9 @@ function renderList(){
     while(cur.superseded_by_memories_id_fk&&cur.superseded_by_memories_id_fk!==cur.id&&!seen.has(cur.id)){
       seen.add(cur.id);cur=byId.get(cur.superseded_by_memories_id_fk)||cur;}
     return cur.id;};
-  const histOf=h=>mems.filter(m=>m!==h&&headOf(m)===h.id);
+  // History expands newest-first — the most recent draft sits directly
+  // under the live card it fed into.
+  const histOf=h=>mems.filter(m=>m!==h&&headOf(m)===h.id).sort((a,b)=>b.id-a.id);
   // Tombstones (superseded_by = self) render dimmed instead of a badge —
   // visually 'former', still clickable for delete/un-retract.
   const supTag=m=>m.superseded_by_memories_id_fk===m.id?''
