@@ -93,7 +93,7 @@ export const PROMPT_BLOCKS = [
     { key: 'arcs', label: 'Open threads',
         example: 'Open threads:\n- The stolen map — Aria suspects the harbor guild took it' },
     { key: 'scene', label: 'Scene state',
-        example: 'Scene:\n- Aria holds the stolen map.\n- The common room fire has burned low.' },
+        example: 'Scene (as of 2024-06-01 12:00):\n- Aria holds the stolen map.\n- The common room fire has burned low.' },
     { key: 'instructions', label: 'Instructions',
         example: "You are Aria and ONLY Aria — an NPC in a shared roleplay. The other characters listed are separate people speaking for themselves; do NOT speak for them or imitate them. Write ONLY Aria's next message." },
     { key: 'history', label: 'Chat history',
@@ -236,11 +236,15 @@ export async function generateReply(roomId, card) {
 
     // Scene state: the latest "what is true right now" snapshot — locations,
     // held objects, ongoing conditions. Always injected when present (it is
-    // by definition relevant), never trigger-gated, own token budget.
-    const sceneRows = cap(db.prepare(`SELECT m.content FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+    // by definition relevant), never trigger-gated, own token budget. The
+    // as-of stamp tells the model how old the sample is — sampled state,
+    // not a truth claim.
+    const sceneRows = cap(db.prepare(`SELECT m.content, m.created FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
         WHERE rm.rooms_id_fk=? AND m.type='state' AND m.room_arcs_id_fk IS NULL AND ${LIVE} ORDER BY m.memories_id_pk`).all(roomId),
         mem?.mem_state_budget ?? 400);
-    const sceneText = sceneRows.length ? 'Scene:\n' + sceneRows.map(m => '- ' + m.content).join('\n') : null;
+    const sceneText = sceneRows.length
+        ? `Scene (as of ${sceneRows.map(r => r.created).sort().at(-1).slice(0, 16)}):\n` + sceneRows.map(m => '- ' + m.content).join('\n')
+        : null;
 
     // Dormancy bookkeeping: a memory counts as fired only when it actually
     // reached the prompt — post-budget rows that never make the cut are
