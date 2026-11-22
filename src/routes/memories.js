@@ -16,7 +16,7 @@ export default {
     'GET /api/lastmem': async (req, res, u) => {
         const roomId = Number(new URL(req.url, 'http://x').searchParams.get('room')) || 1;
         if (!roomMember(roomId, u)) return send(res, 403, { error: 'not a room member' });
-        send(res, 200, db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId) || null);
+        send(res, 200, db.prepare("SELECT m.content text FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.superseded_by_memories_id_fk IS NULL ORDER BY m.memories_id_pk DESC LIMIT 1").get(roomId) || null);
     },
     'GET /api/memories': async (req, res, u) => {
         const q = new URL(req.url, 'http://x').searchParams;

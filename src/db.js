@@ -230,7 +230,8 @@ export function migrateSchema() {
     const rcols = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);
     if (!rcols.includes('ai_trigger')) db.exec("ALTER TABLE rooms ADD COLUMN ai_trigger TEXT DEFAULT 'manual'");
     if (!rcols.includes('bg')) db.exec("ALTER TABLE rooms ADD COLUMN bg TEXT DEFAULT ''");
-    if (!rcols.includes('mem_last_messages_id')) db.exec('ALTER TABLE rooms ADD COLUMN mem_last_messages_id INTEGER DEFAULT 0');
+    if (!rcols.includes('mem_last_messages_id') && !rcols.includes('mem_last_messages_id_fk'))
+        db.exec('ALTER TABLE rooms ADD COLUMN mem_last_messages_id INTEGER DEFAULT 0');
     if (!rcols.includes('mem_refresh_count')) db.exec('ALTER TABLE rooms ADD COLUMN mem_refresh_count INTEGER DEFAULT 0');
     // Extraction-run counter — paces the scene-state pass ("every N runs").
     if (!rcols.includes('mem_extract_count')) db.exec('ALTER TABLE rooms ADD COLUMN mem_extract_count INTEGER DEFAULT 0');
@@ -368,7 +369,6 @@ export function migrateSchema() {
         mem_canon_budget: 'INTEGER DEFAULT 800',
         mem_max_arcs: 'INTEGER DEFAULT 10',
         mem_arc_budget: 'INTEGER DEFAULT 700',
-        mem_arc_profile_id: 'INTEGER DEFAULT 0',
         // Scene-state snapshot settings — "what is true right now"
         // (locations, held objects, conditions), refreshed wholesale.
         mem_state: 'INTEGER DEFAULT 0',
@@ -377,6 +377,12 @@ export function migrateSchema() {
         mem_state_budget: 'INTEGER DEFAULT 400',
         mem_state_prompt: "TEXT DEFAULT ''",
     })) if (!mpcols.includes(col)) db.exec(`ALTER TABLE mem_profiles ADD COLUMN ${col} ${def}`);
+    // mem_arc_profile_id is added under its legacy name — ren() below maps it
+    // to arc_api_profiles_id_fk. Skip the add when the renamed column already
+    // exists or the dead column respawns every boot (migrations must be
+    // idempotent for the upgrade test).
+    if (!mpcols.includes('mem_arc_profile_id') && !mpcols.includes('arc_api_profiles_id_fk'))
+        db.exec('ALTER TABLE mem_profiles ADD COLUMN mem_arc_profile_id INTEGER DEFAULT 0');
     // members = entity (card/user + talkativeness); room_members = junction.
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='room_members'").get()) {
         db.exec(`CREATE TABLE room_members (
@@ -701,6 +707,16 @@ export function migrateSchema() {
     // memories rebuild above.
     if (!colsOf('memories').includes('room_arcs_id_fk'))
         db.exec('ALTER TABLE memories ADD COLUMN room_arcs_id_fk INTEGER REFERENCES room_arcs(room_arcs_id_pk) ON DELETE SET NULL');
+    // Scene-state set: state rows carry their subject key so the snapshot
+    // pass can diff entry-by-entry (supersede in place, drop retracted
+    // subjects) instead of wiping the whole set each run.
+    if (!colsOf('memories').includes('state_key'))
+        db.exec('ALTER TABLE memories ADD COLUMN state_key TEXT');
+    // Extraction can mark a smart memory superseded by a newer one —
+    // retracted rows stop injecting but stay on record (SET NULL revives
+    // the original if its replacement is deleted).
+    if (!colsOf('memories').includes('superseded_by_memories_id_fk'))
+        db.exec('ALTER TABLE memories ADD COLUMN superseded_by_memories_id_fk INTEGER REFERENCES memories(memories_id_pk) ON DELETE SET NULL');
     // Arc message anchors → nullable FKs (the arc survives its anchor
     // message being deleted).
     if (!sqlOf('room_arcs').includes('REFERENCES messages')) {

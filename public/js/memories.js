@@ -32,7 +32,7 @@ function renderList(){
     <h4 style="margin:12px 0 4px;color:var(--dim);font-size:.85em;text-transform:uppercase;letter-spacing:.04em">${esc(t)} (${groups[t].length})</h4>
     ${groups[t].map(m=>editId===m.id?editForm(m):`
     <div class="card">
-      <div><div class="comment">${esc(m.content)}</div><div class="keys"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span>${!m.triggers?' <span class="mtag" title="Always injected into the prompt">canon</span>':''} ${m.triggers?esc(m.triggers):''}</div><div class="meta">#${m.id} · ${m.created||''} · ${curTab==='user'?esc(memScope(m.cards_id_fk)):'shared'}</div></div>
+      <div><div class="comment">${esc(m.content)}</div><div class="keys"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span>${m.superseded_by_memories_id_fk?' <span class="mtag" title="Retracted — replaced by a newer memory, no longer injected">superseded</span>':''}${!m.triggers?' <span class="mtag" title="Always injected into the prompt">canon</span>':''} ${m.triggers?esc(m.triggers):''}</div><div class="meta">#${m.id} · ${m.created||''} · ${curTab==='user'?esc(memScope(m.cards_id_fk)):'shared'}</div></div>
       <div class="btns"><button onclick="editMem(${m.id})">Edit</button>${curTab==='smart'?`<button onclick="permPick(${m.id})">&rarr; manual</button>`:''}<button class="del" onclick="del(${m.id})">Delete</button></div>
     </div>
     ${permPicker(m)}</div>`).join('')}`).join('');
