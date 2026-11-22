@@ -22,8 +22,8 @@
 - **Personas** — your own player character; your messages carry its name and avatar
 - **Import existing SillyTavern characters** (V1/V2/V3 PNG + JSON) **and LoreBooks**
 - **World books** — keyword-triggered and constant lore entries, linkable per chat
-- **Memories** — manual (per-character or shared) and smart (AI-extracted room memories with type tags and trigger keywords); a memory with no triggers is canon — always injected
-- **Story threads** — room-scoped arcs the extraction pass opens/updates/closes, or you manage by hand; injected while open
+- **Memories** — manual (per-character or shared) and smart (AI-extracted, typed + trigger-keyworded) with a full auditable lifecycle: supersede chains instead of edits, a keyed scene-state snapshot, dormancy pruning that retires instead of deletes, and drag-link curation for retellings — a memory with no triggers is canon, always injected
+- **Story threads** — room-scoped arcs the extraction pass opens/updates/closes, or you manage by hand; injected while open, summarized and folded under on close
 - **AI activation** — manual / every message / named / round-robin, plus per-member talkativeness
 - **Context caps** — per-chat and per-profile token limits; history middle-trims to fit
 - **Live updates** — messages, deletions and memory extraction stream to all clients
@@ -72,7 +72,7 @@ Lorebooks. Pick a book in the sidebar and its entries show as full cards — tit
 
 ## Memories
 
-Two tabs: **Manual** — memories you write yourself (shared with the room, or scoped to one character) — and **Smart** — what the extraction pass has learned in the picked chat. Type tags and trigger keywords show on each card; clearing the keywords makes a memory canon (always in the prompt). Smart memories can be promoted to manual.
+Two tabs: **Manual** — memories you write yourself (shared with the room, or scoped to one character) — and **Smart** — what the extraction pass has learned in the picked chat: typed memories, a **State** accordion for the current scene snapshot, and a **Retracted** accordion for pruned ones. Type tags and trigger keywords show on each card; clearing the keywords makes a memory canon (always in the prompt). Retellings collapse under `history ▸` — automatically by the dedupe sweep, or by hand: drag one card onto another to link, drag a dimmed one out to detach. Smart memories can be promoted to manual.
 
 ![Memories](docs/screenshots/memories.png)
 
@@ -84,7 +84,7 @@ Room-scoped story threads, Manual/Smart tabs again — opened by you or by extra
 
 ## Memory profiles
 
-The dials for the extraction side: which connection profile does the reading, how often it runs, caps per memory type, injection budgets, thread tracking. Saved as named profiles a room can follow — following a profile is what switches smart memories on.
+The dials for the extraction side: which connection profile does the reading, how often it runs, caps per memory type, injection budgets, thread tracking, scene-state snapshots, and dormancy pruning (consolidation runs before any cap retirement). Saved as named profiles a room can follow — following a profile is what switches smart memories on.
 
 ![Memory profiles](docs/screenshots/memsettings.png)
 
