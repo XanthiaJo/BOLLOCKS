@@ -178,7 +178,7 @@ export default {
         const folded = db.prepare(`SELECT m.memories_id_pk AS id, m.type, m.content, m.created,
                 m.superseded_by_memories_id_fk AS sup, ${TRIG_SQL} AS triggers, m.room_arcs_id_fk AS arcId
             FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-            WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NOT NULL ORDER BY m.memories_id_pk`).all(room);
+            WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NOT NULL ORDER BY m.memories_id_pk DESC`).all(room);
         const byArc = {};
         for (const f of folded) (byArc[f.arcId] ||= []).push(f);
         send(res, 200, { arcs: arcs.map(a => ({ ...a, mems: byArc[a.id] || [] })) });
