@@ -94,7 +94,7 @@
 
     <div class="pgroup" id="pg_prune">
       <div class="pgt">Pruning &amp; consolidation</div>
-      <span class="hint">Stored-memory housekeeping — how the room keeps its smart memories from piling up. When a cap is exceeded, retold events are merged into chains first (newest telling wins, older versions kept as history); retirement only touches what's still over. Retired rows move to the Retracted section on the Memories page and are never deleted.</span>
+      <span class="hint">Stored-memory housekeeping — how the room keeps its smart memories from piling up. When a cap is exceeded, retold events are merged into chains first (newest telling wins); retirement only touches what's still over.</span>
 
       <h4>Caps</h4>
       <span class="hint">How many live smart memories a room may hold — overflow retires oldest-first after consolidation.</span>
@@ -107,7 +107,7 @@
 
       <h4>Dormancy</h4>
       <span class="hint">A memory earns its slot by being injected — these settings retire the ones that stopped mattering.</span>
-      <div class="row"><span class="lbl" title="Retire triggered smart memories whose keywords haven't brought them back into a prompt within the last N room messages.">Prune dormant after N messages</span><span class="hint">A smart memory that hasn't fired within the last N messages retires itself — moved to Retracted, never deleted, so it can be restored. Canon (no keywords) is exempt. 0 = off (default 50).</span><input type="number" id="set_prune_msgs" min="0" max="5000" value="50" style="width:80px;display:inline-block"></div>
+      <div class="row"><span class="lbl" title="Retire triggered smart memories whose keywords haven't brought them back into a prompt within the last N room messages.">Prune dormant after N messages</span><span class="hint">A smart memory that hasn't fired within the last N messages retires itself. Canon (no keywords) is exempt. 0 = off (default 50).</span><input type="number" id="set_prune_msgs" min="0" max="5000" value="50" style="width:80px;display:inline-block"></div>
     </div>
 
     <div class="pgroup" id="pg_tbi">
