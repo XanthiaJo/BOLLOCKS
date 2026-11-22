@@ -48,12 +48,12 @@ function renderList(){
   const draft=editId?draftFields(['em_content_'+editId,'em_type_'+editId,'em_scope_'+editId,'em_trig_'+editId]):null;
   const memRow=m=>{const n=chainBehind(m.id).length,tomb=m.superseded_by_memories_id_fk===m.id;
     return `
-    <div><div class="card"${m.superseded_by_memories_id_fk===m.id?' style="opacity:.65" title="Retracted — no longer in the live set"':''}>
+    <div><div class="card"${m.superseded_by_memories_id_fk===m.id?' style="opacity:.65" title="Retracted — no longer in the live set"':' draggable="true" data-mid="'+m.id+'" title="Drag onto another card to link them as retellings — the newest telling stays live"'}>
       <div><div class="comment">${esc(m.content)}</div><div class="keys"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span>${m.room_arcs_id_fk?' <span class="mtag" title="Folded under a story thread — injects via the thread, not standalone">folded</span>':''}${supTag(m)}${!m.triggers&&m.type!=='state'?' <span class="mtag" title="Always injected into the prompt">canon</span>':''} ${m.triggers?esc(trigList(m.triggers)):''}</div><div class="meta">#${m.id} · ${m.created||''} · ${curTab==='user'?esc(memScope(m.cards_id_fk)):'shared'}${m.last_fired_at?` · fired ${m.last_fired_at}`:(m.origin==='smart'&&m.triggers?' · never fired':'')}</div></div>
       <div class="btns">${histOf(m).length?`<button onclick="histToggle(${m.id})">${histId===m.id?'history ▾':'history ▸'} (${histOf(m).length})</button>`:''}<button onclick="editMem(${m.id})">Edit</button>${curTab==='smart'?`<button onclick="permPick(${m.id})">&rarr; manual</button>`:''}${delPickId===m.id
         ?`<div style="position:relative;display:flex;justify-content:flex-end"><button style="visibility:hidden" tabindex="-1">Cancel</button><div style="position:absolute;right:0;top:0;display:flex;gap:6px;white-space:nowrap"><button class="del" style="min-width:92px" title="${tomb?'Delete — un-retracts the previous version as current':n?'Delete — restores the previous version as current':'Delete this memory'}" onclick="delConfirm(${m.id},0)">Delete</button>${n?`<button class="del" style="min-width:92px" title="Delete this and its ${n} earlier version${n>1?'s':''}" onclick="delConfirm(${m.id},1)">Delete +${n}</button>`:''}<button onclick="delPick(${m.id})" style="min-width:92px">Cancel</button></div></div>`
         :`<button class="del" onclick="del(${m.id})">Delete</button>`}</div>
-    </div>${histId===m.id?histOf(m).map(h=>`<div class="card" style="opacity:.65"><div><div class="comment">${esc(h.content)}</div><div class="meta">#${h.id} · ${h.created||''} · replaced</div></div></div>`).join(''):''}${permPicker(m)}</div>`};
+    </div>${histId===m.id?histOf(m).map(h=>`<div class="card" style="opacity:.65" draggable="true" data-uid="${h.id}" title="Drag out to restore this version as a live memory — or onto another card to move it under that chain"><div><div class="comment">${esc(h.content)}</div><div class="meta">#${h.id} · ${h.created||''} · replaced</div></div></div>`).join(''):''}${permPicker(m)}</div>`};
   // Live set = superseded_by NULL for every type (tombstones live in the
   // Retracted section instead). The search hides .rcard wrappers directly
   // — no re-render, so the input keeps focus while typing.
@@ -157,4 +157,78 @@ function permPicker(m){if(permPickId!==m.id)return'';
 async function moveToPerm(id,cid){const m=allMems.find(x=>x.id===id);if(!m)return;
   await api('memories',{content:m.content,type:m.type||'fact',triggers:m.triggers||'',room:ROOM,cardId:cid||0});
   await api('memories/delete',{id});permPickId=0;load()}
+// Kanban link — drag a live card onto another to merge their chains
+// (server resolves order by `created`), or drag a dimmed history card
+// out onto empty space to detach it live again; dropping it on another
+// live card moves that version under the target's chain instead.
+// Delegated so re-renders don't rewire.
+let dragMem=null;
+const srcCard=e=>e.target.closest?.('.card[draggable]');
+const tgtCard=e=>e.target.closest?.('.card[data-mid]'); // drop targets are live heads only — history cards carry data-uid
+$('list').addEventListener('dragstart',e=>{const c=srcCard(e);if(!c)return;
+  dragMem={id:Number(c.dataset.mid||c.dataset.uid),unlink:!!c.dataset.uid};
+  c.classList.add('dragging');e.dataTransfer.effectAllowed='link'});
+$('list').addEventListener('dragend',()=>{dragMem=null;for(const c of $('list').querySelectorAll('.dragging,.drop-tgt'))c.classList.remove('dragging','drop-tgt')});
+$('list').addEventListener('dragover',e=>{if(!dragMem)return;e.preventDefault();
+  const c=tgtCard(e);
+  for(const x of $('list').querySelectorAll('.drop-tgt'))x.classList.remove('drop-tgt');
+  if(c&&Number(c.dataset.mid)!==dragMem.id){e.dataTransfer.dropEffect='link';c.classList.add('drop-tgt')}});
+$('list').addEventListener('drop',async e=>{if(!dragMem)return;e.preventDefault();
+  const under=srcCard(e),underId=under?Number(under.dataset.mid||under.dataset.uid):0,d=dragMem;dragMem=null;
+  if(underId===d.id)return; // released on itself — not a gesture
+  const c=tgtCard(e),tgt=c&&Number(c.dataset.mid)!==d.id?Number(c.dataset.mid):0;
+  if(d.unlink)await unlinkMem(d.id,tgt);
+  else if(tgt)await linkMem(d.id,tgt)});
+async function linkMem(id,target){
+  const r=await api('memories/link',{id,target});
+  if(r.error)return alert(r.error);
+  mpFlashSaved('Linked — newest telling stays live');load();
+}
+async function unlinkMem(id,target){
+  const r=await api('memories/unlink',{id,target});
+  if(r.error)return alert(r.error);
+  mpFlashSaved(target?'Moved under that telling':'Restored to the live set');load();
+}
+// Touch fallback — drag events never fire on touch browsers, so a
+// ~400ms hold picks the card up (a finger that moves sooner was a
+// scroll). elementFromPoint hit-tests the target; release drops.
+let td=null;
+$('list').addEventListener('touchstart',e=>{
+  const c=srcCard(e);if(!c||td||e.touches.length>1)return;
+  const t=e.touches[0];
+  td={id:Number(c.dataset.mid||c.dataset.uid),unlink:!!c.dataset.uid,card:c,x:t.clientX,y:t.clientY,active:false,
+    timer:setTimeout(()=>{td.active=true;c.classList.add('dragging');
+      td.ghost=document.createElement('div');td.ghost.className='drag-ghost';
+      td.ghost.textContent=c.querySelector('.comment')?.textContent.slice(0,60)||'#'+td.id;
+      document.body.appendChild(td.ghost);
+      td.ghost.style.left=t.clientX+'px';td.ghost.style.top=t.clientY+'px';
+      navigator.vibrate?.(15)},400)};
+});
+$('list').addEventListener('touchmove',e=>{
+  if(!td)return;const t=e.touches[0];
+  if(!td.active){if(Math.hypot(t.clientX-td.x,t.clientY-td.y)>10){clearTimeout(td.timer);td=null}return}
+  e.preventDefault();
+  td.ghost.style.left=t.clientX+'px';td.ghost.style.top=t.clientY+'px';
+  const over=document.elementFromPoint(t.clientX,t.clientY)?.closest?.('.card[data-mid]');
+  for(const x of $('list').querySelectorAll('.drop-tgt'))x.classList.remove('drop-tgt');
+  if(over&&Number(over.dataset.mid)!==td.id)over.classList.add('drop-tgt');
+},{passive:false});
+const endTouch=async e=>{
+  if(!td)return;clearTimeout(td.timer);
+  if(!td.active){td=null;return}
+  const t=e.changedTouches[0],id=td.id,unlink=td.unlink;
+  td.card.classList.remove('dragging');td.ghost?.remove();
+  for(const x of $('list').querySelectorAll('.drop-tgt'))x.classList.remove('drop-tgt');
+  td=null;
+  const el=document.elementFromPoint(t.clientX,t.clientY);
+  const under=el?.closest?.('.card[draggable]'),underId=under?Number(under.dataset.mid||under.dataset.uid):0;
+  if(underId===id)return; // released on itself — not a gesture
+  const over=el?.closest?.('.card[data-mid]'),tgt=over&&Number(over.dataset.mid)!==id?Number(over.dataset.mid):0;
+  if(unlink){ // released inside the list detaches; outside it cancels
+    if(el&&$('list').contains(el))await unlinkMem(id,tgt);
+  }else if(tgt)await linkMem(id,tgt);
+};
+$('list').addEventListener('touchend',endTouch);
+$('list').addEventListener('touchcancel',endTouch);
+$('list').addEventListener('contextmenu',e=>{if(td)e.preventDefault()}); // long-press menu would fight the pickup
 load();

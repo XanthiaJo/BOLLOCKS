@@ -71,6 +71,76 @@ describe('memories', () => {
         assert.equal(mems.find(m => m.id === userMem).superseded_by_memories_id_fk, null);
         await s.post('rooms/delete', { id: room });
     });
+
+    test('link merges chains by created date regardless of drop direction', async () => {
+        const room = (await s.post('rooms', { name: 'Link room' })).json.id;
+        const seed = async content => (await s.post('memories', { room, content, type: 'event', triggers: 'x' })).json.id;
+        const sup = async id => (await s.get(`memories?card=-1&room=${room}`)).json.memories.find(m => m.id === id).superseded_by_memories_id_fk;
+
+        const older = await seed('Buddy napped on the bed.');
+        await new Promise(r => setTimeout(r, 1100)); // created is second-resolution
+        const newer = await seed('Buddy moved to the bowl.');
+
+        // Dragging the newer onto the older still leaves the newer live —
+        // `created` resolves order, not drop direction.
+        assert.equal((await s.post('memories/link', { id: newer, target: older })).status, 200);
+        assert.equal(await sup(older), newer);
+        assert.equal(await sup(newer), null);
+
+        // Merging chains: a head with a draft behind it re-points whole.
+        await new Promise(r => setTimeout(r, 1100));
+        const third = await seed('Buddy finally settled in the doorway.');
+        await s.post('memories/link', { id: newer, target: third });
+        assert.equal(await sup(newer), third);   // old head → new head
+        assert.equal(await sup(older), newer);   // draft keeps its own pointer
+        // Linking a superseded row re-resolves through its head — same
+        // chain now, so it's a no-op rather than a duplicate pointer.
+        assert.equal((await s.post('memories/link', { id: older, target: third })).status, 200);
+        assert.equal(await sup(older), newer);
+
+        // Dropping a card on itself is a no-op, not a tombstone.
+        const lone = await seed('Karima made fudge.');
+        assert.equal((await s.post('memories/link', { id: lone, target: lone })).status, 200);
+        assert.equal(await sup(lone), null);
+
+        // Drag-out: unlink detaches a superseded row back to live, and
+        // its draft keeps pointing at it (the head it built stays put).
+        assert.equal((await s.post('memories/unlink', { id: older })).status, 200);
+        assert.equal(await sup(older), null);
+        assert.equal(await sup(newer), third); // old chain unaffected
+        // Unlink with a target re-points the row under that chain's head.
+        assert.equal((await s.post('memories/unlink', { id: older, target: newer })).status, 200);
+        assert.equal(await sup(older), third); // newer's head is third
+        // Unlinking a live row is a no-op.
+        assert.equal((await s.post('memories/unlink', { id: lone })).status, 200);
+        assert.equal(await sup(lone), null);
+        await s.post('rooms/delete', { id: room });
+    });
+
+    test('user-sorted rows are invisible to the dedupe sweep', async () => {
+        const room = (await s.post('rooms', { name: 'Curated room' })).json.id;
+        const seed = async content => {
+            const id = (await s.post('memories', { room, content, type: 'event', triggers: 'fudge,rivalry' })).json.id;
+            await s.post('memories/update', { id, origin: 'smart' });
+            return id;
+        };
+        const sup = async id => (await s.get(`memories?card=-1&room=${room}`)).json.memories.find(m => m.id === id);
+        // Identical trigger vocab — every pair here would chain in a sweep.
+        const x1 = await seed('Buddy won the fudge.');
+        const x2 = await seed('Buddy claimed the fudge again.');
+        const y1 = await seed('Buddy scored the fudge.');
+        const y2 = await seed('Buddy took the fudge once more.');
+        // Hand-arrange the y pair: link then pull y1 back out — both stay
+        // flagged as user-sorted, which must immunise them from the sweep.
+        await s.post('memories/link', { id: y1, target: y2 });
+        await s.post('memories/unlink', { id: y1 });
+        assert.equal((await sup(y1)).user_sorted, 1);
+        const merged = (await s.post('memories/dedupe', { room })).json.merged;
+        assert.deepEqual(merged, [[x1, x2]]);
+        assert.equal((await sup(y1)).superseded_by_memories_id_fk, null);
+        assert.equal((await sup(y2)).superseded_by_memories_id_fk, null);
+        await s.post('rooms/delete', { id: room });
+    });
 });
 
 // Older builds re-add a `source` column to a migrated memories table (their

@@ -732,6 +732,10 @@ export function migrateSchema() {
         db.exec('ALTER TABLE memories ADD COLUMN last_fired_messages_id_fk INTEGER');
     if (!colsOf('memories').includes('last_fired_at'))
         db.exec('ALTER TABLE memories ADD COLUMN last_fired_at TEXT');
+    // Hand-arranged rows (drag-link/unlink) — auto-dedupe must not
+    // re-sort what the user placed deliberately.
+    if (!colsOf('memories').includes('user_sorted'))
+        db.exec('ALTER TABLE memories ADD COLUMN user_sorted INTEGER DEFAULT 0');
     // Arc message anchors → nullable FKs (the arc survives its anchor
     // message being deleted).
     if (!sqlOf('room_arcs').includes('REFERENCES messages')) {

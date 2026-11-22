@@ -20,10 +20,11 @@ const DEDUPE_MIN = 0.3; // weighted overlap coefficient to call a retelling
 
 // `arc` = 'live' → standalone smart events (not folded); a number → smart
 // events folded under that arc. Either way only un-retired rows enter:
-// an already-superseded row is settled history, never a candidate.
+// an already-superseded row is settled history, never a candidate — and
+// user_sorted rows are hand-arranged, so sweeps leave them alone.
 function eventRows(roomId, arc = 'live') {
     const where = (arc === 'live' ? 'm.room_arcs_id_fk IS NULL' : 'm.room_arcs_id_fk=' + Number(arc))
-        + ' AND m.superseded_by_memories_id_fk IS NULL';
+        + ' AND m.superseded_by_memories_id_fk IS NULL AND m.user_sorted IS NOT 1';
     return db.prepare(`SELECT m.memories_id_pk AS id,
         (SELECT GROUP_CONCAT(mt.word,' ') FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk) AS trigs
         FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
