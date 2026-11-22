@@ -3,9 +3,6 @@
 // the four seeded personas; Suite Room is owned by admin.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
-import fs from 'node:fs';
-import path from 'node:path';
 import { boot, tmp, asUser, pngCardBuffer } from './helpers.js';
 
 let s;
@@ -135,41 +132,4 @@ describe('rooms and members', () => {
         assert.equal((await s.post('rooms/delete', { id: room2 })).status, 200);
         assert.ok(!(await s.get('rooms')).json.rooms.some(r => r.id === room2));
     });
-});
-
-// Legacy schema: members wrapped one card each and room_members pointed at
-// them, so talkativeness was shared across rooms. The collapse must copy the
-// member's value onto every room link and drop the members table.
-test('migration copies talkativeness per-room from legacy members table', async () => {
-    const dir = tmp('data');
-    fs.mkdirSync(dir, { recursive: true });
-    const db = new DatabaseSync(path.join(dir, 'app.db'));
-    db.exec(`CREATE TABLE rooms (rooms_id_pk INTEGER PRIMARY KEY AUTOINCREMENT);
-        CREATE TABLE cards (cards_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-            owner_users_id_fk INTEGER, is_persona INTEGER DEFAULT 0);
-        CREATE TABLE members (members_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-            cards_id_fk INTEGER NOT NULL, talkativeness INTEGER DEFAULT 50);
-        CREATE TABLE room_members (rooms_id_fk INTEGER NOT NULL,
-            members_id_fk INTEGER NOT NULL,
-            UNIQUE(rooms_id_fk, members_id_fk))`);
-    db.exec(`INSERT INTO rooms (rooms_id_pk) VALUES (1),(2);
-        INSERT INTO cards (cards_id_pk) VALUES (7);
-        INSERT INTO members (members_id_pk,cards_id_fk,talkativeness) VALUES (3,7,42);
-        INSERT INTO room_members (rooms_id_fk,members_id_fk) VALUES (1,3),(2,3)`);
-    db.close();
-
-    const srv = await boot(dir);
-    try {
-        const check = new DatabaseSync(path.join(dir, 'app.db'));
-        const rows = check.prepare('SELECT rooms_id_fk, cards_id_fk, talkativeness FROM room_members ORDER BY rooms_id_fk').all().map(r => ({ ...r }));
-        const hasMembers = check.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='members'").get();
-        check.close();
-        assert.deepEqual(rows, [
-            { rooms_id_fk: 1, cards_id_fk: 7, talkativeness: 42 },
-            { rooms_id_fk: 2, cards_id_fk: 7, talkativeness: 42 },
-        ]);
-        assert.equal(hasMembers, undefined);
-    } finally {
-        await srv.stop();
-    }
 });

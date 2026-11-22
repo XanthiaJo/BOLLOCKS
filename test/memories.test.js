@@ -147,89 +147,34 @@ describe('memories', () => {
 // migrateSchema ALTERs it back when missing), leaving both source and origin.
 // The rebuild must keep an existing origin='smart' instead of re-deriving
 // everything from source — otherwise every smart row flattens to 'user'.
-test('memories rebuild preserves origin when source column is also present', async () => {
-    const dir = tmp('data');
-    fs.mkdirSync(path.join(dir), { recursive: true });
-    const db = new DatabaseSync(path.join(dir, 'app.db'));
-    db.exec(`CREATE TABLE memories (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-        content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')),
-        type TEXT DEFAULT 'fact', origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart')),
-        triggers TEXT DEFAULT '', source TEXT DEFAULT 'manual')`);
-    db.prepare("INSERT INTO memories (content,origin,source) VALUES ('smart fact','smart','manual'),('perm fact','user','manual'),('old auto','user','auto')").run();
-    db.close();
-
-    const srv = await boot(dir);
-    try {
-        const check = new DatabaseSync(path.join(dir, 'app.db'));
-        const rows = check.prepare('SELECT content,origin FROM memories').all();
-        check.close();
-        const by = Object.fromEntries(rows.map(r => [r.content, r.origin]));
-        assert.equal(by['smart fact'], 'smart');
-        assert.equal(by['perm fact'], 'user');
-        assert.equal(by['old auto'], 'smart');
-    } finally {
-        await srv.stop();
-    }
-});
-
-// The mem_profiles rebuild (api_profiles FK normalisation) rewrites the
-// table from a hardcoded column list — any column added by an earlier
-// ALTER that isn't in the list is silently dropped on first boot.
-test('mem_profiles rebuild keeps the dormancy-pruning column', async () => {
+test('fresh DB boots with the canonical schema', async () => {
     const dir = tmp('data');
     fs.mkdirSync(dir, { recursive: true });
-    const db = new DatabaseSync(path.join(dir, 'app.db'));
-    // Pre-FK schema: no REFERENCES api_profiles, so the rebuild fires.
-    // user_version=8 skips the legacy one-time data fixes (they're for
-    // real old DBs and assume columns this fake table never had).
-    db.exec(`CREATE TABLE mem_profiles (mem_profiles_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-        users_id_fk INTEGER, name TEXT, mem_every INTEGER DEFAULT 10, mem_readonly INTEGER DEFAULT 0);
-        PRAGMA user_version=8`);
-    db.prepare("INSERT INTO mem_profiles (users_id_fk,name,mem_readonly) VALUES (1,'old prof',1)").run();
-    db.close();
     const srv = await boot(dir);
     try {
         const check = new DatabaseSync(path.join(dir, 'app.db'));
-        const mp = check.prepare('PRAGMA table_info(mem_profiles)').all().map(c => c.name);
-        assert.ok(mp.includes('mem_prune_messages'), 'prune window survives rebuild');
-        const row = check.prepare('SELECT name,mem_readonly FROM mem_profiles').get();
-        assert.equal(row.name, 'old prof'); // row carried across too
-        const mc = check.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
-        assert.ok(mc.includes('last_fired_messages_id_fk'), 'fired watermark');
-        assert.ok(mc.includes('last_fired_at'));
+        const cols = t => check.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
+        const mem = cols('memories');
+        for (const c of ['room_arcs_id_fk', 'state_key', 'superseded_by_memories_id_fk',
+            'last_fired_messages_id_fk', 'last_fired_at', 'user_sorted'])
+            assert.ok(mem.includes(c), `memories.${c}`);
+        const mp = cols('mem_profiles');
+        for (const c of ['mem_prune_messages', 'mem_readonly', 'extraction_api_profiles_id_fk',
+            'arc_api_profiles_id_fk', 'mem_state', 'mem_state_prompt'])
+            assert.ok(mp.includes(c), `mem_profiles.${c}`);
+        for (const legacy of ['auto_mem', 'mem_extraction_profile_id', 'mem_arc_profile_id'])
+            assert.ok(!mp.includes(legacy), `mem_profiles.${legacy} dropped`);
+        const rooms = cols('rooms');
+        for (const c of ['mem_profiles_id_fk', 'mem_last_messages_id_fk', 'mem_extract_count',
+            'mem_refresh_count', 'owner_users_id_fk'])
+            assert.ok(rooms.includes(c), `rooms.${c}`);
+        assert.ok(!rooms.includes('mem_last_messages_id'), 'legacy pointer dropped');
+        const msgs = cols('messages');
+        assert.ok(msgs.includes('supersedes_messages_id_fk'));
+        for (const t of ['room_arcs', 'memory_triggers', 'prompt_logs', 'prompt_profiles'])
+            assert.ok(check.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name=?`).get(t), t);
+        assert.equal(check.prepare('PRAGMA user_version').get().user_version, 8);
         check.close();
-    } finally {
-        await srv.stop();
-    }
-});
-
-// The triggers comma-list column becomes memory_triggers rows (one per
-// keyword). The harvest must split, trim, lowercase, and drop the column.
-test('migration splits memories.triggers into memory_triggers rows', async () => {
-    const dir = tmp('data');
-    fs.mkdirSync(dir, { recursive: true });
-    const db = new DatabaseSync(path.join(dir, 'app.db'));
-    db.exec(`CREATE TABLE memories (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-        content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')), type TEXT DEFAULT 'fact',
-        origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart')),
-        triggers TEXT DEFAULT '')`);
-    db.exec(`INSERT INTO memories (content,triggers) VALUES
-        ('tea memory','Tea, Dr Pepper ,WEB SEARCH'),
-        ('quiet memory',''),
-        ('solo memory','bedtime')`);
-    db.close();
-
-    const srv = await boot(dir);
-    try {
-        const check = new DatabaseSync(path.join(dir, 'app.db'));
-        const rows = check.prepare(`SELECT memories_id_fk AS id, word FROM memory_triggers WHERE memories_id_fk<=3 ORDER BY memories_id_fk, word`).all();
-        const cols = check.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
-        check.close();
-        assert.deepEqual(rows.map(r => ({ ...r })), [
-            { id: 1, word: 'dr pepper' }, { id: 1, word: 'tea' }, { id: 1, word: 'web search' },
-            { id: 3, word: 'bedtime' },
-        ]);
-        assert.ok(!cols.includes('triggers'));
     } finally {
         await srv.stop();
     }

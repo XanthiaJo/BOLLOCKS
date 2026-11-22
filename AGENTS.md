@@ -60,7 +60,7 @@ Route-handler conventions: routes are `export default { 'METHOD /path': handler 
 
 ## Data model
 
-Canonical column naming: `<table>_<col>_pk` for primary keys, `<referenced_table>_<col>_fk` for foreign keys (e.g. `rooms_id_pk`, `owner_users_id_fk`). The `CREATE TABLE` block at the top of `db.js` already uses canonical names; `migrateSchema()`'s `REN` map still renames legacy columns on old DBs. **FKs are enforced** (`PRAGMA foreign_keys=ON` at connect) — declared `ON DELETE` actions are the safety net behind the route-ordered delete chains in `lib/cascade.js`, so keep delete order correct rather than relying on cascades.
+Canonical column naming: `<table>_<col>_pk` for primary keys, `<referenced_table>_<col>_fk` for foreign keys (e.g. `rooms_id_pk`, `owner_users_id_fk`). The `CREATE TABLE` block at the top of `db.js` IS the canonical baseline — historical migrations were retired at `user_version` 8, so DBs from before that aren't upgraded. **FKs are enforced** (`PRAGMA foreign_keys=ON` at connect) — declared `ON DELETE` actions are the safety net behind the route-ordered delete chains in `lib/cascade.js`, so keep delete order correct rather than relying on cascades.
 
 Core tables:
 
@@ -77,7 +77,7 @@ Core tables:
 - `mem_profiles` — named memory-setting presets a room follows (`mem_*` columns; see `MEM_PROFILE_FIELDS` in `generate.js`).
 - `prompt_profiles` — per-user injection/prompt-assembly presets (`active` flag applies to all of the user's generations; `prompt_order` JSON array of `PROMPT_BLOCKS` keys, NULL = built-in cache-optimal order; `include_time` injects a current-time/last-message-age block below `history`).
 
-**Schema changes** go in `migrateSchema()` in `db.js`: additive `ALTER TABLE ... ADD COLUMN` guarded by `PRAGMA table_info` checks, or table rebuilds for FK changes; one-time data fixes are gated by `PRAGMA user_version` bumps. Never edit the top `CREATE TABLE` block alone — migrations must bring existing DBs along.
+**Schema changes** go in `migrateSchema()` in `db.js` AND in the top `CREATE TABLE` block: the CREATE block is the baseline for fresh installs, while guarded `ALTER TABLE ... ADD COLUMN` (checked via `PRAGMA table_info`) or table rebuilds bring existing DBs forward; one-time data fixes are gated by `PRAGMA user_version` bumps. Never add a column in only one of the two places.
 
 ## Generation pipeline (generate.js)
 
