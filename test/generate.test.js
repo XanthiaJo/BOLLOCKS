@@ -544,4 +544,27 @@ describe('generation (mock LLM)', () => {
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
+
+    test('dedupe does not chain events sharing only possessive fragments', async () => {
+        const ext = await mockLLM("- [event] The dog's bone went missing. (triggers: dog's bone, missing)");
+        try {
+            const profId = (await s.post('profiles', { name: 'Pos', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Pos', every: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Pos room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            // Shares only the 's possessive fragment with the incoming row —
+            // a junk token, not evidence of a retelling.
+            const oldId = (await s.post('memories', { room: mroom, content: "The cat's bowl was filled.", type: 'event', triggers: "cat's bowl, filled" })).json.id;
+            await s.post('memories/update', { id: oldId, origin: 'smart' });
+            await s.post('say', { room: mroom, text: 'a pet thing happened' });
+            await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                return m?.some(x => /dog's bone/.test(x.content)) ? m : null;
+            }, 'new memory');
+            const old = (await s.get(`memories?card=0&room=${mroom}`)).json.memories
+                .find(x => x.memories_id_pk === oldId);
+            assert.equal(old.superseded_by_memories_id_fk, null); // stays live
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
 });

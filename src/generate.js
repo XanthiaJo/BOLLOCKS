@@ -485,7 +485,7 @@ export async function maybeSummarize(roomId) {
           AND m.superseded_by_memories_id_fk IS NULL
         ORDER BY m.memories_id_pk DESC LIMIT 30`).all(roomId).reverse();
     const supersedeSuffix = supersedable.length
-        ? ' If the memory you write updates or contradicts a current memory, write it as "- [supersede N] …" where N is the number of the memory it replaces — the old memory is retired, never keep both.'
+        ? ' If the memory you write restates, updates, or gives a newer version of ANY numbered memory — even in different words — you MUST write it as "- [supersede N] …" where N is its number: the old version is retired and keeping both is never allowed. Paraphrased retellings of an ongoing event supersede its last telling.'
         : '';
     const memList = supersedable.length
         ? 'Current memories (numbered — a [supersede N] tag retires one):\n'
