@@ -79,7 +79,7 @@ export default {
             b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId || null,
             b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId || null,
             b.state ? 1 : 0, b.stateEvery ?? 1, b.maxState ?? 30, b.stateBudget ?? 400, b.statePrompt || '',
-            b.readonly ? 1 : 0, b.pruneMessages ?? 0];
+            b.readonly ? 1 : 0, b.pruneMessages ?? 100];
         const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,mem_every,mem_budget,mem_max,
             mem_max_fact,mem_max_event,mem_max_relationship,mem_max_preference,mem_extraction_prompt,
             mem_context_threshold,mem_response_length,mem_gen_budget,mem_unlimited,mem_unified,mem_triggers,
@@ -108,7 +108,7 @@ export default {
                 b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId || null,
                 b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId || null,
                 b.state ? 1 : 0, b.stateEvery ?? 1, b.maxState ?? 30, b.stateBudget ?? 400, b.statePrompt || '',
-                b.readonly ? 1 : 0, b.pruneMessages ?? 0,
+                b.readonly ? 1 : 0, b.pruneMessages ?? 100,
                 b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
