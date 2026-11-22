@@ -517,4 +517,31 @@ describe('generation (mock LLM)', () => {
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
+
+    test('cap pressure runs a consolidation sweep before retiring', async () => {
+        const ext = await mockLLM('- [event] Something unrelated. (triggers: zzz)');
+        try {
+            const profId = (await s.post('profiles', { name: 'Cns', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Cns', every: 1, profileId: profId, maxEvent: 2 })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Consolid room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            // Two tellings of one event, seeded direct so dedupeNew never
+            // scored them at insert. Plus the mock's filler each tick = 3
+            // live events > cap 2 — the sweep must merge the pair, not
+            // retire a row.
+            const e1 = (await s.post('memories', { room: mroom, content: 'A flapjack vanished overnight, leaving crumbs near Buddy.', type: 'event', triggers: 'flapjack,crumbs,buddy,mystery' })).json.id;
+            const e2 = (await s.post('memories', { room: mroom, content: 'Rackington named Blake the flapjack thief after the crumbs.', type: 'event', triggers: 'flapjack,crumbs,blake,culprit' })).json.id;
+            for (const id of [e1, e2]) await s.post('memories/update', { id, origin: 'smart' });
+            await s.post('say', { room: mroom, text: 'tick' });
+            const mems = await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                return m?.find(x => x.memories_id_pk === e1)?.superseded_by_memories_id_fk === e2 ? m : null;
+            }, 'consolidated chain');
+            // Chained under the newer telling — NOT self-tombstoned, and
+            // the surviving head stays live because the merge satisfied cap.
+            assert.equal(mems.find(x => x.memories_id_pk === e1).superseded_by_memories_id_fk, e2);
+            assert.equal(mems.find(x => x.memories_id_pk === e2).superseded_by_memories_id_fk, null);
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
 });

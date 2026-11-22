@@ -1,6 +1,6 @@
 import { db, activeProfile, MSG_SQL } from './db.js';
 import { push } from './lib/sse.js';
-import { dedupeNew } from './lib/memdedupe.js';
+import { dedupeNew, dedupeRoom } from './lib/memdedupe.js';
 
 // Latest prompt composition per room — exposed for the chat sidebar.
 export const genStats = {};
@@ -588,6 +588,17 @@ export async function maybeSummarize(roomId) {
     // Always signal completion — clients refresh lastmem on done even when
     // activity notifications (the flash) are disabled.
     push(roomId, { type: 'mem', phase: 'done', count: added, notify: !!mem.mem_activity });
+    // Consolidation before eviction: under cap pressure, sweep for
+    // retellings first — a merged pair frees a live slot without retiring
+    // anything, so pileups collapse instead of evicting real memories.
+    const totalCap = mem.mem_max || 0;
+    const counts = db.prepare(`SELECT m.type AS t, COUNT(*) AS c FROM memories m
+        JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+        WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.superseded_by_memories_id_fk IS NULL
+          AND m.room_arcs_id_fk IS NULL GROUP BY m.type`).all(roomId);
+    if ((totalCap > 0 && counts.filter(x => x.t !== 'state').reduce((a, x) => a + x.c, 0) > totalCap)
+        || counts.some(({ t, c }) => (mem['mem_max_' + t] || 0) > 0 && c > mem['mem_max_' + t]))
+        dedupeRoom(roomId);
     // Cap stored smart memories per type — oldest entries of each type
     // retire (tombstone — self-supersede, never deleted). Superseded and
     // folded-arc rows don't occupy cap slots, and retiring a chain head
@@ -605,7 +616,6 @@ export async function maybeSummarize(roomId) {
             .run(type, roomId, type, roomId, type, cap);
     }
     // Global cap (mem_max) as a safety net across all types.
-    const totalCap = mem.mem_max || 0;
     if (totalCap > 0) {
         db.prepare(`UPDATE memories SET superseded_by_memories_id_fk=memories_id_pk WHERE origin='smart' AND type!='state' AND superseded_by_memories_id_fk IS NULL AND memories_id_pk IN
             (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
