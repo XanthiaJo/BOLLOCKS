@@ -130,15 +130,15 @@ flowchart TD
 | `/api/room/memsettings` | POST | room owner only | `{room, memProfile}`. Point the room at one of the owner's own `mem_profiles` (0 clears). |
 | `/api/lastmem?room=` | GET | user | Latest `origin='smart'` memory in room. |
 
-## Known issues to fix (tracked)
+## Known issues
 
-1. `/api/memories/delete`, `/triggers`, `/move` read `b.world_books_id_pk` instead of `b.id` — mismatched with frontend. Fix to `b.id`.
-2. `/api/memories/triggers` filters by `rooms_id_pk` instead of `memories_id_pk` — would update all memories in a room. Fix filter.
-3. No ownership/auth checks on memory endpoints or memsettings. Add per the table above.
-4. Smart extraction stores everything as shared (strips `[Name]`) — acceptable per design; document it.
-5. ~~Extraction profile (`set_profile`) not persisted~~ — resolved: `extraction_api_profiles_id_fk` on the memory profile is used, and it must belong to the room owner (no fallback).
-6. `POST /api/memories` doesn't accept `type`/`triggers` from frontend.
-7. Consider adding `updated` timestamp and `owner_users_id_fk` for audit.
+Tracked on GitHub rather than in this doc — see the
+[issue list](https://github.com/XanthiaJo/BOLLOCKS/issues). The historical
+list that used to live here was stale on review: the `world_books_id_pk`
+fallback ([#149](https://github.com/XanthiaJo/BOLLOCKS/issues/149)) and the
+`updated`/`owner` audit columns ([#150](https://github.com/XanthiaJo/BOLLOCKS/issues/150))
+are still open; the auth gaps, trigger filter, `set_profile`, and
+`type`/`triggers` acceptance were all fixed since.
 
 ## Open design questions
 
