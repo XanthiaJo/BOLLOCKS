@@ -299,8 +299,8 @@ function mpCloseEditor(){
   v.remove();
 }
 
-// Transient "saved" toast — pages call this after a successful write so the
-// form can stay open instead of vanishing.
+// Transient "saved" toast — every explicit save flashes this so a write is
+// always acknowledged, whether the form stays open or collapses.
 function mpFlashSaved(msg = 'Saved') {
     let t = document.getElementById('mpsaved');
     if (!t) {

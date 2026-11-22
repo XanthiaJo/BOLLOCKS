@@ -46,14 +46,14 @@ function arcToggle(id){extId=extId===id?0:id;renderList()}
 function editArc(id){editId=editId===id?0:id;renderList()}
 function cancelArc(){editId=0;renderList()}
 async function saveArc(){const id=editId;if(!allArcs.find(x=>x.id===id))return;
-  await api('arcs/update',{id,title:$('ea_title_'+id).value,summary:$('ea_summary_'+id).value});editId=0;load()}
+  await api('arcs/update',{id,title:$('ea_title_'+id).value,summary:$('ea_summary_'+id).value});editId=0;mpFlashSaved();load()}
 async function resolveArc(id){await api('arcs/resolve',{id});load()}
 async function reopenArc(id){await api('arcs/update',{id,status:'open'});load()}
 async function delArc(id){if(confirm('Delete this thread?')){await api('arcs/delete',{id});load()}}
 function newArc(){$('newarcbox').style.display='block';$('newarctitle').focus()}
 function cancelNewArc(){$('newarctitle').value='';$('newarcsummary').value='';$('newarcbox').style.display='none'}
 async function saveNewArc(){const t=$('newarctitle').value.trim();if(!t)return;
-  await api('arcs',{room:ROOM,title:t,summary:$('newarcsummary').value.trim()});cancelNewArc();load()}
+  await api('arcs',{room:ROOM,title:t,summary:$('newarcsummary').value.trim()});cancelNewArc();mpFlashSaved();load()}
 async function load(){
   const [{rooms},mps]=await Promise.all([get('rooms'),get('memprofiles')]);
   memProfiles=mps?.profiles||[];
