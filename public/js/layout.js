@@ -390,12 +390,10 @@ function setupAcc(panel, key, openDefault = []) {
         for (const n of toMove) body.appendChild(n);
         // An intro hint right after the h4 belongs on the header line.
         if (body.firstElementChild?.classList.contains('hint')) title.append(body.firstElementChild);
-        // Sections where every control is disabled are placeholders — say so.
-        if (!title.querySelector('.hint') && !body.querySelector('input:not([disabled]),select:not([disabled]),textarea:not([disabled])')) {
-            const note = document.createElement('span'); note.className = 'hint';
-            note.textContent = 'Not implemented yet — these are placeholders for planned features.';
-            title.append(note);
-        }
+        // Sections where every control is disabled are placeholders — tag
+        // the wrap so they can be dimmed (they live in the tbi panel).
+        if (!body.querySelector('input:not([disabled]),select:not([disabled]),textarea:not([disabled])'))
+            wrap.classList.add('acc-ph');
         h.remove();
         if (openSet.has(header.dataset.acc)) { header.classList.add('open'); body.classList.add('open'); }
         header.onclick = () => { header.classList.toggle('open'); body.classList.toggle('open'); saveAcc(); };
