@@ -45,6 +45,7 @@ export default [
         setupAcc: "readonly",
         draftFields: "readonly",
         fillFields: "readonly",
+        trigList: "readonly",
       },
     },
     rules: {

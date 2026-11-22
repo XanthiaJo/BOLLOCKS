@@ -11,6 +11,7 @@ import { db } from '../db.js';
 import { send, readBody } from '../lib/util.js';
 import { roomMember, memoryShared } from '../lib/access.js';
 import { consolidateArc } from '../generate.js';
+import { dedupeRoom } from '../lib/memdedupe.js';
 
 export default {
     'GET /api/lastmem': async (req, res, u) => {
@@ -80,6 +81,14 @@ export default {
         } catch (e) { db.exec('ROLLBACK'); throw e; }
         send(res, 200, { ok: true });
     },
+    // Manual retelling sweep — same check extraction runs on each new
+    // memory, applied pairwise across the room's live smart events.
+    // Returns [[oldId, newId], ...] pairs it chained.
+    'POST /api/memories/dedupe': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!roomMember(b.room || 1, u)) return send(res, 403, { error: 'not a room member' });
+        send(res, 200, { merged: dedupeRoom(b.room || 1) });
+    },
     'POST /api/memories/triggers': async (req, res, u) => {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
@@ -103,9 +112,18 @@ export default {
     'GET /api/arcs': async (req, res, u) => {
         const room = Number(new URL(req.url, 'http://x').searchParams.get('room') || 0);
         if (!roomMember(room, u)) return send(res, 403, { error: 'not a room member' });
-        const arcs = db.prepare(`SELECT room_arcs_id_pk AS id, title, summary, status, origin, created, updated
+        const arcs = db.prepare(`SELECT room_arcs_id_pk AS id, title, summary, status, origin, created, updated,
+            opened_messages_id_fk AS openedId, closed_messages_id_fk AS closedId
             FROM room_arcs WHERE rooms_id_fk=? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, updated DESC`).all(room);
-        send(res, 200, { arcs });
+        // Extractions folded under each arc at close — the thread's detail
+        // history, expandable in the Stories UI.
+        const folded = db.prepare(`SELECT m.memories_id_pk AS id, m.type, m.content, m.created,
+                m.superseded_by_memories_id_fk AS sup, ${TRIG_SQL} AS triggers, m.room_arcs_id_fk AS arcId
+            FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+            WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NOT NULL ORDER BY m.memories_id_pk`).all(room);
+        const byArc = {};
+        for (const f of folded) (byArc[f.arcId] ||= []).push(f);
+        send(res, 200, { arcs: arcs.map(a => ({ ...a, mems: byArc[a.id] || [] })) });
     },
     'POST /api/arcs': async (req, res, u) => {
         const b = await readBody(req);
@@ -121,12 +139,19 @@ export default {
         if (!arc) return send(res, 404, { error: 'no arc' });
         if (!roomMember(arc.rooms_id_fk, u)) return send(res, 403, { error: 'not a room member' });
         const status = ['open', 'resolved', 'dropped'].includes(b.status) ? b.status : null;
+        // Reopening re-anchors the span: opened resets to the latest
+        // message and the stale close clears, so a second consolidation
+        // covers only the continuation — not everything since the first
+        // open (which would re-sweep unrelated memories into the arc).
         db.prepare(`UPDATE room_arcs SET title=COALESCE(NULLIF(?,''),title), summary=COALESCE(?,summary),
             status=COALESCE(?,status), updated=datetime('now'),
-            closed_messages_id_fk=CASE WHEN ? IN ('resolved','dropped') AND status='open'
-                THEN (SELECT MAX(messages_id_pk) FROM messages WHERE rooms_id_fk=?) ELSE closed_messages_id_fk END
+            closed_messages_id_fk=CASE WHEN ?='open' AND status<>'open' THEN NULL
+                WHEN ? IN ('resolved','dropped') AND status='open'
+                THEN (SELECT MAX(messages_id_pk) FROM messages WHERE rooms_id_fk=?) ELSE closed_messages_id_fk END,
+            opened_messages_id_fk=CASE WHEN ?='open' AND status<>'open'
+                THEN (SELECT MAX(messages_id_pk) FROM messages WHERE rooms_id_fk=?) ELSE opened_messages_id_fk END
             WHERE room_arcs_id_pk=?`)
-            .run(b.title?.trim() ?? null, b.summary ?? null, status, status, arc.rooms_id_fk, b.id);
+            .run(b.title?.trim() ?? null, b.summary ?? null, status, status, status, arc.rooms_id_fk, status, arc.rooms_id_fk, b.id);
         if (status && status !== 'open' && arc.status === 'open')
             consolidateArc(arc.rooms_id_fk, b.id).catch(e => console.error('[mem]', e.message));
         send(res, 200, { ok: true });

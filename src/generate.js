@@ -1,5 +1,6 @@
 import { db, activeProfile, MSG_SQL } from './db.js';
 import { push } from './lib/sse.js';
+import { dedupeNew } from './lib/memdedupe.js';
 
 // Latest prompt composition per room — exposed for the chat sidebar.
 export const genStats = {};
@@ -470,7 +471,7 @@ export async function maybeSummarize(roomId) {
           AND m.superseded_by_memories_id_fk IS NULL
         ORDER BY m.memories_id_pk DESC LIMIT 30`).all(roomId).reverse();
     const supersedeSuffix = supersedable.length
-        ? ' If the memory you write updates or contradicts a current memory, write it as "- [supersede N] …" where N is the number of the memory it replaces — the old memory is retired, never keep both.'
+        ? ' If the memory you write restates, updates, or gives a newer version of ANY numbered memory — even in different words — you MUST write it as "- [supersede N] …" where N is its number: the old version is retired and keeping both is never allowed. Paraphrased retellings of an ongoing event supersede its last telling.'
         : '';
     const memList = supersedable.length
         ? 'Current memories (numbered — a [supersede N] tag retires one):\n'
@@ -500,7 +501,13 @@ export async function maybeSummarize(roomId) {
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
     const findArc = db.prepare("SELECT room_arcs_id_pk AS id FROM room_arcs WHERE rooms_id_fk=? AND status='open' AND LOWER(title)=LOWER(?)");
     const insArc = db.prepare("INSERT INTO room_arcs (rooms_id_fk,title,summary,opened_messages_id_fk,origin) VALUES (?,?,?,?,'smart')");
-    const upArc = db.prepare("UPDATE room_arcs SET summary=?, status='open', updated=datetime('now') WHERE room_arcs_id_pk=?");
+    // A closed thread revived by an [arc] beat re-anchors its span at the
+    // current message — same rule as the reopen route, so a second close
+    // consolidates only the continuation.
+    const upArc = db.prepare(`UPDATE room_arcs SET summary=?, status='open', updated=datetime('now'),
+        opened_messages_id_fk=CASE WHEN status<>'open' THEN ? ELSE opened_messages_id_fk END,
+        closed_messages_id_fk=CASE WHEN status<>'open' THEN NULL ELSE closed_messages_id_fk END
+        WHERE room_arcs_id_pk=?`);
     const closeArc = db.prepare("UPDATE room_arcs SET status='resolved', closed_messages_id_fk=?, updated=datetime('now') WHERE room_arcs_id_pk=?");
     const closedArcs = [];
     for (const line of text.split('\n')) {
@@ -526,7 +533,7 @@ export async function maybeSummarize(roomId) {
             if (!title || (mem.mem_max_arcs ?? 10) <= 0) continue;
             const ex = findArc.get(roomId, title);
             if (arc === 'arc-close') { if (ex) { closeArc.run(lastId, ex.id); closedArcs.push(ex.id); } }
-            else if (ex) { if (summary) upArc.run(summary, ex.id); }
+            else if (ex) { if (summary) upArc.run(summary, lastId, ex.id); }
             else insArc.run(roomId, title, summary, lastId);
             continue;
         }
@@ -547,6 +554,10 @@ export async function maybeSummarize(roomId) {
             const target = supersedes && supersedable[supersedes - 1];
             if (target) db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?')
                 .run(mid, target.id);
+            // Untagged retellings of a still-live event chain the same way —
+            // the writer saw the duplicates and didn't tag, so the script
+            // decides by trigger overlap instead.
+            dedupeNew(roomId, mid);
             // One memory per extraction run — but keep scanning the rest of
             // the output for [arc*] lines.
         }

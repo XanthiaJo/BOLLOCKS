@@ -256,8 +256,17 @@ describe('generation (mock LLM)', () => {
             return JSON.parse(llm.requests.at(-1).body).messages[0].content;
         };
         assert.match(await sysOf(), /Open threads:\n- The stolen map — Kira suspects the guild/);
+        const sayId = (await s.post('say', { room, text: 'the guild struck again' })).json.id;
         await s.post('arcs/resolve', { id: arcId });
         assert.doesNotMatch(await sysOf(), /stolen map/); // resolved threads leave the prompt
+        // Reopening re-anchors the span at the latest message and clears
+        // the stale close, so a second close consolidates only the
+        // continuation — not everything since the original open. (The AI
+        // may reply to the say asynchronously, so only >= is reliable.)
+        await s.post('arcs/update', { id: arcId, status: 'open' });
+        const re = (await s.get(`arcs?room=${room}`)).json.arcs[0];
+        assert.equal(re.closedId, null);
+        assert.ok(re.openedId >= sayId);
         assert.equal((await s.post('arcs/delete', { id: arcId })).status, 200);
     });
 
@@ -300,6 +309,10 @@ describe('generation (mock LLM)', () => {
             const fired = await sysOf();
             assert.match(fired, /Earlier events:\n- The Poisoning — Wren hid the poison in the tin/);
             assert.match(fired, /\n {2}- Wren hid the poison in the tin/);
+            // The arcs endpoint surfaces folded extractions for the UI toggle.
+            const arcNow = (await s.get(`arcs?room=${mroom}`)).json.arcs[0];
+            assert.equal(arcNow.mems.length, 1);
+            assert.equal(arcNow.mems[0].content, 'Wren hid the poison in the tin.');
             await s.post('rooms/delete', { id: mroom });
             await s.post('cards/delete', { id: mcard });
         } finally { await ext.close(); }
@@ -434,6 +447,53 @@ describe('generation (mock LLM)', () => {
             assert.equal(neu.type, 'fact');
             // The extraction prompt carried the numbered current-memories list.
             assert.match(ext.requests.at(-1).body, /Current memories.*1\) \[fact\] The blue tin is full/s);
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
+
+    test('extraction auto-dedupes an untagged retelling of a live event', async () => {
+        const ext = await mockLLM('- [event] Sir Rackington cleared Buddy and named Blake the flapjack thief. (triggers: flapjack, crumbs, blake, culprit)');
+        try {
+            const profId = (await s.post('profiles', { name: 'Ded', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Ded', every: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Ded room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            const oldId = (await s.post('memories', { room: mroom, content: 'A flapjack vanished overnight, leaving crumbs near Buddy.', type: 'event', triggers: 'flapjack,crumbs,buddy,mystery' })).json.id;
+            await s.post('memories/update', { id: oldId, origin: 'smart' });
+            // No [supersede] tag in the mock — the script must chain the
+            // retelling on trigger overlap by itself.
+            await s.post('say', { room: mroom, text: 'case closed' });
+            const mems = await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                const old = m?.find(x => x.memories_id_pk === oldId);
+                return old?.superseded_by_memories_id_fk ? m : null;
+            }, 'deduped memory');
+            const old = mems.find(m => m.memories_id_pk === oldId);
+            const neu = mems.find(m => m.memories_id_pk === old.superseded_by_memories_id_fk);
+            assert.match(neu.content, /named Blake the flapjack thief/);
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
+
+    test('dedupe does not chain events sharing only possessive fragments', async () => {
+        const ext = await mockLLM("- [event] The dog's bone went missing. (triggers: dog's bone, missing)");
+        try {
+            const profId = (await s.post('profiles', { name: 'Pos', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Pos', every: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Pos room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            // Shares only the 's possessive fragment with the incoming row —
+            // a junk token, not evidence of a retelling.
+            const oldId = (await s.post('memories', { room: mroom, content: "The cat's bowl was filled.", type: 'event', triggers: "cat's bowl, filled" })).json.id;
+            await s.post('memories/update', { id: oldId, origin: 'smart' });
+            await s.post('say', { room: mroom, text: 'a pet thing happened' });
+            await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                return m?.some(x => /dog's bone/.test(x.content)) ? m : null;
+            }, 'new memory');
+            const old = (await s.get(`memories?card=0&room=${mroom}`)).json.memories
+                .find(x => x.memories_id_pk === oldId);
+            assert.equal(old.superseded_by_memories_id_fk, null); // stays live
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
