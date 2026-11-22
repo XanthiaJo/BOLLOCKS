@@ -42,7 +42,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | Path | Purpose |
 |---|---|
 | `data/` | Runtime state, gitignored: `app.db` (SQLite), `cards/*.png` (avatars), `bg/*.png` (room backgrounds). Never commit it |
-| `scripts/` | Node ESM maintenance scripts run manually: `backfill-triggers.mjs` (LLM-fill memory trigger keywords on a live server), `pull-st-connection.mjs` (import a SillyTavern host's API connection over ssh) |
+| `scripts/` | Node ESM maintenance scripts run manually: `backfill-triggers.mjs` (LLM-fill memory trigger keywords on a live server), `pull-st-connection.mjs` (import a SillyTavern host's API connection over ssh), `screenshots.mjs` (Playwright — refresh docs/screenshots on a seeded instance; resolves playwright from node_modules or the npx cache, `BASE_URL`/`SHOTS_USER`/`SHOTS_PASS` env) |
 | `docs/memories.md` | Design doc for the memory system (kinds, ownership rules, extraction flow) |
 | `docs/tests.md` | Checklist of exactly what the test suite covers + known gaps it has surfaced |
 | `test/` | `node:test` suites run by `npm test`: `api-contract.test.js` (static frontend↔route checks), `upgrade.test.js` (migration/upgrade), one file per API domain (`auth`, `profile`, `rooms`, `access`, `cards`, `messages`, `world`, `memories`, `profiles`, `generate`, `users`, `update`), `pngcard.test.js` (card parser units), `helpers.js` (shared `boot()`/`mockLLM()`/`pub`/`asUser` harness) |
