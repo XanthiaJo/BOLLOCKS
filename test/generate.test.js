@@ -300,6 +300,10 @@ describe('generation (mock LLM)', () => {
             const fired = await sysOf();
             assert.match(fired, /Earlier events:\n- The Poisoning — Wren hid the poison in the tin/);
             assert.match(fired, /\n {2}- Wren hid the poison in the tin/);
+            // The arcs endpoint surfaces folded extractions for the UI toggle.
+            const arcNow = (await s.get(`arcs?room=${mroom}`)).json.arcs[0];
+            assert.equal(arcNow.mems.length, 1);
+            assert.equal(arcNow.mems[0].content, 'Wren hid the poison in the tin.');
             await s.post('rooms/delete', { id: mroom });
             await s.post('cards/delete', { id: mcard });
         } finally { await ext.close(); }

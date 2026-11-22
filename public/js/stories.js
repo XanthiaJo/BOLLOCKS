@@ -11,7 +11,7 @@ initSidebar({
   footer:'Manual threads are ones you opened. Smart threads are opened, advanced, and closed by the memory-writer.',
 });
 let curTab=localStorage.mp_storytab||'user';if(!['user','smart'].includes(curTab))curTab='user';
-let allArcs=[],memProfiles=[],editId=0,roomName='';
+let allArcs=[],memProfiles=[],editId=0,extId=0,roomName='';
 function tab(t){curTab=t;editId=0;localStorage.mp_storytab=t;renderList()}
 function renderList(){
   $('t_manual').classList.toggle('on',curTab==='user');
@@ -22,10 +22,10 @@ function renderList(){
   const arcs=allArcs.filter(a=>(a.origin||'user')===curTab);
   const draft=editId?draftFields(['ea_title_'+editId,'ea_summary_'+editId]):null;
   const card=a=>editId===a.id?arcForm(a):`
-  <div class="card">
+  <div><div class="card">
     <div><div class="comment">${esc(a.title)}</div>${a.summary?`<div class="keys">${esc(a.summary)}</div>`:''}<div class="meta">#${a.id} · ${esc(a.status)} · ${a.updated||a.created||''}</div></div>
-    <div class="btns"><button onclick="editArc(${a.id})">Edit</button>${a.status==='open'?`<button onclick="resolveArc(${a.id})">Resolve</button>`:`<button onclick="reopenArc(${a.id})">Reopen</button>`}<button class="del" onclick="delArc(${a.id})">Delete</button></div>
-  </div>`;
+    <div class="btns">${a.mems?.length?`<button onclick="arcToggle(${a.id})">${extId===a.id?'extractions ▾':'extractions ▸'} (${a.mems.length})</button>`:''}<button onclick="editArc(${a.id})">Edit</button>${a.status==='open'?`<button onclick="resolveArc(${a.id})">Resolve</button>`:`<button onclick="reopenArc(${a.id})">Reopen</button>`}<button class="del" onclick="delArc(${a.id})">Delete</button></div>
+  </div>${extId===a.id?(a.mems||[]).map(m=>`<div class="card" style="opacity:.65"><div><div class="comment"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''} · folded extraction${m.sup?' · superseded':''}${m.triggers?` · ${esc(m.triggers)}`:''}</div></div></div>`).join(''):''}</div>`;
   const open=arcs.filter(a=>a.status==='open'),closed=arcs.filter(a=>a.status!=='open');
   $('list').innerHTML=
     `<span class="hint" style="display:block;margin-bottom:8px">${curTab==='smart'
@@ -42,6 +42,7 @@ function arcForm(a){
     <textarea id="ea_summary_${a.id}" placeholder="Current beat" style="min-height:50px;width:100%;margin-top:4px">${esc(a.summary||'')}</textarea>
   </div>`;
 }
+function arcToggle(id){extId=extId===id?0:id;renderList()}
 function editArc(id){editId=editId===id?0:id;renderList()}
 function cancelArc(){editId=0;renderList()}
 async function saveArc(){const id=editId;if(!allArcs.find(x=>x.id===id))return;

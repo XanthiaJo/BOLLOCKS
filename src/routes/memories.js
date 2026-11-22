@@ -105,7 +105,15 @@ export default {
         if (!roomMember(room, u)) return send(res, 403, { error: 'not a room member' });
         const arcs = db.prepare(`SELECT room_arcs_id_pk AS id, title, summary, status, origin, created, updated
             FROM room_arcs WHERE rooms_id_fk=? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, updated DESC`).all(room);
-        send(res, 200, { arcs });
+        // Extractions folded under each arc at close — the thread's detail
+        // history, expandable in the Stories UI.
+        const folded = db.prepare(`SELECT m.memories_id_pk AS id, m.type, m.content, m.created,
+                m.superseded_by_memories_id_fk AS sup, ${TRIG_SQL} AS triggers, m.room_arcs_id_fk AS arcId
+            FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+            WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NOT NULL ORDER BY m.memories_id_pk`).all(room);
+        const byArc = {};
+        for (const f of folded) (byArc[f.arcId] ||= []).push(f);
+        send(res, 200, { arcs: arcs.map(a => ({ ...a, mems: byArc[a.id] || [] })) });
     },
     'POST /api/arcs': async (req, res, u) => {
         const b = await readBody(req);
