@@ -71,6 +71,39 @@ describe('memories', () => {
         assert.equal(mems.find(m => m.id === userMem).superseded_by_memories_id_fk, null);
         await s.post('rooms/delete', { id: room });
     });
+
+    test('link merges chains by created date regardless of drop direction', async () => {
+        const room = (await s.post('rooms', { name: 'Link room' })).json.id;
+        const seed = async content => (await s.post('memories', { room, content, type: 'event', triggers: 'x' })).json.id;
+        const sup = async id => (await s.get(`memories?card=-1&room=${room}`)).json.memories.find(m => m.id === id).superseded_by_memories_id_fk;
+
+        const older = await seed('Buddy napped on the bed.');
+        await new Promise(r => setTimeout(r, 1100)); // created is second-resolution
+        const newer = await seed('Buddy moved to the bowl.');
+
+        // Dragging the newer onto the older still leaves the newer live —
+        // `created` resolves order, not drop direction.
+        assert.equal((await s.post('memories/link', { id: newer, target: older })).status, 200);
+        assert.equal(await sup(older), newer);
+        assert.equal(await sup(newer), null);
+
+        // Merging chains: a head with a draft behind it re-points whole.
+        await new Promise(r => setTimeout(r, 1100));
+        const third = await seed('Buddy finally settled in the doorway.');
+        await s.post('memories/link', { id: newer, target: third });
+        assert.equal(await sup(newer), third);   // old head → new head
+        assert.equal(await sup(older), newer);   // draft keeps its own pointer
+        // Linking a superseded row re-resolves through its head — same
+        // chain now, so it's a no-op rather than a duplicate pointer.
+        assert.equal((await s.post('memories/link', { id: older, target: third })).status, 200);
+        assert.equal(await sup(older), newer);
+
+        // Dropping a card on itself is a no-op, not a tombstone.
+        const lone = await seed('Karima made fudge.');
+        assert.equal((await s.post('memories/link', { id: lone, target: lone })).status, 200);
+        assert.equal(await sup(lone), null);
+        await s.post('rooms/delete', { id: room });
+    });
 });
 
 // Older builds re-add a `source` column to a migrated memories table (their

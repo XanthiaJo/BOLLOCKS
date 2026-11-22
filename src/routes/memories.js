@@ -89,6 +89,28 @@ export default {
         if (!roomMember(b.room || 1, u)) return send(res, 403, { error: 'not a room member' });
         send(res, 200, { merged: dedupeRoom(b.room || 1) });
     },
+    // Drag-link: merge two chains into one — the head with the newest
+    // `created` stays live, the other head supersede-points at it.
+    'POST /api/memories/link': async (req, res, u) => {
+        const b = await readBody(req);
+        const row = db.prepare('SELECT memories_id_pk,created,superseded_by_memories_id_fk FROM memories WHERE memories_id_pk=?');
+        const a = row.get(b.id), t = row.get(b.target);
+        if (!a || !t) return send(res, 404, { error: 'no memory' });
+        if (!memoryShared(b.id, u) || !memoryShared(b.target, u)) return send(res, 403, { error: 'not a room member' });
+        const head = m => { const seen = new Set(); let cur = m;
+            while (cur.superseded_by_memories_id_fk && cur.superseded_by_memories_id_fk !== cur.memories_id_pk && !seen.has(cur.memories_id_pk)) {
+                seen.add(cur.memories_id_pk);
+                cur = row.get(cur.superseded_by_memories_id_fk);
+            } return cur; };
+        const ha = head(a), ht = head(t);
+        if (ha.memories_id_pk === ht.memories_id_pk) return send(res, 200, { ok: true, head: ha.memories_id_pk });
+        if (ha.superseded_by_memories_id_fk === ha.memories_id_pk || ht.superseded_by_memories_id_fk === ht.memories_id_pk)
+            return send(res, 400, { error: 'retracted rows cannot be linked' });
+        const newer = (ha.created === ht.created ? ha.memories_id_pk > ht.memories_id_pk : ha.created > ht.created) ? ha : ht;
+        const older = newer === ha ? ht : ha;
+        db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?').run(newer.memories_id_pk, older.memories_id_pk);
+        send(res, 200, { ok: true, head: newer.memories_id_pk });
+    },
     'POST /api/memories/triggers': async (req, res, u) => {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;

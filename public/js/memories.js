@@ -48,7 +48,7 @@ function renderList(){
   const draft=editId?draftFields(['em_content_'+editId,'em_type_'+editId,'em_scope_'+editId,'em_trig_'+editId]):null;
   const memRow=m=>{const n=chainBehind(m.id).length,tomb=m.superseded_by_memories_id_fk===m.id;
     return `
-    <div><div class="card"${m.superseded_by_memories_id_fk===m.id?' style="opacity:.65" title="Retracted — no longer in the live set"':''}>
+    <div><div class="card"${m.superseded_by_memories_id_fk===m.id?' style="opacity:.65" title="Retracted — no longer in the live set"':' draggable="true" data-mid="'+m.id+'" title="Drag onto another card to link them as retellings — the newest telling stays live"'}>
       <div><div class="comment">${esc(m.content)}</div><div class="keys"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span>${m.room_arcs_id_fk?' <span class="mtag" title="Folded under a story thread — injects via the thread, not standalone">folded</span>':''}${supTag(m)}${!m.triggers&&m.type!=='state'?' <span class="mtag" title="Always injected into the prompt">canon</span>':''} ${m.triggers?esc(trigList(m.triggers)):''}</div><div class="meta">#${m.id} · ${m.created||''} · ${curTab==='user'?esc(memScope(m.cards_id_fk)):'shared'}${m.last_fired_at?` · fired ${m.last_fired_at}`:(m.origin==='smart'&&m.triggers?' · never fired':'')}</div></div>
       <div class="btns">${histOf(m).length?`<button onclick="histToggle(${m.id})">${histId===m.id?'history ▾':'history ▸'} (${histOf(m).length})</button>`:''}<button onclick="editMem(${m.id})">Edit</button>${curTab==='smart'?`<button onclick="permPick(${m.id})">&rarr; manual</button>`:''}${delPickId===m.id
         ?`<div style="position:relative;display:flex;justify-content:flex-end"><button style="visibility:hidden" tabindex="-1">Cancel</button><div style="position:absolute;right:0;top:0;display:flex;gap:6px;white-space:nowrap"><button class="del" style="min-width:92px" title="${tomb?'Delete — un-retracts the previous version as current':n?'Delete — restores the previous version as current':'Delete this memory'}" onclick="delConfirm(${m.id},0)">Delete</button>${n?`<button class="del" style="min-width:92px" title="Delete this and its ${n} earlier version${n>1?'s':''}" onclick="delConfirm(${m.id},1)">Delete +${n}</button>`:''}<button onclick="delPick(${m.id})" style="min-width:92px">Cancel</button></div></div>`
@@ -157,4 +157,18 @@ function permPicker(m){if(permPickId!==m.id)return'';
 async function moveToPerm(id,cid){const m=allMems.find(x=>x.id===id);if(!m)return;
   await api('memories',{content:m.content,type:m.type||'fact',triggers:m.triggers||'',room:ROOM,cardId:cid||0});
   await api('memories/delete',{id});permPickId=0;load()}
+// Kanban link — drag a live card onto another to merge their chains.
+// Server resolves order by `created`: the newest head stays live, the
+// rest collapse under its history. Delegated so re-renders don't rewire.
+let dragMem=0;
+const dragCard=e=>e.target.closest?.('.card[draggable]');
+$('list').addEventListener('dragstart',e=>{const c=dragCard(e);if(!c)return;dragMem=Number(c.dataset.mid);c.classList.add('dragging');e.dataTransfer.effectAllowed='link'});
+$('list').addEventListener('dragend',()=>{dragMem=0;for(const c of $('list').querySelectorAll('.dragging,.drop-tgt'))c.classList.remove('dragging','drop-tgt')});
+$('list').addEventListener('dragover',e=>{if(!dragMem)return;const c=dragCard(e);if(!c||Number(c.dataset.mid)===dragMem)return;e.preventDefault();e.dataTransfer.dropEffect='link';c.classList.add('drop-tgt')});
+$('list').addEventListener('dragleave',e=>{const c=dragCard(e);if(c)c.classList.remove('drop-tgt')});
+$('list').addEventListener('drop',async e=>{const c=dragCard(e);if(!c||!dragMem)return;e.preventDefault();
+  const target=Number(c.dataset.mid),id=dragMem;dragMem=0;
+  const r=await api('memories/link',{id,target});
+  if(r.error)return alert(r.error);
+  mpFlashSaved('Linked — newest telling stays live');load()});
 load();

@@ -187,7 +187,10 @@ retellings are caught anyway: each new smart `event` is compared against
 the room's live events by IDF-weighted trigger overlap (`memdedupe.js`,
 shared rare words count, ubiquitous room vocabulary doesn't) and scores
 above `DEDUPE_MIN` chain the same way — `POST /api/memories/dedupe`
-re-runs that sweep pairwise for cleanup. Superseded rows stop injecting
+re-runs that sweep pairwise for cleanup. When the scorer can't see a
+retelling (fully paraphrased triggers), drag one live card onto another
+on the Memories page — `POST /api/memories/link` merges the two chains
+with the newest-`created` head staying live. Superseded rows stop injecting
 everywhere (memory block, canon, arc details), don't occupy the
 per-type/`mem_max` cap slots, and collapse under the replacement's
 `history ▸` toggle for audit. The FK is `ON DELETE SET NULL` — deleting
