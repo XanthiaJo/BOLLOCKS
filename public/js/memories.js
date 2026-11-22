@@ -10,8 +10,8 @@ initSidebar({
   footer:'Memory-writer profiles live on the <a href="/memsettings.html" style="color:var(--muted)">Memory profiles</a> page. Story threads have their own <a href="/stories.html" style="color:var(--muted)">Stories</a> page.',
 });
 let cardId=0,scopeName='',curTab=localStorage.mp_memtab||'user';if(!['user','smart'].includes(curTab))curTab='user';
-let allMems=[],roomCards=[],memProfiles=[],editId=0,permPickId=0,roomName='';
-const TYPE_ORDER=['fact','event','relationship','preference'];
+let allMems=[],roomCards=[],memProfiles=[],editId=0,permPickId=0,histId=0,delPickId=0,retQ='',roomName='';
+const TYPE_ORDER=['state','fact','event','relationship','preference'];
 function tab(t){curTab=t;editId=0;permPickId=0;localStorage.mp_memtab=t;
   if(t==='smart'&&cardId!==0){cardId=0;scopeName='';}// smart memories are room-scoped
   load();
@@ -24,24 +24,55 @@ function renderList(){
   $('btn_new').style.display=curTab==='user'?'':'none';
   if(curTab!=='user')$('newbox').style.display='none';
   const mems = allMems.filter(m=>(m.origin||m.source||'user')===curTab);
-  // Group by type.
+  // Group by type — every type renders as an accordion section, even empty.
+  // The h4 carries just the type name (the .acc persistence key); the count
+  // rides the header line as a .hint, which also keeps setupAcc's
+  // placeholder-note heuristic quiet.
   const groups={};
   for(const m of mems){ const t=m.type||'fact'; (groups[t]=groups[t]||[]).push(m); }
+  // State rows chain via superseded_by: follow it to the chain head — a
+  // live row (null) or a retracted tombstone (self-reference). Only heads
+  // render top-level; earlier versions collapse under the head's history.
+  const byId=new Map(mems.map(m=>[m.id,m]));
+  const headOf=m=>{const seen=new Set();let cur=m;
+    while(cur.superseded_by_memories_id_fk&&cur.superseded_by_memories_id_fk!==cur.id&&!seen.has(cur.id)){
+      seen.add(cur.id);cur=byId.get(cur.superseded_by_memories_id_fk)||cur;}
+    return cur.id;};
+  const histOf=h=>mems.filter(m=>m!==h&&headOf(m)===h.id);
+  // Tombstones (superseded_by = self) render dimmed instead of a badge —
+  // visually 'former', still clickable for delete/un-retract.
+  const supTag=m=>m.superseded_by_memories_id_fk===m.id?''
+    :(m.superseded_by_memories_id_fk?' <span class="mtag" title="Superseded — replaced by a newer memory, no longer injected">superseded</span>':'');
   const draft=editId?draftFields(['em_content_'+editId,'em_type_'+editId,'em_scope_'+editId,'em_trig_'+editId]):null;
-  const html=TYPE_ORDER.filter(t=>groups[t]?.length).map(t=>`
-    <h4 style="margin:12px 0 4px;color:var(--dim);font-size:.85em;text-transform:uppercase;letter-spacing:.04em">${esc(t)} (${groups[t].length})</h4>
-    ${groups[t].map(m=>editId===m.id?editForm(m):`
-    <div class="card">
-      <div><div class="comment">${esc(m.content)}</div><div class="keys"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span>${m.superseded_by_memories_id_fk?' <span class="mtag" title="Retracted — replaced by a newer memory, no longer injected">superseded</span>':''}${!m.triggers?' <span class="mtag" title="Always injected into the prompt">canon</span>':''} ${m.triggers?esc(m.triggers):''}</div><div class="meta">#${m.id} · ${m.created||''} · ${curTab==='user'?esc(memScope(m.cards_id_fk)):'shared'}</div></div>
-      <div class="btns"><button onclick="editMem(${m.id})">Edit</button>${curTab==='smart'?`<button onclick="permPick(${m.id})">&rarr; manual</button>`:''}<button class="del" onclick="del(${m.id})">Delete</button></div>
-    </div>
-    ${permPicker(m)}</div>`).join('')}`).join('');
-  $('list').innerHTML=html||`<small>No ${curTab==='smart'?'smart memories yet — extraction writes them once enabled':'manual'} memories${curTab==='smart'?'':' yet'}.</small>`;
-  initEdHeads($('list'));if(draft&&editId)fillFields(draft);
+  const memRow=(m,t)=>{const n=chainBehind(m.id).length,tomb=m.superseded_by_memories_id_fk===m.id;
+    return `
+    <div><div class="card"${m.superseded_by_memories_id_fk===m.id?' style="opacity:.65" title="Retracted — no longer in the live set"':''}>
+      <div><div class="comment">${esc(m.content)}</div><div class="keys"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span>${supTag(m)}${!m.triggers&&m.type!=='state'?' <span class="mtag" title="Always injected into the prompt">canon</span>':''} ${m.triggers?esc(m.triggers):''}</div><div class="meta">#${m.id} · ${m.created||''} · ${curTab==='user'?esc(memScope(m.cards_id_fk)):'shared'}</div></div>
+      <div class="btns">${t==='state'&&histOf(m).length?`<button onclick="histToggle(${m.id})">${histId===m.id?'history ▾':'history ▸'} (${histOf(m).length})</button>`:''}<button onclick="editMem(${m.id})">Edit</button>${curTab==='smart'?`<button onclick="permPick(${m.id})">&rarr; manual</button>`:''}${delPickId===m.id
+        ?`<div style="position:relative;display:flex;justify-content:flex-end"><button style="visibility:hidden" tabindex="-1">Cancel</button><div style="position:absolute;right:0;top:0;display:flex;gap:6px;white-space:nowrap"><button class="del" style="min-width:92px" title="${tomb?'Delete — un-retracts the previous version as current':n?'Delete — restores the previous version as current':'Delete this memory'}" onclick="delConfirm(${m.id},0)">Delete</button>${n?`<button class="del" style="min-width:92px" title="Delete this and its ${n} earlier version${n>1?'s':''}" onclick="delConfirm(${m.id},1)">Delete +${n}</button>`:''}<button onclick="delPick(${m.id})" style="min-width:92px">Cancel</button></div></div>`
+        :`<button class="del" onclick="del(${m.id})">Delete</button>`}</div>
+    </div>${histId===m.id?histOf(m).map(h=>`<div class="card" style="opacity:.65"><div><div class="comment">${esc(h.content)}</div><div class="meta">#${h.id} · ${h.created||''} · replaced</div></div></div>`).join(''):''}${permPicker(m)}</div>`};
+  // Live state = superseded_by NULL (tombstones live in the Retracted
+  // section instead). The search hides .rcard wrappers directly — no
+  // re-render, so the input keeps focus while typing.
+  const ret=(groups.state||[]).filter(m=>m.superseded_by_memories_id_fk===m.id);
+  $('list').innerHTML=TYPE_ORDER.map(t=>{
+    const rows=groups[t]||[];
+    const show=t==='state'?rows.filter(m=>!m.superseded_by_memories_id_fk):rows;
+    return `<h4>${esc(t[0].toUpperCase()+t.slice(1))}</h4><span class="hint">${show.length}</span>${show.length?show.map(m=>editId===m.id?editForm(m):memRow(m,t)).join(''):'<small>None</small>'}`;
+  }).join('')+`<h4>Retracted</h4><span class="hint">${ret.length}</span>${ret.length
+    ?`<input id="retq" placeholder="search retracted…" value="${esc(retQ)}" oninput="retSearch(this.value)" style="margin:4px 0 8px;width:100%;box-sizing:border-box"><div id="retlist">${ret.map(m=>`<div class="rcard">${memRow(m,'state')}</div>`).join('')}</div>`
+    :'<small>None</small>'}`;
+  setupAcc($('list'),'mp_mem_acc',TYPE_ORDER.map(t=>t[0].toUpperCase()+t.slice(1)).concat('Retracted'));
+  initEdHeads($('list'));if(draft&&editId)fillFields(draft);if(retQ)retSearch(retQ);
 }
+function retSearch(q){retQ=q;const nq=q.trim().toLowerCase();
+  for(const el of document.querySelectorAll('#retlist .rcard'))
+    el.style.display=!nq||el.textContent.toLowerCase().includes(nq)?'':'none'}
+function histToggle(id){histId=histId===id?0:id;renderList()}
 function editMem(id){editId=editId===id?0:id;renderList();document.querySelector('.card.editing')?.scrollIntoView({behavior:'smooth',block:'nearest'})}
 function editForm(m){
-  const types=['fact','event','relationship','preference'];
+  const types=[...new Set(['fact','event','relationship','preference',m.type||'fact'])]; // keep exotic types (state) selectable so editing can't clobber them
   const scopeOpts=`<option value="0"${!m.cards_id_fk?' selected':''}>${esc(roomName||'This chat')} (shared)</option>`+
     roomCards.map(c=>`<option value="${c.id}"${m.cards_id_fk===c.id?' selected':''}>${esc(c.name)}</option>`).join('');
   return `<div class="card editing">
@@ -102,7 +133,15 @@ async function pickMProf(v){await api('room/memsettings',{room:ROOM,memProfile:N
 function newMem(){$('newbox').style.display='block';$('newmem').focus()}
 function cancelNew(){$('newmem').value='';$('newtrig').value='';$('newbox').style.display='none'}
 async function saveNew(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t,type:$('newtype').value,triggers:$('newtrig').value.trim()});$('newtrig').value='';load()}
-async function del(id){if(confirm('Forget this memory?')){await api('memories/delete',{id});load()}}
+// Every version a row superseded — walk superseded_by backwards.
+function chainBehind(id){const out=[],seen=new Set([id]),q=[id];
+  while(q.length){const cid=q.shift();
+    for(const p of allMems.filter(x=>x.superseded_by_memories_id_fk===cid))
+      if(!seen.has(p.id)){seen.add(p.id);out.push(p)}}
+  return out}
+function del(id){delPickId=delPickId===id?0:id;renderList()}
+function delPick(id){delPickId=delPickId===id?0:id;renderList()}
+async function delConfirm(id,chain){delPickId=0;await api('memories/delete',{id,chain:!!chain});load()}
 function permPick(id){permPickId=permPickId===id?0:id;renderList()}
 function permPicker(m){if(permPickId!==m.id)return'';
   const cards=roomCards.map(c=>`<button onclick="moveToPerm(${m.id},${c.id})">${esc(c.name)}</button>`).join('');
