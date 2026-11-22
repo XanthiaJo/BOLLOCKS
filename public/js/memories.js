@@ -168,7 +168,47 @@ $('list').addEventListener('dragover',e=>{if(!dragMem)return;const c=dragCard(e)
 $('list').addEventListener('dragleave',e=>{const c=dragCard(e);if(c)c.classList.remove('drop-tgt')});
 $('list').addEventListener('drop',async e=>{const c=dragCard(e);if(!c||!dragMem)return;e.preventDefault();
   const target=Number(c.dataset.mid),id=dragMem;dragMem=0;
+  await linkMem(id,target)});
+async function linkMem(id,target){
   const r=await api('memories/link',{id,target});
   if(r.error)return alert(r.error);
-  mpFlashSaved('Linked — newest telling stays live');load()});
+  mpFlashSaved('Linked — newest telling stays live');load();
+}
+// Touch fallback — drag events never fire on touch browsers, so a
+// ~400ms hold picks the card up (a finger that moves sooner was a
+// scroll). elementFromPoint hit-tests the target; release drops.
+let td=null;
+$('list').addEventListener('touchstart',e=>{
+  const c=dragCard(e);if(!c||td||e.touches.length>1)return;
+  const t=e.touches[0];
+  td={id:Number(c.dataset.mid),card:c,x:t.clientX,y:t.clientY,active:false,
+    timer:setTimeout(()=>{td.active=true;c.classList.add('dragging');
+      td.ghost=document.createElement('div');td.ghost.className='drag-ghost';
+      td.ghost.textContent=c.querySelector('.comment')?.textContent.slice(0,60)||'#'+td.id;
+      document.body.appendChild(td.ghost);
+      td.ghost.style.left=t.clientX+'px';td.ghost.style.top=t.clientY+'px';
+      navigator.vibrate?.(15)},400)};
+});
+$('list').addEventListener('touchmove',e=>{
+  if(!td)return;const t=e.touches[0];
+  if(!td.active){if(Math.hypot(t.clientX-td.x,t.clientY-td.y)>10){clearTimeout(td.timer);td=null}return}
+  e.preventDefault();
+  td.ghost.style.left=t.clientX+'px';td.ghost.style.top=t.clientY+'px';
+  const over=document.elementFromPoint(t.clientX,t.clientY)?.closest?.('.card[draggable]');
+  for(const x of $('list').querySelectorAll('.drop-tgt'))x.classList.remove('drop-tgt');
+  if(over&&Number(over.dataset.mid)!==td.id)over.classList.add('drop-tgt');
+},{passive:false});
+const endTouch=async e=>{
+  if(!td)return;clearTimeout(td.timer);
+  if(!td.active){td=null;return}
+  const t=e.changedTouches[0],id=td.id;
+  td.card.classList.remove('dragging');td.ghost?.remove();
+  for(const x of $('list').querySelectorAll('.drop-tgt'))x.classList.remove('drop-tgt');
+  td=null;
+  const over=document.elementFromPoint(t.clientX,t.clientY)?.closest?.('.card[draggable]');
+  if(over&&Number(over.dataset.mid)!==id)await linkMem(id,Number(over.dataset.mid));
+};
+$('list').addEventListener('touchend',endTouch);
+$('list').addEventListener('touchcancel',endTouch);
+$('list').addEventListener('contextmenu',e=>{if(td)e.preventDefault()}); // long-press menu would fight the pickup
 load();
