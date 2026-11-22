@@ -881,7 +881,7 @@ export function seed() {
     // Every room must follow a memory profile — ensure one exists and assign it.
     if (!db.prepare('SELECT 1 FROM mem_profiles LIMIT 1').get()) {
         const uid = db.prepare('SELECT users_id_pk AS id FROM users ORDER BY users_id_pk LIMIT 1').get()?.id;
-        if (uid) db.prepare("INSERT INTO mem_profiles (users_id_fk,name,mem_unified,mem_prune_messages) VALUES (?,'Default',1,100)").run(uid);
+        if (uid) db.prepare("INSERT INTO mem_profiles (users_id_fk,name,mem_unified,mem_prune_messages) VALUES (?,'Default',1,50)").run(uid);
     }
     db.prepare('UPDATE rooms SET mem_profiles_id_fk=(SELECT mem_profiles_id_pk FROM mem_profiles ORDER BY mem_profiles_id_pk LIMIT 1) WHERE mem_profiles_id_fk IS NULL OR mem_profiles_id_fk=0').run();
     const mptest = db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get('mptest')?.id;
