@@ -55,7 +55,7 @@ memory (memories)  -- standalone entity; no room/card FKs
 Injection at generation time (see `generateReply`):
 1. Shared room memories (no `memory_cards` row, trigger-filtered, budget-capped).
 2. This card's own memories (linked via `memory_cards`, trigger-filtered, budget-capped against remaining budget).
-3. Budget = `rooms.mem_budget` tokens.
+3. Budget = `mem_budget` on the room's followed `mem_profiles` row.
 
 ## Ownership & permissions
 
@@ -63,7 +63,7 @@ Injection at generation time (see `generateReply`):
 |---|---|---|
 | Create | User (via UI/API) | System (extraction) |
 | Read | Room members / card owners | Room members |
-| Edit content/type/triggers | Card owner or room member | No (read-only; regenerate via extraction) |
+| Edit content/type/triggers | Card owner or room member | Room member |
 | Delete | Card owner or room member | Room member (or auto-capped) |
 | Move between scopes (card ↔ shared) | User (via move) | No |
 
@@ -280,9 +280,8 @@ reaches context exactly the way a spoken line does.
 ### Schema
 
 ```sql
--- canon is "no memory_triggers rows" — no flag column. A user_version=8
--- migration clears triggers off rows from the old canon=1 era so they
--- stay always-injected; the column itself is then dropped.
+-- canon is "no memory_triggers rows" — no flag column (the old canon=1
+-- era predates the schema baseline; see the CREATE TABLE block in db.js).
 ALTER TABLE mem_profiles ADD COLUMN mem_canon_budget INTEGER DEFAULT 800;
 
 CREATE TABLE IF NOT EXISTS room_arcs (
@@ -318,10 +317,19 @@ ALTER TABLE memories ADD COLUMN superseded_by_memories_id_fk INTEGER
 ALTER TABLE memories ADD COLUMN last_fired_messages_id_fk INTEGER;
 ALTER TABLE memories ADD COLUMN last_fired_at TEXT;
 ALTER TABLE mem_profiles ADD COLUMN mem_prune_messages INTEGER DEFAULT 0;
+
+-- Arc folding (smart rows consolidate under their thread) + manual curation:
+ALTER TABLE memories ADD COLUMN room_arcs_id_fk INTEGER
+    REFERENCES room_arcs(room_arcs_id_pk) ON DELETE SET NULL;
+ALTER TABLE memories ADD COLUMN user_sorted INTEGER DEFAULT 0;
+-- 1 = drag-arranged by a user; excluded from dedupe sweeps in both roles
 ```
 
-All additive in `migrateSchema()`; the new `mem_*` columns ride
-`MEM_PROFILE_FIELDS`; `room_arcs` is covered by `deleteRoomCascade`.
+These ALTERs document the additions column-by-column; the canonical
+shape lives in the `CREATE TABLE` block at the top of `db.js` (the schema
+baseline — pre-baseline migration machinery was retired at `user_version` 8).
+New `mem_*` columns ride `MEM_PROFILE_FIELDS`; `room_arcs` is covered by
+`deleteRoomCascade`.
 
 ### Canon (injection-only, no extra LLM calls)
 
