@@ -51,7 +51,7 @@ const MEM_PROFILE_FIELDS = ['mem_every', 'mem_budget', 'mem_max', 'mem_max_fact'
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
     'extraction_api_profiles_id_fk', 'mem_canon_budget', 'mem_max_arcs', 'mem_arc_budget',
     'arc_api_profiles_id_fk', 'mem_state', 'mem_state_every', 'mem_max_state',
-    'mem_state_budget', 'mem_state_prompt'];
+    'mem_state_budget', 'mem_state_prompt', 'mem_readonly'];
 
 // Named system-prompt sections in cache-optimal order (stable content first —
 // see the assembly comment in generateReply). The user's active
@@ -416,6 +416,9 @@ export async function maybeSummarize(roomId) {
     // owner-owned extraction profile check below still gates).
     if (!room?.mem_profiles_id_fk) return;
     const mem = memProfileFor(room);
+    // Read-only profiles: injection still reads stored memories, but the
+    // memory-writer never mutates them.
+    if (mem.mem_readonly) return;
     const lastId = db.prepare('SELECT MAX(messages_id_pk) m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
     const interval = mem.mem_every || 10;
     const threshold = mem.mem_context_threshold || 80;
@@ -715,7 +718,7 @@ export async function consolidateArc(roomId, arcId) {
     if (!arc || arc.status === 'open') return;
     const room = db.prepare('SELECT * FROM rooms WHERE rooms_id_pk=?').get(roomId);
     const mem = memProfileFor(room);
-    if (!mem) return;
+    if (!mem || mem.mem_readonly) return;
     const pid = mem.arc_api_profiles_id_fk || mem.extraction_api_profiles_id_fk;
     const ext = pid ? db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(pid) : null;
     if (!ext?.api_url || ext.users_id_fk !== room.owner_users_id_fk) return;
