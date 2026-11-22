@@ -501,7 +501,13 @@ export async function maybeSummarize(roomId) {
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
     const findArc = db.prepare("SELECT room_arcs_id_pk AS id FROM room_arcs WHERE rooms_id_fk=? AND status='open' AND LOWER(title)=LOWER(?)");
     const insArc = db.prepare("INSERT INTO room_arcs (rooms_id_fk,title,summary,opened_messages_id_fk,origin) VALUES (?,?,?,?,'smart')");
-    const upArc = db.prepare("UPDATE room_arcs SET summary=?, status='open', updated=datetime('now') WHERE room_arcs_id_pk=?");
+    // A closed thread revived by an [arc] beat re-anchors its span at the
+    // current message — same rule as the reopen route, so a second close
+    // consolidates only the continuation.
+    const upArc = db.prepare(`UPDATE room_arcs SET summary=?, status='open', updated=datetime('now'),
+        opened_messages_id_fk=CASE WHEN status<>'open' THEN ? ELSE opened_messages_id_fk END,
+        closed_messages_id_fk=CASE WHEN status<>'open' THEN NULL ELSE closed_messages_id_fk END
+        WHERE room_arcs_id_pk=?`);
     const closeArc = db.prepare("UPDATE room_arcs SET status='resolved', closed_messages_id_fk=?, updated=datetime('now') WHERE room_arcs_id_pk=?");
     const closedArcs = [];
     for (const line of text.split('\n')) {
@@ -527,7 +533,7 @@ export async function maybeSummarize(roomId) {
             if (!title || (mem.mem_max_arcs ?? 10) <= 0) continue;
             const ex = findArc.get(roomId, title);
             if (arc === 'arc-close') { if (ex) { closeArc.run(lastId, ex.id); closedArcs.push(ex.id); } }
-            else if (ex) { if (summary) upArc.run(summary, ex.id); }
+            else if (ex) { if (summary) upArc.run(summary, lastId, ex.id); }
             else insArc.run(roomId, title, summary, lastId);
             continue;
         }

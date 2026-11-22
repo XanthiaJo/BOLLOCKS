@@ -256,8 +256,17 @@ describe('generation (mock LLM)', () => {
             return JSON.parse(llm.requests.at(-1).body).messages[0].content;
         };
         assert.match(await sysOf(), /Open threads:\n- The stolen map — Kira suspects the guild/);
+        const sayId = (await s.post('say', { room, text: 'the guild struck again' })).json.id;
         await s.post('arcs/resolve', { id: arcId });
         assert.doesNotMatch(await sysOf(), /stolen map/); // resolved threads leave the prompt
+        // Reopening re-anchors the span at the latest message and clears
+        // the stale close, so a second close consolidates only the
+        // continuation — not everything since the original open. (The AI
+        // may reply to the say asynchronously, so only >= is reliable.)
+        await s.post('arcs/update', { id: arcId, status: 'open' });
+        const re = (await s.get(`arcs?room=${room}`)).json.arcs[0];
+        assert.equal(re.closedId, null);
+        assert.ok(re.openedId >= sayId);
         assert.equal((await s.post('arcs/delete', { id: arcId })).status, 200);
     });
 

@@ -342,6 +342,13 @@ All additive in `migrateSchema()`; the new `mem_*` columns ride
   memories fold; canon stays top-level. The call uses
   `arc_api_profiles_id_fk`, falling back to `extraction_api_profiles_id_fk`,
   owner-owned as usual — no profile configured = consolidation off.
+- **Reopening re-anchors the span** — flipping a closed arc back to `open`
+  (the Stories Reopen button via `arcs/update`, or an `[arc]` tag on a
+  closed thread) resets `opened_messages_id_fk` to the latest message and
+  clears the stale close anchor. A second consolidation therefore covers
+  only the continuation — without it, a re-close would re-summarize the
+  whole history since the original open and fold unrelated memories
+  extracted in the meantime into the arc.
 - Injection: closed arcs with summaries render `Earlier events:` under the
   same `arcs` block when a title word reappears in context **or** a folded
   memory's trigger fires — matching details ride under the headline as

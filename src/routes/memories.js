@@ -112,7 +112,8 @@ export default {
     'GET /api/arcs': async (req, res, u) => {
         const room = Number(new URL(req.url, 'http://x').searchParams.get('room') || 0);
         if (!roomMember(room, u)) return send(res, 403, { error: 'not a room member' });
-        const arcs = db.prepare(`SELECT room_arcs_id_pk AS id, title, summary, status, origin, created, updated
+        const arcs = db.prepare(`SELECT room_arcs_id_pk AS id, title, summary, status, origin, created, updated,
+            opened_messages_id_fk AS openedId, closed_messages_id_fk AS closedId
             FROM room_arcs WHERE rooms_id_fk=? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, updated DESC`).all(room);
         // Extractions folded under each arc at close — the thread's detail
         // history, expandable in the Stories UI.
@@ -138,12 +139,19 @@ export default {
         if (!arc) return send(res, 404, { error: 'no arc' });
         if (!roomMember(arc.rooms_id_fk, u)) return send(res, 403, { error: 'not a room member' });
         const status = ['open', 'resolved', 'dropped'].includes(b.status) ? b.status : null;
+        // Reopening re-anchors the span: opened resets to the latest
+        // message and the stale close clears, so a second consolidation
+        // covers only the continuation — not everything since the first
+        // open (which would re-sweep unrelated memories into the arc).
         db.prepare(`UPDATE room_arcs SET title=COALESCE(NULLIF(?,''),title), summary=COALESCE(?,summary),
             status=COALESCE(?,status), updated=datetime('now'),
-            closed_messages_id_fk=CASE WHEN ? IN ('resolved','dropped') AND status='open'
-                THEN (SELECT MAX(messages_id_pk) FROM messages WHERE rooms_id_fk=?) ELSE closed_messages_id_fk END
+            closed_messages_id_fk=CASE WHEN ?='open' AND status<>'open' THEN NULL
+                WHEN ? IN ('resolved','dropped') AND status='open'
+                THEN (SELECT MAX(messages_id_pk) FROM messages WHERE rooms_id_fk=?) ELSE closed_messages_id_fk END,
+            opened_messages_id_fk=CASE WHEN ?='open' AND status<>'open'
+                THEN (SELECT MAX(messages_id_pk) FROM messages WHERE rooms_id_fk=?) ELSE opened_messages_id_fk END
             WHERE room_arcs_id_pk=?`)
-            .run(b.title?.trim() ?? null, b.summary ?? null, status, status, arc.rooms_id_fk, b.id);
+            .run(b.title?.trim() ?? null, b.summary ?? null, status, status, status, arc.rooms_id_fk, status, arc.rooms_id_fk, b.id);
         if (status && status !== 'open' && arc.status === 'open')
             consolidateArc(arc.rooms_id_fk, b.id).catch(e => console.error('[mem]', e.message));
         send(res, 200, { ok: true });
