@@ -25,7 +25,7 @@ function renderList(){
   <div><div class="card">
     <div><div class="comment">${esc(a.title)}</div>${a.summary?`<div class="keys">${esc(a.summary)}</div>`:''}<div class="meta">#${a.id} · ${esc(a.status)} · ${a.updated||a.created||''}</div></div>
     <div class="btns">${a.mems?.length?`<button onclick="arcToggle(${a.id})">${extId===a.id?'extractions ▾':'extractions ▸'} (${a.mems.length})</button>`:''}<button onclick="editArc(${a.id})">Edit</button>${a.status==='open'?`<button onclick="resolveArc(${a.id})">Resolve</button>`:`<button onclick="reopenArc(${a.id})">Reopen</button>`}<button class="del" onclick="delArc(${a.id})">Delete</button></div>
-  </div>${extId===a.id?(a.mems||[]).map(m=>`<div class="card" style="opacity:.65"><div><div class="comment"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''} · folded extraction${m.sup?' · superseded':''}${m.triggers?` · ${esc(m.triggers)}`:''}</div></div></div>`).join(''):''}</div>`;
+  </div>${extId===a.id?(a.mems||[]).map(m=>`<div class="card" style="opacity:.65"><div><div class="comment"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span> ${esc(m.content)}</div><div class="meta">#${m.id} · ${m.created||''} · folded extraction${m.sup?' · superseded':''}${m.triggers?` · ${esc(m.triggers.split(',').join(', '))}`:''}</div></div></div>`).join(''):''}</div>`;
   const open=arcs.filter(a=>a.status==='open'),closed=arcs.filter(a=>a.status!=='open');
   $('list').innerHTML=
     `<span class="hint" style="display:block;margin-bottom:8px">${curTab==='smart'
