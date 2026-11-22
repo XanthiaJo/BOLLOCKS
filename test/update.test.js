@@ -76,13 +76,13 @@ test('stable channel: no release yet → latest null, not an update', async () =
 });
 
 test('beta channel: picks the newest -beta.N prerelease only', async () => {
-    const gh = await mockGH({ releases: [rel('v0.3.0-beta.2', true), rel('v0.2.0'), rel('v0.3.0-alpha.1', true)] });
+    const gh = await mockGH({ releases: [rel('v0.4.0-beta.2', true), rel('v0.2.0'), rel('v0.4.0-alpha.1', true)] });
     const s = await boot(tmp('update-beta'), { BOLLOCKS_GH_API: gh.url });
     try {
         await s.login('admin');
         const r = await s.get('update?channel=beta');
         assert.equal(r.status, 200);
-        assert.equal(r.json.latest.tag, 'v0.3.0-beta.2');
+        assert.equal(r.json.latest.tag, 'v0.4.0-beta.2');
         assert.equal(r.json.update, true);
     } finally { await s.stop(); await gh.close(); }
 });
