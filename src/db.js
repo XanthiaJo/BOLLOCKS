@@ -376,6 +376,9 @@ export function migrateSchema() {
         mem_max_state: 'INTEGER DEFAULT 30',
         mem_state_budget: 'INTEGER DEFAULT 400',
         mem_state_prompt: "TEXT DEFAULT ''",
+        // Read-only mode: injection keeps reading stored memories but the
+        // memory-writer never runs — protects memories from mutation.
+        mem_readonly: 'INTEGER DEFAULT 0',
     })) if (!mpcols.includes(col)) db.exec(`ALTER TABLE mem_profiles ADD COLUMN ${col} ${def}`);
     // mem_arc_profile_id is added under its legacy name — ren() below maps it
     // to arc_api_profiles_id_fk. Skip the add when the renamed column already
@@ -772,7 +775,7 @@ export function migrateSchema() {
             'mem_unlimited', 'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh',
             'mem_activity', 'extraction_api_profiles_id_fk', 'mem_canon_budget', 'mem_max_arcs',
             'mem_arc_budget', 'arc_api_profiles_id_fk', 'mem_state', 'mem_state_every',
-            'mem_max_state', 'mem_state_budget', 'mem_state_prompt'];
+            'mem_max_state', 'mem_state_budget', 'mem_state_prompt', 'mem_readonly'];
         const mcols = MP_COLS.filter(c => colsOf('mem_profiles').includes(c));
         const msel = mcols.map(c => (c === 'extraction_api_profiles_id_fk' || c === 'arc_api_profiles_id_fk') ? `NULLIF(${c},0)` : c).join(',');
         db.exec(`PRAGMA foreign_keys=OFF;
@@ -806,7 +809,8 @@ export function migrateSchema() {
                 mem_state_every INTEGER DEFAULT 1,
                 mem_max_state INTEGER DEFAULT 30,
                 mem_state_budget INTEGER DEFAULT 400,
-                mem_state_prompt TEXT DEFAULT '');
+                mem_state_prompt TEXT DEFAULT '',
+                mem_readonly INTEGER DEFAULT 0);
             INSERT INTO mem_profiles_new (${mcols.join(',')}) SELECT ${msel} FROM mem_profiles;
             DROP TABLE mem_profiles; ALTER TABLE mem_profiles_new RENAME TO mem_profiles;
             PRAGMA foreign_keys=ON`);
