@@ -73,6 +73,71 @@ export default {
                 JSON.stringify(raw)).lastInsertRowid;
         send(res, 200, { id, name: c.name });
     },
+    // Read-only "where does this character appear" — memories, lorebook
+    // entries, arcs, and room seats that reference the card's name. Name
+    // matching is normalized (case + non-alphanumerics stripped) so
+    // 'SirRackington' finds 'Sir Rackington' content and 'Rackington' keys.
+    'GET /api/cards/refs': async (req, res, u) => {
+        const id = Number(new URL(req.url, 'http://x').searchParams.get('id'));
+        // Same visibility rule as GET /api/cards — own, shared-room, or a
+        // shared-room member's persona.
+        const card = db.prepare(`SELECT name FROM cards c WHERE c.cards_id_pk=? AND (
+            c.owner_users_id_fk = ? OR c.cards_id_pk IN (
+                SELECT r2.cards_id_fk FROM room_members r2
+                JOIN room_members re ON re.rooms_id_fk = r2.rooms_id_fk
+                JOIN cards cc ON cc.cards_id_pk=re.cards_id_fk AND cc.owner_users_id_fk = ?
+            ) OR (c.is_persona=1 AND c.owner_users_id_fk IN (
+                SELECT c3.owner_users_id_fk FROM room_members r3 JOIN cards c3 ON c3.cards_id_pk=r3.cards_id_fk
+                JOIN room_members re2 ON re2.rooms_id_fk = r3.rooms_id_fk
+                JOIN cards cc2 ON cc2.cards_id_pk=re2.cards_id_fk AND cc2.owner_users_id_fk = ?
+                WHERE c3.owner_users_id_fk IS NOT NULL
+            )))`).get(id, u.users_id_pk, u.users_id_pk, u.users_id_pk);
+        if (!card) return send(res, 404, { error: 'no card' });
+        const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const needle = norm(card.name);
+        const hits = s => norm(s).includes(needle);
+        const hitsKey = s => { const k = norm(s); return k && (k.includes(needle) || needle.includes(k)); };
+
+        // Rooms the caller sits in — refs never leak rooms they can't see.
+        const mrooms = db.prepare(`SELECT rm.rooms_id_fk r FROM room_members rm
+            JOIN cards c ON c.cards_id_pk=rm.cards_id_fk WHERE c.owner_users_id_fk=?
+            UNION SELECT rooms_id_pk r FROM rooms WHERE owner_users_id_fk=?`)
+            .all(u.users_id_pk, u.users_id_pk).map(x => x.r);
+        const inRooms = mrooms.length ? `(${mrooms.join(',')})` : '(NULL)';
+
+        const rooms = db.prepare(`SELECT r.rooms_id_pk id, r.name FROM rooms r
+            JOIN room_members m ON m.rooms_id_fk=r.rooms_id_pk
+            WHERE m.cards_id_fk=? AND r.rooms_id_pk IN ${inRooms}`).all(id);
+
+        const TRIGS = `(SELECT GROUP_CONCAT(mt.word,',') FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk)`;
+        const memories = db.prepare(`SELECT m.memories_id_pk id, m.type, m.origin, m.state_key, m.content,
+                r.rooms_id_pk room_id, r.name room, mc.cards_id_fk scoped, ${TRIGS} triggers
+            FROM memories m
+            JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+            JOIN rooms r ON r.rooms_id_pk=rm.rooms_id_fk
+            LEFT JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk
+            WHERE rm.rooms_id_fk IN ${inRooms} AND m.superseded_by_memories_id_fk IS NULL`)
+            .all()
+            .filter(m => m.scoped === id || hits(m.content) || hits(m.state_key) ||
+                (m.triggers || '').split(',').some(hitsKey));
+
+        const entries = db.prepare(`SELECT DISTINCT e.world_entries_id_pk id, e.comment, e.content, e.constant, e.enabled,
+                wb.world_books_id_pk book_id, wb.name book
+            FROM world_entries e
+            JOIN book_entries be ON be.world_entries_id_fk=e.world_entries_id_pk
+            JOIN world_books wb ON wb.world_books_id_pk=be.world_books_id_fk
+            WHERE wb.owner_users_id_fk=? OR wb.world_books_id_pk IN
+                (SELECT world_books_id_fk FROM room_books WHERE rooms_id_fk IN ${inRooms})`)
+            .all(u.users_id_pk)
+            .map(e => ({ ...e, keys: db.prepare('SELECT word FROM world_entry_keys WHERE world_entries_id_fk=?').all(e.id).map(k => k.word) }))
+            .filter(e => hits(e.content) || hits(e.comment) || e.keys.some(hitsKey));
+
+        const arcs = db.prepare(`SELECT a.room_arcs_id_pk id, a.title, a.status, r.name room
+            FROM room_arcs a JOIN rooms r ON r.rooms_id_pk=a.rooms_id_fk
+            WHERE a.rooms_id_fk IN ${inRooms}`).all().filter(a => hits(a.title));
+
+        send(res, 200, { rooms, memories, entries, arcs });
+    },
     // Card avatar image.
     'GET /api/avatar': (req, res) => {
         const id = Number(new URL(req.url, 'http://x').searchParams.get('id'));

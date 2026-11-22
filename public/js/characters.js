@@ -40,7 +40,20 @@ async function loadProfs(){
 }
 
 function editIdx(i){edit(allCards[i])}
+async function loadRefs(id){
+  $('refs').style.display='';
+  $('refs_body').innerHTML='<div class="hint">loading…</div>';
+  const r=await get('cards/refs?id='+id);
+  if(r.error){$('refs_body').innerHTML=`<div class="hint">${esc(r.error)}</div>`;return}
+  const sec=(t,rows,none)=>`<h4>${t}</h4>`+(rows||`<div class="hint">${none}</div>`);
+  $('refs_body').innerHTML=
+    sec('In rooms',r.rooms.length?r.rooms.map(x=>`<span class="mtag">${esc(x.name)}</span>`).join(' '):null,'not seated anywhere you can see')+
+    sec('Memories',r.memories.length?r.memories.map(m=>`<div class="ref"><div class="comment">${esc(m.content)}</div><div class="keys"><span class="mtag m${esc(m.type||'fact')}">${esc(m.type||'fact')}</span>${m.origin==='smart'?' <span class="mtag">smart</span>':''}${m.scoped?' <span class="mtag" title="Pinned to this character">pinned</span>':''}${!m.triggers&&m.type!=='state'?' <span class="mtag" title="Always injected">canon</span>':''} ${m.triggers?esc(m.triggers):''}</div><div class="meta">#${m.id} · ${esc(m.room)}</div></div>`).join(''):null,'none')+
+    sec('Lorebook entries',r.entries.length?r.entries.map(e=>`<div class="ref"><div class="comment">${esc(e.comment||'(untitled)')}</div><div class="keys">${e.constant?'<span class="mtag">constant</span> ':''}${e.keys.map(esc).join(', ')||'<span class="hint">no keys</span>'}</div><div class="meta">${esc(e.book)} · ${esc((e.content||'').slice(0,140))}${e.content&&e.content.length>140?'…':''}</div></div>`).join(''):null,'none')+
+    sec('Story threads',r.arcs.length?r.arcs.map(a=>`<div class="ref"><div class="comment">${esc(a.title)}</div><div class="meta">${esc(a.status)} · ${esc(a.room)}</div></div>`).join(''):null,'none');
+}
 function edit(c){
+  loadRefs(c.id);
   const mine=c.owner===me;
   document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=!mine);
   $('edtitle').textContent=(mine?'Edit ':'')+c.name+(mine?'':` (${c.owner})`);
@@ -78,7 +91,7 @@ function cropConfirm(){
     if(r.error)alert(r.error);else $('ed_av').src='/api/avatar?id='+id+'&t='+Date.now();});
   else{$('ed_av').src=url;$('ed_av').dataset.pending=b64;}
 }
-function clearEd(){$('edtitle').textContent='New character';['ed_id','ed_name','ed_desc','ed_personality','ed_scenario','ed_first','ed_mesex','ed_sysp','ed_phi','ed_tags','ed_creator'].forEach(i=>$(i).value='');$('ed_profile').value='';$('ed_av').src='';$('ed_av').dataset.pending=''}
+function clearEd(){$('refs').style.display='none';$('edtitle').textContent='New character';['ed_id','ed_name','ed_desc','ed_personality','ed_scenario','ed_first','ed_mesex','ed_sysp','ed_phi','ed_tags','ed_creator'].forEach(i=>$(i).value='');$('ed_profile').value='';$('ed_av').src='';$('ed_av').dataset.pending=''}
 function cancelEd(){const id=Number($('ed_id').value)||0;const c=id?allCards.find(c=>c.id===id):null;c?edit(c):clearEd()}
 function newCard(){clearEd();document.querySelectorAll('#editor input:not([type=hidden]),#editor textarea,#editor select,#editor button').forEach(el=>el.disabled=false);mpOpenEditor('inline')}
 
