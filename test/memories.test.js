@@ -116,6 +116,31 @@ describe('memories', () => {
         assert.equal(await sup(lone), null);
         await s.post('rooms/delete', { id: room });
     });
+
+    test('user-sorted rows are invisible to the dedupe sweep', async () => {
+        const room = (await s.post('rooms', { name: 'Curated room' })).json.id;
+        const seed = async content => {
+            const id = (await s.post('memories', { room, content, type: 'event', triggers: 'fudge,rivalry' })).json.id;
+            await s.post('memories/update', { id, origin: 'smart' });
+            return id;
+        };
+        const sup = async id => (await s.get(`memories?card=-1&room=${room}`)).json.memories.find(m => m.id === id);
+        // Identical trigger vocab — every pair here would chain in a sweep.
+        const x1 = await seed('Buddy won the fudge.');
+        const x2 = await seed('Buddy claimed the fudge again.');
+        const y1 = await seed('Buddy scored the fudge.');
+        const y2 = await seed('Buddy took the fudge once more.');
+        // Hand-arrange the y pair: link then pull y1 back out — both stay
+        // flagged as user-sorted, which must immunise them from the sweep.
+        await s.post('memories/link', { id: y1, target: y2 });
+        await s.post('memories/unlink', { id: y1 });
+        assert.equal((await sup(y1)).user_sorted, 1);
+        const merged = (await s.post('memories/dedupe', { room })).json.merged;
+        assert.deepEqual(merged, [[x1, x2]]);
+        assert.equal((await sup(y1)).superseded_by_memories_id_fk, null);
+        assert.equal((await sup(y2)).superseded_by_memories_id_fk, null);
+        await s.post('rooms/delete', { id: room });
+    });
 });
 
 // Older builds re-add a `source` column to a migrated memories table (their

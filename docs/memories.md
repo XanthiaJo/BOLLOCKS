@@ -193,7 +193,9 @@ on the Memories page — `POST /api/memories/link` merges the two chains
 with the newest-`created` head staying live. The inverse works too:
 drag a dimmed history card out of a chain and `POST /api/memories/unlink`
 detaches it back to live (or re-points it under a target's head when
-dropped on another card). Superseded rows stop injecting
+dropped on another card). Hand-arranged rows get `user_sorted=1`, which
+makes them invisible to `dedupeNew`/`dedupeRoom` in both roles — the
+sweep never re-sorts what a user placed. Superseded rows stop injecting
 everywhere (memory block, canon, arc details), don't occupy the
 per-type/`mem_max` cap slots, and collapse under the replacement's
 `history ▸` toggle for audit. The FK is `ON DELETE SET NULL` — deleting

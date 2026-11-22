@@ -115,7 +115,8 @@ export default {
             return send(res, 400, { error: 'retracted rows cannot be linked' });
         const newer = (ha.created === ht.created ? ha.memories_id_pk > ht.memories_id_pk : ha.created > ht.created) ? ha : ht;
         const older = newer === ha ? ht : ha;
-        db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?').run(newer.memories_id_pk, older.memories_id_pk);
+        db.prepare('UPDATE memories SET superseded_by_memories_id_fk=?, user_sorted=1 WHERE memories_id_pk=?').run(newer.memories_id_pk, older.memories_id_pk);
+        db.prepare('UPDATE memories SET user_sorted=1 WHERE memories_id_pk=?').run(newer.memories_id_pk);
         send(res, 200, { ok: true, head: newer.memories_id_pk });
     },
     // Drag-out: detach a superseded row — clears its supersede pointer so
@@ -139,8 +140,9 @@ export default {
                 return send(res, 400, { error: 'retracted rows cannot be linked' });
             if (ht.memories_id_pk === m.memories_id_pk) return send(res, 200, { ok: true });
             next = ht.memories_id_pk;
+            db.prepare('UPDATE memories SET user_sorted=1 WHERE memories_id_pk=?').run(next);
         }
-        db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?').run(next, m.memories_id_pk);
+        db.prepare('UPDATE memories SET superseded_by_memories_id_fk=?, user_sorted=1 WHERE memories_id_pk=?').run(next, m.memories_id_pk);
         send(res, 200, { ok: true });
     },
     'POST /api/memories/triggers': async (req, res, u) => {
