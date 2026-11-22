@@ -361,7 +361,7 @@ describe('generation (mock LLM)', () => {
         await s.post('memories/delete', { id: st });
     });
 
-    test('scene-state pass diffs a keyed JSON set — updates in place, retracts absent', async () => {
+    test('scene-state pass diffs a keyed JSON set — supersedes changed, tombstones absent', async () => {
         // One mock serves both calls: the extraction prompt gets a fact
         // bullet; the state prompt (asks for a "keyed set") gets a different
         // JSON set per run.
@@ -388,17 +388,24 @@ describe('generation (mock LLM)', () => {
             assert.equal(byKey['Wren'].content, 'Wren — in the kitchen');
             assert.equal(byKey['blue tin'].content, 'blue tin — on the counter');
             await s.post('say', { room: mroom, text: 'scene two' });
-            // Second run: Wren's new value supersedes in place (same id),
-            // the unchanged tin keeps its row, the absent fire is retracted.
-            const second = await until(async () => {
+            // Second run: Wren's new value supersedes via a fresh row (the
+            // old one stays as history), the unchanged tin keeps its row,
+            // the absent fire is retracted as a self-referencing tombstone.
+            const all = await until(async () => {
                 const st = await states();
-                return st.length === 2 && st.some(m => m.content === 'Wren — by the door') ? st : null;
+                const live = st.filter(m => !m.superseded_by_memories_id_fk);
+                return live.length === 2 && live.some(m => m.content === 'Wren — by the door') ? st : null;
             }, 'diffed snapshot');
-            const byKey2 = Object.fromEntries(second.map(m => [m.state_key, m]));
-            assert.equal(byKey2['Wren'].memories_id_pk, byKey['Wren'].memories_id_pk);
-            assert.equal(byKey2['blue tin'].memories_id_pk, byKey['blue tin'].memories_id_pk);
-            assert.ok(!byKey2['hearth fire']);
-            assert.ok(second.every(m => !m.triggers)); // state is never trigger-gated
+            const live = all.filter(m => !m.superseded_by_memories_id_fk);
+            const liveByKey = Object.fromEntries(live.map(m => [m.state_key, m]));
+            const newWren = liveByKey['Wren'];
+            assert.notEqual(newWren.memories_id_pk, byKey['Wren'].memories_id_pk);
+            const oldWren = all.find(m => m.memories_id_pk === byKey['Wren'].memories_id_pk);
+            assert.equal(oldWren.superseded_by_memories_id_fk, newWren.memories_id_pk);
+            assert.equal(liveByKey['blue tin'].memories_id_pk, byKey['blue tin'].memories_id_pk);
+            const fire = all.find(m => m.state_key === 'hearth fire');
+            assert.equal(fire.superseded_by_memories_id_fk, fire.memories_id_pk);
+            assert.ok(live.every(m => !m.triggers)); // state is never trigger-gated
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });

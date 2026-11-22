@@ -60,10 +60,24 @@ export default {
         const b = await readBody(req);
         const id = b.id || b.world_books_id_pk;
         if (!memoryShared(id, u)) return send(res, 403, { error: 'not a room member' });
-    db.prepare('DELETE FROM room_memories WHERE memories_id_fk=?').run(id);
-    db.prepare('DELETE FROM memory_cards WHERE memories_id_fk=?').run(id);
-    db.prepare('DELETE FROM memory_triggers WHERE memories_id_fk=?').run(id);
-    db.prepare('DELETE FROM memories WHERE memories_id_pk=?').run(id);
+        // chain=1 also deletes every version this row superseded (walk
+        // superseded_by backwards). A plain delete leaves history, and the
+        // ON DELETE SET NULL FK revives the previous version as current.
+        const ids = new Set([id]);
+        if (b.chain) {
+            const pred = db.prepare('SELECT memories_id_pk FROM memories WHERE superseded_by_memories_id_fk=?');
+            for (const cid of ids) for (const r of pred.all(cid)) ids.add(r.memories_id_pk);
+        }
+        db.exec('BEGIN');
+        try {
+            for (const cid of ids) {
+                db.prepare('DELETE FROM room_memories WHERE memories_id_fk=?').run(cid);
+                db.prepare('DELETE FROM memory_cards WHERE memories_id_fk=?').run(cid);
+                db.prepare('DELETE FROM memory_triggers WHERE memories_id_fk=?').run(cid);
+                db.prepare('DELETE FROM memories WHERE memories_id_pk=?').run(cid);
+            }
+            db.exec('COMMIT');
+        } catch (e) { db.exec('ROLLBACK'); throw e; }
         send(res, 200, { ok: true });
     },
     'POST /api/memories/triggers': async (req, res, u) => {

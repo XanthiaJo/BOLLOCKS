@@ -165,10 +165,14 @@ dedicated memory-writer pass (`mem_state` on the profile, every
 `mem_state_every` extraction runs, paced by `rooms.mem_extract_count`)
 emits the scene as a **keyed JSON set** — one `subject → state` entry per
 thing worth tracking (`{"Wren":"in the kitchen","blue tin":"on the
-counter"}`) — and the script owns the diff: a subject's new value
-supersedes its old row in place (`memories.state_key`), subjects absent
-from the set are retracted, unchanged entries keep their rows.
-Contradictory states can't stack (one value per subject), and the model
+counter"}`) — and the script owns the diff against the **live** rows
+(`superseded_by IS NULL`, keyed by `memories.state_key`): a subject's new
+value stores a fresh row and points the old row's `superseded_by` at it,
+subjects absent from the set are retracted as tombstones
+(`superseded_by = self` — retired with no successor), unchanged entries
+keep their rows. Contradictory states can't stack — the live set is
+always exactly one row per subject, and the superseded chain is the
+subject's history (browsable per entry in the State accordion). The model
 sees the current set so it carries unchanged keys forward. State rows
 carry no triggers, never fold into arcs, are excluded from the canon query
 and the global `mem_max` cap, and inject as their own `Scene:` prompt

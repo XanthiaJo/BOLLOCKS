@@ -932,6 +932,38 @@ function seedExamples(room) {
     mem('Wren once fixed the upstairs window during a storm without being asked.', 'event', 'user', 'window, storm', wren);
     mem('Wren considers everyone under the roof hers to look after.', 'relationship', 'smart', 'wren, caretaker', 0);
 
+    // Scene-state sample — subject→state rows keyed exactly like the state
+    // pass writes them (state_key is the diff handle).
+    const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
+    const state = (key, val) => {
+        const id = db.prepare("INSERT INTO memories (content,type,origin,state_key) VALUES (?, 'state', 'smart', ?)")
+            .run(`${key} — ${val}`, key).lastInsertRowid;
+        db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(room, id);
+        return id;
+    };
+    state('Wren', 'in the kitchen, refilling the kettle');
+    state('the blue tin', 'on the counter, half full');
+    // History samples: the window's earlier state sits superseded under the
+    // current row (the chain the diff would have written); 'the storm' is a
+    // retracted tombstone (superseded_by self — dropped, no successor).
+    const winOld = state('the upstairs window', 'cracked open, draughty');
+    const winNew = state('the upstairs window', 'repaired, no longer draughty');
+    db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?').run(winNew, winOld);
+    db.prepare('UPDATE memories SET superseded_by_memories_id_fk=memories_id_pk WHERE memories_id_pk=?')
+        .run(state('the storm', 'rattling the shutters'));
+    state('the locked door', 'still locked');
+
+    // Story threads: one open manual arc, one resolved smart arc with a
+    // folded detail memory — it stays quiet until its trigger re-evokes the
+    // chapter under "Earlier events:".
+    const iarc = db.prepare("INSERT INTO room_arcs (rooms_id_fk,title,summary,status,origin) VALUES (?,?,?,?,?)");
+    iarc.run(room, 'The greenhouse pane', 'A pane cracked in the last storm; taped for now but needs replacing before frost.', 'open', 'user');
+    const closedArc = iarc.run(room, 'The missing biscuit tin', 'The blue tin vanished for a day — found under the settle behind a stack of blankets.', 'resolved', 'smart').lastInsertRowid;
+    const folded = db.prepare("INSERT INTO memories (content,type,origin,room_arcs_id_fk) VALUES (?, 'event', 'smart', ?)")
+        .run('The blue tin was found under the settle, biscuits intact.', closedArc).lastInsertRowid;
+    insTrig.run(folded, 'tin');
+    db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(room, folded);
+
     const imsg = db.prepare('INSERT INTO messages (rooms_id_fk,cards_id_fk,text) VALUES (?,?,?)');
     imsg.run(room, null, 'Welcome to BOLLOCKS — this is a seeded example chat. Set up an API connection on the Connection page, then say something and Wren will answer.');
     imsg.run(room, wren, "The kettle had just boiled when you walked in. Wren set down a second cup without being asked. \"You look like you've had a day. Sit — the armchair by the window's the good one.\"");

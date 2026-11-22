@@ -628,7 +628,8 @@ async function maybeUpdateState(roomId, mem, conn) {
     // subjects keep their exact keys (a renamed key diffs as retract+insert).
     const rows = db.prepare(`SELECT m.memories_id_pk AS id, m.state_key, m.content FROM memories m
         JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-        WHERE rm.rooms_id_fk=? AND m.type='state' AND m.origin='smart' ORDER BY m.memories_id_pk`).all(roomId);
+        WHERE rm.rooms_id_fk=? AND m.type='state' AND m.origin='smart'
+        AND m.superseded_by_memories_id_fk IS NULL ORDER BY m.memories_id_pk`).all(roomId);
     const prev = rows.length ? 'Current set:\n' + rows.map(r => '- ' + r.content).join('\n') + '\n\n' : '';
     const reqBody = {
         model: conn.model || 'local',
@@ -671,21 +672,28 @@ async function maybeUpdateState(roomId, mem, conn) {
         const entries = cap > 0 ? [...set.entries()].slice(0, cap) : [];
         db.exec('BEGIN');
         try {
+            // History is kept: a changed value gets a fresh row and the old
+            // one points at it via superseded_by; a dropped key is tombstoned
+            // (superseded_by = self — retracted, no successor). "Current" is
+            // always exactly the live row per subject — no latest-version
+            // ambiguity for injection or UI.
             const byKey = new Map(rows.map(r => [r.state_key?.toLowerCase(), r]));
             const seen = new Set();
-            const upd = db.prepare('UPDATE memories SET state_key=?, content=? WHERE memories_id_pk=?');
             const ins = db.prepare("INSERT INTO memories (content,type,origin,state_key) VALUES (?, 'state', 'smart', ?)");
             const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
+            const sup = db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?');
             for (const [subject, val] of entries) {
                 const content = `${subject} — ${val}`;
                 const ex = byKey.get(subject.toLowerCase());
-                if (ex) {
-                    seen.add(ex.id);
-                    if (ex.content !== content || ex.state_key !== subject) upd.run(subject, content, ex.id);
-                } else linkRoom.run(roomId, ins.run(content, subject).lastInsertRowid);
+                if (!ex) { linkRoom.run(roomId, ins.run(content, subject).lastInsertRowid); continue; }
+                seen.add(ex.id);
+                if (ex.content === content) continue;
+                const nid = ins.run(content, subject).lastInsertRowid;
+                linkRoom.run(roomId, nid);
+                sup.run(nid, ex.id);
             }
-            const del = db.prepare('DELETE FROM memories WHERE memories_id_pk=?');
-            for (const r of rows) if (!seen.has(r.id)) del.run(r.id);
+            const tomb = db.prepare('UPDATE memories SET superseded_by_memories_id_fk=memories_id_pk WHERE memories_id_pk=?');
+            for (const r of rows) if (!seen.has(r.id)) tomb.run(r.id);
             db.exec('COMMIT');
             if (mem.mem_activity) console.log(`[mem] activity: state snapshot refreshed for room ${roomId} (${entries.length} entries)`);
         } catch (e) { db.exec('ROLLBACK'); throw e; }
