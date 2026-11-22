@@ -6,10 +6,15 @@ import { db } from '../db.js';
 // row itself — the writer only had to write it, [supersede N] or not.
 // Match strength is IDF-weighted trigger overlap (overlap coefficient):
 // shared rare words weigh far more than ubiquitous in-room vocabulary
-// like character names. Corpus-tuned: retellings score ~0.31-0.67 while
-// distinct-but-related events cap ~0.27.
+// like character names. Threshold errs conservative — a retelling whose
+// trigger vocabulary the model fully paraphrases scores like a distinct
+// event and is left for the writer's own [supersede] judgment rather
+// than risking a wrong merge.
 const STOP = new Set('a an the was is were been be on of in at to by with and or for from under over his her their its it as that this into out up down'.split(' '));
-const words = s => new Set((s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w && !STOP.has(w)));
+// Strip possessives first ('rabbit's' → 'rabbit') or the leftover 's'
+// fragment becomes a junk token shared across rows, inflating overlap.
+// Single-char tokens are dropped for the same reason.
+const words = s => new Set((s || '').toLowerCase().replace(/'s\b/g, '').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length > 1 && !STOP.has(w)));
 
 const DEDUPE_MIN = 0.3; // weighted overlap coefficient to call a retelling
 
@@ -79,16 +84,24 @@ export function dedupeNew(roomId, newId) {
 
 // Retroactive sweep: chains retellings in the live set and, separately,
 // inside each arc's folded set (beats of one story chain under their
-// newest telling). Returns [[oldId, newId], ...] pairs for reporting.
+// newest telling). Each pass runs to fixpoint: a merge shrinks the live
+// corpus, which shifts every IDF weight — pairs that scored under the
+// threshold can cross it once merged rows leave the set.
+// Returns [[oldId, newId], ...] pairs for reporting.
 export function dedupeRoom(roomId) {
-    const liveRows = eventRows(roomId);
-    const merged = sweep(liveRows, scorer(liveRows));
+    const merged = [];
+    const sweepSet = arc => {
+        let pass;
+        do {
+            const rows = eventRows(roomId, arc);
+            pass = sweep(rows, scorer(rows));
+            merged.push(...pass);
+        } while (pass.length);
+    };
+    sweepSet('live');
     const arcIds = db.prepare(`SELECT DISTINCT m.room_arcs_id_fk AS id
         FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
         WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NOT NULL`).all(roomId);
-    for (const { id } of arcIds) {
-        const rows = eventRows(roomId, id);
-        merged.push(...sweep(rows, scorer(rows)));
-    }
+    for (const { id } of arcIds) sweepSet(id);
     return merged;
 }
