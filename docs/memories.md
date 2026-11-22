@@ -55,7 +55,7 @@ memory (memories)  -- standalone entity; no room/card FKs
 Injection at generation time (see `generateReply`):
 1. Shared room memories (no `memory_cards` row, trigger-filtered, budget-capped).
 2. This card's own memories (linked via `memory_cards`, trigger-filtered, budget-capped against remaining budget).
-3. Budget = `rooms.mem_budget` tokens.
+3. Budget = `mem_budget` on the room's followed `mem_profiles` row.
 
 ## Ownership & permissions
 
@@ -63,7 +63,7 @@ Injection at generation time (see `generateReply`):
 |---|---|---|
 | Create | User (via UI/API) | System (extraction) |
 | Read | Room members / card owners | Room members |
-| Edit content/type/triggers | Card owner or room member | No (read-only; regenerate via extraction) |
+| Edit content/type/triggers | Card owner or room member | Room member |
 | Delete | Card owner or room member | Room member (or auto-capped) |
 | Move between scopes (card ↔ shared) | User (via move) | No |
 
@@ -130,21 +130,21 @@ flowchart TD
 | `/api/room/memsettings` | POST | room owner only | `{room, memProfile}`. Point the room at one of the owner's own `mem_profiles` (0 clears). |
 | `/api/lastmem?room=` | GET | user | Latest `origin='smart'` memory in room. |
 
-## Known issues to fix (tracked)
+## Known issues
 
-1. `/api/memories/delete`, `/triggers`, `/move` read `b.world_books_id_pk` instead of `b.id` — mismatched with frontend. Fix to `b.id`.
-2. `/api/memories/triggers` filters by `rooms_id_pk` instead of `memories_id_pk` — would update all memories in a room. Fix filter.
-3. No ownership/auth checks on memory endpoints or memsettings. Add per the table above.
-4. Smart extraction stores everything as shared (strips `[Name]`) — acceptable per design; document it.
-5. ~~Extraction profile (`set_profile`) not persisted~~ — resolved: `extraction_api_profiles_id_fk` on the memory profile is used, and it must belong to the room owner (no fallback).
-6. `POST /api/memories` doesn't accept `type`/`triggers` from frontend.
-7. Consider adding `updated` timestamp and `owner_users_id_fk` for audit.
+Tracked on GitHub rather than in this doc — see the
+[issue list](https://github.com/XanthiaJo/BOLLOCKS/issues). The historical
+list that used to live here was stale on review: the `world_books_id_pk`
+fallback ([#149](https://github.com/XanthiaJo/BOLLOCKS/issues/149)) and the
+`updated`/`owner` audit columns ([#150](https://github.com/XanthiaJo/BOLLOCKS/issues/150))
+are still open; the auth gaps, trigger filter, `set_profile`, and
+`type`/`triggers` acceptance were all fixed since.
 
 ## Open design questions
 
 - Should permanent card memories be visible across rooms if the same card is in multiple rooms? Currently scoped per room. Leaning: keep per-room (matches smart memories; avoids cross-room leakage).
 - Should smart memories ever be attributed to a character? Decided no — room-scoped only, to avoid ambiguity. Users can promote manually.
-- Should there be a "global character memory" (ST-style)? Deferred; would need a memory with no `room_memories` link + UI scope selector.
+- "Global character memory" (ST-style) — deferred, tracked as [#144](https://github.com/XanthiaJo/BOLLOCKS/issues/144).
 
 ## Canon & arcs
 
@@ -188,7 +188,7 @@ the room's live events by IDF-weighted trigger overlap (`memdedupe.js`,
 shared rare words count, ubiquitous room vocabulary doesn't) and scores
 above `DEDUPE_MIN` chain the same way — `POST /api/memories/dedupe`
 re-runs that sweep pairwise for cleanup. When the scorer can't see a
-retelling (fully paraphrased triggers), drag one live card onto another
+retelling (fully paraphrased triggers — [#141](https://github.com/XanthiaJo/BOLLOCKS/issues/141) tracks an LLM consolidation pass), drag one live card onto another
 on the Memories page — `POST /api/memories/link` merges the two chains
 with the newest-`created` head staying live. The inverse works too:
 drag a dimmed history card out of a chain and `POST /api/memories/unlink`
@@ -280,9 +280,8 @@ reaches context exactly the way a spoken line does.
 ### Schema
 
 ```sql
--- canon is "no memory_triggers rows" — no flag column. A user_version=8
--- migration clears triggers off rows from the old canon=1 era so they
--- stay always-injected; the column itself is then dropped.
+-- canon is "no memory_triggers rows" — no flag column (the old canon=1
+-- era predates the schema baseline; see the CREATE TABLE block in db.js).
 ALTER TABLE mem_profiles ADD COLUMN mem_canon_budget INTEGER DEFAULT 800;
 
 CREATE TABLE IF NOT EXISTS room_arcs (
@@ -318,10 +317,19 @@ ALTER TABLE memories ADD COLUMN superseded_by_memories_id_fk INTEGER
 ALTER TABLE memories ADD COLUMN last_fired_messages_id_fk INTEGER;
 ALTER TABLE memories ADD COLUMN last_fired_at TEXT;
 ALTER TABLE mem_profiles ADD COLUMN mem_prune_messages INTEGER DEFAULT 0;
+
+-- Arc folding (smart rows consolidate under their thread) + manual curation:
+ALTER TABLE memories ADD COLUMN room_arcs_id_fk INTEGER
+    REFERENCES room_arcs(room_arcs_id_pk) ON DELETE SET NULL;
+ALTER TABLE memories ADD COLUMN user_sorted INTEGER DEFAULT 0;
+-- 1 = drag-arranged by a user; excluded from dedupe sweeps in both roles
 ```
 
-All additive in `migrateSchema()`; the new `mem_*` columns ride
-`MEM_PROFILE_FIELDS`; `room_arcs` is covered by `deleteRoomCascade`.
+These ALTERs document the additions column-by-column; the canonical
+shape lives in the `CREATE TABLE` block at the top of `db.js` (the schema
+baseline — pre-baseline migration machinery was retired at `user_version` 8).
+New `mem_*` columns ride `MEM_PROFILE_FIELDS`; `room_arcs` is covered by
+`deleteRoomCascade`.
 
 ### Canon (injection-only, no extra LLM calls)
 
@@ -393,7 +401,7 @@ correctly.
   injecting every turn" critique — keyword gating stays the relevance
   mechanism, canon is just its absence.
 - Arc `summary` overwrite vs. append — overwrite for now (one line per arc,
-  cheap injection); a beats timeline would need its own cap.
+  cheap injection); a beats timeline is tracked as [#145](https://github.com/XanthiaJo/BOLLOCKS/issues/145).
 - `arc_api_profiles_id_fk` — now drives `consolidateArc` (chapter summaries
-  on close), with `extraction_api_profiles_id_fk` as fallback. Still unused
-  for a separate arc *extraction* pass; add if tag-folding proves unreliable.
+  on close), with `extraction_api_profiles_id_fk` as fallback. A separate
+  arc *extraction* pass is conditional work: [#146](https://github.com/XanthiaJo/BOLLOCKS/issues/146).

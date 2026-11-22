@@ -2,8 +2,10 @@
 
 Where the database stands, what's worth changing, and in what order.
 The runtime schema is mostly well-normalized — the "bonkers" impression
-comes from `migrateSchema()`, a ~500-line fossil record of every shape
-the DB has ever had. Proposals below are staged by value-vs-risk.
+came from `migrateSchema()`, a ~500-line fossil record of every shape
+the DB had ever had — now retired (see Stage 3): the `CREATE TABLE`
+block is the baseline and `migrateSchema()` starts fresh at
+`user_version` 8. Proposals below are staged by value-vs-risk.
 
 ## What's already fine
 
@@ -79,19 +81,16 @@ stay as safety nets.
 
 ## Stage 3 — optional / cosmetic
 
-- **Room extraction bookkeeping** (`mem_last_messages_id_fk`,
-  `mem_refresh_count`): single-valued pointers on `rooms`, technically
-  fine, but would sit more honestly in a `room_state(room_id, key, value)`
-  or on `room_memories`-adjacent state. Low value either way.
-- **Index audit**: junction PKs cover `(room, member)` order; queries
-  filtering by the second column alone (e.g. "all rooms card X sits in")
-  rely on SQLite auto-indexes. Worth a `EXPLAIN QUERY PLAN` pass on the
-  hot reads; add reverse indexes only where a scan shows.
-- **`migrateSchema()` consolidation**: the real readability win. Each
-  table could converge via a single "current shape" rebuild guarded by
-  column checks, rather than N sequential historical rebuilds
-  (`members_new`, `members_new2`, `world_entries_new3`…). Bigger diff,
-  mostly cosmetic — only worth it the next time a rebuild is touched.
+Tracked as [#93](https://github.com/XanthiaJo/BOLLOCKS/issues/93): a
+`room_state` table for extraction bookkeeping on `rooms`, and an
+index audit on the junction tables.
+- [x] **`migrateSchema()` consolidation** — done. The fossil record
+  (every historical `*_new` rebuild, the `REN` rename map, uv-gated
+  data fixes) was deleted outright: the top `CREATE TABLE` block now
+  declares the live schema directly and `migrateSchema()` is a fresh
+  baseline at `user_version` 8. New changes go in both places. This
+  intentionally drops upgrades from pre-baseline DBs — acceptable
+  because only we run this app; the old machinery is in git history.
 
 ## Explicit non-goals
 

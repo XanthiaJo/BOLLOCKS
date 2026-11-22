@@ -61,18 +61,7 @@ async function load(){
   const rm=(rooms||[]).find(r=>r.id===ROOM);
   roomName=rm?.name||'Chat';
   // Smart tab: picker showing which profile this chat follows.
-  const followed=(rm?.mem_profiles_id_fk)&&(memProfiles.find(x=>x.mem_profiles_id_pk===rm.mem_profiles_id_fk))||null;
-  const mprofOpts=(memProfiles||[]).map(p=>`<option value="${p.mem_profiles_id_pk}">${esc(p.name)}</option>`).join('');
-  const mprofVal=String(rm?.mem_profiles_id_fk ?? 0);
-  // Non-owners can't see the owner's profile list — show the followed name only.
-  const followedName=followed?.name||rm?.mem_profile_name||null;
-  $('smart_mprof').innerHTML=rm?.is_owner?`<option value="0">Disabled</option>`+mprofOpts:`<option>${esc(followedName||'Disabled')}</option>`;
-  $('smart_mprof').value=mprofVal;
-  $('smart_mprof_hint').textContent=rm?.is_owner
-    ? (followed?`This chat follows "${followed.name}" — edit it on the Memory profiles page.`
-        :memProfiles.length?'Smart memory is off — pick a profile to enable.':'No profiles yet — create one on the Memory profiles page.')
-    : (followedName?`This chat follows "${followedName}". `:'Smart memory is off. ')+'Only the room owner can change the memory profile.';
-  $('smart_mprof').disabled=!rm?.is_owner;
+  renderMprofPicker(rm,memProfiles);
   $('rchat').innerHTML=(rooms||[]).map(r=>
     rprofRow({name:esc(r.name),meta:'story threads',sel:r.id===ROOM,onclick:`pickRoom(${r.id})`})
     ).join('')||'<small>No chats yet.</small>';

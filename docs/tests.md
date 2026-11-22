@@ -127,15 +127,13 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 - `GET /api/avatar` serves any card's avatar to any logged-in user (no room scoping — images aren't sensitive and `<img>` can't send headers).
 - `GET /api/users` lists all handles to any logged-in user — needed by the member-invite picker; handles aren't secret.
 - World books are readable by everyone (the list is a shared resource); only *writing* into a book is owner-scoped.
-- "Admin" is defined as the first registered user (`MIN(users_id_pk)`) — there is no `is_admin` column yet.
+- `users.admin` is a real column now (multi-admin shipped) — the first registered user is still backfilled as admin.
 
 ## Deliberately not covered
 
-- [ ] Real LLM output — the mock endpoint covers the request/response contract deterministically; a real-model check belongs in a manual smoke script, not CI
-- [ ] `maybeSummarize` cadence edge cases (context-threshold trigger, per-type caps, watermark retry on failure) — extraction itself is covered; the gating branches aren't
-- [ ] Browser-side behavior (401→login redirects, localStorage) — needs a DOM; asserted indirectly via contract tests
-- [ ] `scripts/` maintenance utilities (interactive, need SSH/live server)
-- [ ] Theme/CSS correctness — no visual testing infrastructure
+Tracked as [#147](https://github.com/XanthiaJo/BOLLOCKS/issues/147): real
+LLM output, `maybeSummarize` cadence edge cases, browser-side behavior,
+`scripts/` utilities, theme/CSS correctness.
 
 ## Running
 

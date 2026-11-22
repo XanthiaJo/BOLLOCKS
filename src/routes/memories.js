@@ -105,6 +105,7 @@ export default {
     // `created` stays live, the other head supersede-points at it.
     'POST /api/memories/link': async (req, res, u) => {
         const b = await readBody(req);
+        if (!b.id || !b.target) return send(res, 400, { error: 'id and target required' });
         const row = db.prepare(MEMROW);
         const a = row.get(b.id), t = row.get(b.target);
         if (!a || !t) return send(res, 404, { error: 'no memory' });
@@ -124,6 +125,7 @@ export default {
     // With `target`, the row instead re-points under target's chain head.
     'POST /api/memories/unlink': async (req, res, u) => {
         const b = await readBody(req);
+        if (!b.id) return send(res, 400, { error: 'id required' });
         const row = db.prepare(MEMROW);
         const m = row.get(b.id);
         if (!m) return send(res, 404, { error: 'no memory' });

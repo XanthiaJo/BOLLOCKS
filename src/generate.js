@@ -15,6 +15,19 @@ function logPrompt(roomId, cardId, kind, reqBody, text, usage) {
 }
 const tok = s => Math.ceil((s || '').length / 4); // rough chars/4 estimate
 
+// POST /chat/completions — one place for the connection boilerplate
+// (url normalize, bearer key, custom headers). Callers keep their own
+// .ok handling since failures mean different things per caller.
+const llmFetch = (conn, reqBody) => fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
+        ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })(),
+    },
+    body: JSON.stringify(reqBody),
+});
+
 // Built-in extraction prompt, used when a profile leaves its template
 // blank. The triggers suffix is appended only to the built-in prompt.
 export const MEM_EXTRACT_PROMPT = `You extract lasting memories from roleplay chat logs. All memories are shared with the whole chat.
@@ -46,7 +59,7 @@ export const MEM_STATE_PROMPT = `You track the current scene state of a roleplay
 Rules: exactly one entry per subject — the value IS the current truth and replaces whatever was true before. Carry unchanged subjects forward with their exact keys so the diff stays clean. Snapshot, not history — no events, no past states. System lines — "Ruling: …" decisions and "… rolls … → N" dice results — are authoritative outcomes. When participants disagree about what is true, the most recent message wins. If nothing is trackable, reply {}. Output only the JSON object, no prose.`;
 
 // Fields a memory profile can override on a room's mem_* settings.
-const MEM_PROFILE_FIELDS = ['mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
+export const MEM_PROFILE_FIELDS = ['mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
     'mem_max_event', 'mem_max_relationship', 'mem_max_preference', 'mem_extraction_prompt',
     'mem_context_threshold', 'mem_response_length', 'mem_gen_budget', 'mem_unlimited',
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
@@ -387,15 +400,7 @@ export async function generateReply(roomId, card) {
         temperature: 0.8,
         max_tokens: conn.max_response || 2048,
     };
-    const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
-            ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })(),
-        },
-        body: JSON.stringify(reqBody),
-    });
+    const resp = await llmFetch(conn, reqBody);
     if (!resp.ok) throw new Error(`AI ${resp.status}: ${await resp.text()}`);
     const data = await resp.json();
     let text = data?.choices?.[0]?.message?.content?.trim();
@@ -499,12 +504,7 @@ export async function maybeSummarize(roomId) {
         ],
         temperature: 0.3, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
     };
-    const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
-            ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })() },
-        body: JSON.stringify(reqBody),
-    });
+    const resp = await llmFetch(conn, reqBody);
     if (!resp.ok) return;
     const data = await resp.json();
     const text = data?.choices?.[0]?.message?.content?.trim() || '';
@@ -698,12 +698,7 @@ async function maybeUpdateState(roomId, mem, conn) {
         temperature: 0.2, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
     };
     try {
-        const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
-                ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })() },
-            body: JSON.stringify(reqBody),
-        });
+        const resp = await llmFetch(conn, reqBody);
         if (!resp.ok) return;
         const data = await resp.json();
         const text = data?.choices?.[0]?.message?.content?.trim() || '';
@@ -798,12 +793,7 @@ export async function consolidateArc(roomId, arcId) {
             ],
             temperature: 0.3, max_tokens: 300,
         };
-        const resp = await fetch(`${conn.apiUrl.replace(/\/$/, '')}/chat/completions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(conn.key ? { Authorization: `Bearer ${conn.key}` } : {}),
-                ...(() => { try { return JSON.parse(conn.headers || '{}'); } catch { return {}; } })() },
-            body: JSON.stringify(reqBody),
-        });
+        const resp = await llmFetch(conn, reqBody);
         if (resp.ok) {
             const summary = (await resp.json())?.choices?.[0]?.message?.content?.trim();
             if (summary) {

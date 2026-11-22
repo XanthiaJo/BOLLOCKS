@@ -98,6 +98,11 @@ function parseRouter() {
                 ...[...body.matchAll(/\bb\.([A-Za-z_$][\w$]*)/g)].map(x => x[1]),
                 ...[...body.matchAll(/\b(?:q|searchParams)\.get\(\s*['"]([^'"]+)['"]/g)].map(x => x[1]),
             ]);
+            // memArgs(b) reads the body through the MEM_VALS map — follow it.
+            if (/\bmemArgs\(\s*b\s*\)/.test(body) && src.includes('const MEM_VALS')) {
+                const vals = src.slice(src.indexOf('const MEM_VALS'), src.indexOf('const memArgs'));
+                for (const m of vals.matchAll(/\bb\.([A-Za-z_$][\w$]*)/g)) reads.add(m[1]);
+            }
             const dynamic = /\bb\[/.test(body) || /\{\s*[^}]*\}\s*=\s*b\b/.test(body);
             routes.set(`${m[1]} ${m[2]}`, { reads, dynamic });
         });
