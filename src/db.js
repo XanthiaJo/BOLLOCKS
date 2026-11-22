@@ -282,6 +282,8 @@ export function seed() {
         if (!db.prepare('SELECT users_id_pk AS id FROM users WHERE handle=?').get(h))
             createUser(h, 'changeme');
     }
+    // The seeded room needs an owner or nobody can touch its settings.
+    db.prepare('UPDATE rooms SET owner_users_id_fk=(SELECT users_id_pk FROM users ORDER BY users_id_pk LIMIT 1) WHERE owner_users_id_fk IS NULL').run();
     // Only auto-join the test users on a fresh install (no humans anywhere).
     const memberFor = (uid, handle) => {
         let pc = db.prepare('SELECT cards_id_pk FROM cards WHERE owner_users_id_fk=? AND is_persona=1').get(uid)?.cards_id_pk;
