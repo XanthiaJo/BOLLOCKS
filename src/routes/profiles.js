@@ -1,7 +1,28 @@
 // Connection routes: API profiles, memory profiles, /models proxy.
 import { db } from '../db.js';
 import { send, readBody } from '../lib/util.js';
-import { MEM_EXTRACT_PROMPT, MEM_STATE_PROMPT, PROMPT_BLOCKS } from '../generate.js';
+import { MEM_EXTRACT_PROMPT, MEM_STATE_PROMPT, MEM_PROFILE_FIELDS, PROMPT_BLOCKS } from '../generate.js';
+
+// mem_* column → request value; MEM_PROFILE_FIELDS order drives the
+// generated INSERT/UPDATE column lists so they can never drift apart.
+const MEM_VALS = {
+    mem_every: b => b.every ?? 10, mem_budget: b => b.budget ?? 800,
+    mem_max: b => b.max ?? 50, mem_max_fact: b => b.maxFact ?? 50,
+    mem_max_event: b => b.maxEvent ?? 50, mem_max_relationship: b => b.maxRel ?? 50,
+    mem_max_preference: b => b.maxPref ?? 50, mem_extraction_prompt: b => b.extractionPrompt || '',
+    mem_context_threshold: b => b.contextThreshold ?? 80, mem_response_length: b => b.responseLength ?? 2000,
+    mem_gen_budget: b => b.genBudget ?? 2000, mem_unlimited: b => b.unlimited ? 1 : 0,
+    mem_unified: b => (b.unified ?? 1) ? 1 : 0, mem_triggers: b => b.triggers ? 1 : 0,
+    mem_autotune: b => b.autotune ? 1 : 0, mem_refresh: b => b.refresh ?? 1,
+    mem_activity: b => b.activity ? 1 : 0, extraction_api_profiles_id_fk: b => b.profileId || null,
+    mem_canon_budget: b => b.canonBudget ?? 800, mem_max_arcs: b => b.maxArcs ?? 10,
+    mem_arc_budget: b => b.arcBudget ?? 700, arc_api_profiles_id_fk: b => b.arcProfileId || null,
+    mem_state: b => b.state ? 1 : 0, mem_state_every: b => b.stateEvery ?? 1,
+    mem_max_state: b => b.maxState ?? 30, mem_prune_messages: b => b.pruneMessages ?? 50,
+    mem_state_budget: b => b.stateBudget ?? 400, mem_state_prompt: b => b.statePrompt || '',
+    mem_readonly: b => b.readonly ? 1 : 0,
+};
+const memArgs = b => MEM_PROFILE_FIELDS.map(f => MEM_VALS[f](b));
 
 export default {
     'POST /api/models': async (req, res, u) => {
@@ -72,44 +93,17 @@ export default {
     'POST /api/memprofiles': async (req, res, u) => {
         const b = await readBody(req);
         if (!b.name) return send(res, 400, { error: 'name required' });
-        const vals = [b.every ?? 10, b.budget ?? 800, b.max ?? 50,
-            b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
-            b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
-            b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
-            b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId || null,
-            b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId || null,
-            b.state ? 1 : 0, b.stateEvery ?? 1, b.maxState ?? 30, b.stateBudget ?? 400, b.statePrompt || '',
-            b.readonly ? 1 : 0, b.pruneMessages ?? 50];
-        const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,mem_every,mem_budget,mem_max,
-            mem_max_fact,mem_max_event,mem_max_relationship,mem_max_preference,mem_extraction_prompt,
-            mem_context_threshold,mem_response_length,mem_gen_budget,mem_unlimited,mem_unified,mem_triggers,
-            mem_autotune,mem_refresh,mem_activity,extraction_api_profiles_id_fk,
-            mem_canon_budget,mem_max_arcs,mem_arc_budget,arc_api_profiles_id_fk,
-            mem_state,mem_state_every,mem_max_state,mem_state_budget,mem_state_prompt,mem_readonly,mem_prune_messages)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-            .run(u.users_id_pk, b.name, ...vals).lastInsertRowid;
+        const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,${MEM_PROFILE_FIELDS.join(',')})
+            VALUES (?,?${',?'.repeat(MEM_PROFILE_FIELDS.length)})`)
+            .run(u.users_id_pk, b.name, ...memArgs(b)).lastInsertRowid;
         send(res, 200, { id });
     },
     'POST /api/memprofiles/update': async (req, res, u) => {
         const b = await readBody(req);
-        db.prepare(`UPDATE mem_profiles SET name=COALESCE(NULLIF(?,''),name), mem_every=?, mem_budget=?, mem_max=?,
-            mem_max_fact=?, mem_max_event=?, mem_max_relationship=?, mem_max_preference=?,
-            mem_extraction_prompt=?, mem_context_threshold=?, mem_response_length=?,
-            mem_gen_budget=?, mem_unlimited=?, mem_unified=?, mem_triggers=?,
-            mem_autotune=?, mem_refresh=?, mem_activity=?, extraction_api_profiles_id_fk=?,
-            mem_canon_budget=?, mem_max_arcs=?, mem_arc_budget=?, arc_api_profiles_id_fk=?,
-            mem_state=?, mem_state_every=?, mem_max_state=?, mem_state_budget=?, mem_state_prompt=?,
-            mem_readonly=?, mem_prune_messages=?
+        db.prepare(`UPDATE mem_profiles SET name=COALESCE(NULLIF(?,''),name),
+            ${MEM_PROFILE_FIELDS.map(f => f + '=?').join(',')}
             WHERE mem_profiles_id_pk=? AND users_id_fk=?`)
-            .run(String(b.name ?? '').trim(), b.every ?? 10, b.budget ?? 800, b.max ?? 50,
-                b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
-                b.extractionPrompt || '', b.contextThreshold ?? 80, b.responseLength ?? 2000,
-                b.genBudget ?? 2000, b.unlimited ? 1 : 0, (b.unified ?? 1) ? 1 : 0, b.triggers ? 1 : 0,
-                b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId || null,
-                b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId || null,
-                b.state ? 1 : 0, b.stateEvery ?? 1, b.maxState ?? 30, b.stateBudget ?? 400, b.statePrompt || '',
-                b.readonly ? 1 : 0, b.pruneMessages ?? 50,
-                b.id, u.users_id_pk);
+            .run(String(b.name ?? '').trim(), ...memArgs(b), b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
     'POST /api/memprofiles/delete': async (req, res, u) => {

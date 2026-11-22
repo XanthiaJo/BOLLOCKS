@@ -46,6 +46,7 @@ export default [
         draftFields: "readonly",
         fillFields: "readonly",
         trigList: "readonly",
+        renderMprofPicker: "readonly",
       },
     },
     rules: {

@@ -314,6 +314,26 @@ function mpFlashSaved(msg = 'Saved') {
     t._t = setTimeout(() => t.classList.remove('show'), 1600);
 }
 
+/* Memory-profile picker — the "which profile does this chat follow"
+   select + hint shared by the Memories and Stories pages. Renders into
+   #smart_mprof / #smart_mprof_hint; the room owner picks from their own
+   profiles, everyone else just sees the followed name. */
+function renderMprofPicker(rm, memProfiles) {
+    const escP = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const followed = (rm?.mem_profiles_id_fk) && (memProfiles.find(x => x.mem_profiles_id_pk === rm.mem_profiles_id_fk)) || null;
+    const mprofOpts = (memProfiles || []).map(p => `<option value="${p.mem_profiles_id_pk}">${escP(p.name)}</option>`).join('');
+    // Non-owners can't see the owner's profile list — show the followed name only.
+    const followedName = followed?.name || rm?.mem_profile_name || null;
+    const sel = document.getElementById('smart_mprof');
+    sel.innerHTML = rm?.is_owner ? `<option value="0">Disabled</option>` + mprofOpts : `<option>${escP(followedName || 'Disabled')}</option>`;
+    sel.value = String(rm?.mem_profiles_id_fk ?? 0);
+    document.getElementById('smart_mprof_hint').textContent = rm?.is_owner
+        ? (followed ? `This chat follows "${followed.name}" — edit it on the Memory profiles page.`
+            : memProfiles.length ? 'Smart memories are off — pick a profile to enable.' : 'No profiles yet — create one on the Memory profiles page.')
+        : (followedName ? `This chat follows "${followedName}". ` : 'Smart memories are off. ') + 'Only the room owner can change the memory profile.';
+    sel.disabled = !rm?.is_owner;
+}
+
 /* Sidebar picker row — the single place this markup is built. All settings
    pages render .rprof rows through here so shape changes happen once.
      name/meta/img/btns are raw HTML (escape dynamic text at the call site);

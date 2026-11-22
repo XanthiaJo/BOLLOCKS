@@ -140,6 +140,70 @@ export function activeProfile(userId) {
     return s.apiUrl ? s : null;
 }
 
+// Canonical column lists for the table rebuilds in migrateSchema — name
+// and DDL live in one string per column so the CREATE and the copy list
+// can't drift apart (a missing entry once dropped a column on rebuild).
+const ARCS_DDL = [
+    'room_arcs_id_pk INTEGER PRIMARY KEY AUTOINCREMENT',
+    'rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk)',
+    'title TEXT NOT NULL',
+    "summary TEXT DEFAULT ''",
+    "status TEXT DEFAULT 'open' CHECK(status IN ('open','resolved','dropped'))",
+    "origin TEXT DEFAULT 'user' CHECK(origin IN ('user','smart'))",
+    'opened_messages_id_fk INTEGER REFERENCES messages(messages_id_pk) ON DELETE SET NULL',
+    'closed_messages_id_fk INTEGER REFERENCES messages(messages_id_pk) ON DELETE SET NULL',
+    "created TEXT DEFAULT (datetime('now'))",
+    "updated TEXT DEFAULT (datetime('now'))",
+];
+const ROOM_DDL = [
+    'rooms_id_pk INTEGER PRIMARY KEY',
+    "name TEXT NOT NULL DEFAULT ''",
+    "ai_trigger TEXT DEFAULT 'manual'",
+    "bg TEXT DEFAULT ''",
+    'mem_last_messages_id_fk INTEGER DEFAULT 0', // stale-tolerant pointer; deliberately no REFERENCES
+    'mem_refresh_count INTEGER DEFAULT 0',
+    'mem_extract_count INTEGER DEFAULT 0',
+    'mem_profiles_id_fk INTEGER REFERENCES mem_profiles(mem_profiles_id_pk) ON DELETE SET NULL',
+    'max_context INTEGER DEFAULT 0',
+    'owner_users_id_fk INTEGER REFERENCES users(users_id_pk)',
+];
+const MP_DDL = [
+    'mem_profiles_id_pk INTEGER PRIMARY KEY AUTOINCREMENT',
+    'users_id_fk INTEGER NOT NULL REFERENCES users(users_id_pk)',
+    'name TEXT NOT NULL',
+    'mem_every INTEGER DEFAULT 10',
+    'mem_budget INTEGER DEFAULT 800',
+    'mem_max INTEGER DEFAULT 50',
+    'mem_max_fact INTEGER DEFAULT 15',
+    'mem_max_event INTEGER DEFAULT 15',
+    'mem_max_relationship INTEGER DEFAULT 15',
+    'mem_max_preference INTEGER DEFAULT 15',
+    "mem_extraction_prompt TEXT DEFAULT ''",
+    'mem_context_threshold INTEGER DEFAULT 80',
+    'mem_response_length INTEGER DEFAULT 2000',
+    'mem_gen_budget INTEGER DEFAULT 2000',
+    'mem_unlimited INTEGER DEFAULT 0',
+    'mem_unified INTEGER DEFAULT 1',
+    'mem_triggers INTEGER DEFAULT 1',
+    'mem_autotune INTEGER DEFAULT 0',
+    'mem_refresh INTEGER DEFAULT 1',
+    'mem_activity INTEGER DEFAULT 0',
+    'extraction_api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk) ON DELETE SET NULL',
+    'mem_canon_budget INTEGER DEFAULT 800',
+    'mem_max_arcs INTEGER DEFAULT 10',
+    'mem_arc_budget INTEGER DEFAULT 700',
+    'arc_api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk) ON DELETE SET NULL',
+    'mem_state INTEGER DEFAULT 0',
+    'mem_state_every INTEGER DEFAULT 1',
+    'mem_max_state INTEGER DEFAULT 30',
+    'mem_state_budget INTEGER DEFAULT 400',
+    "mem_state_prompt TEXT DEFAULT ''",
+    'mem_readonly INTEGER DEFAULT 0',
+    'mem_prune_messages INTEGER DEFAULT 0',
+];
+const colNames = ddl => ddl.map(d => d.split(' ')[0]);
+const tableSql = (name, ddl, ifNotExists) => `CREATE TABLE${ifNotExists ? ' IF NOT EXISTS' : ''} ${name} (${ddl.join(',')})`;
+
 /** Schema touch-ups for existing DBs (CREATE TABLE only applies on fresh). */
 export function migrateSchema() {
     const ccols2 = db.prepare('PRAGMA table_info(cards)').all().map(c => c.name);
@@ -328,18 +392,7 @@ export function migrateSchema() {
     // Story arcs: room-scoped open/resolved threads tracked by extraction
     // ([arc-open]/[arc]/[arc-close] tags) and injected while open.
     // origin: 'user' (opened from the Stories page) vs 'smart' (extraction).
-    db.exec(`CREATE TABLE IF NOT EXISTS room_arcs (
-        room_arcs_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-        rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
-        title TEXT NOT NULL,
-        summary TEXT DEFAULT '',
-        status TEXT DEFAULT 'open' CHECK(status IN ('open','resolved','dropped')),
-        origin TEXT DEFAULT 'user' CHECK(origin IN ('user','smart')),
-        opened_messages_id_fk INTEGER REFERENCES messages(messages_id_pk) ON DELETE SET NULL,
-        closed_messages_id_fk INTEGER REFERENCES messages(messages_id_pk) ON DELETE SET NULL,
-        created TEXT DEFAULT (datetime('now')),
-        updated TEXT DEFAULT (datetime('now'))
-    )`);
+    db.exec(tableSql('room_arcs', ARCS_DDL, true));
     if (!db.prepare('PRAGMA table_info(room_arcs)').all().map(c => c.name).includes('origin'))
         db.exec("ALTER TABLE room_arcs ADD COLUMN origin TEXT DEFAULT 'user'");
     // prompt_profiles: injection/prompt-assembly presets. prompt order moved
@@ -739,20 +792,10 @@ export function migrateSchema() {
     // Arc message anchors → nullable FKs (the arc survives its anchor
     // message being deleted).
     if (!sqlOf('room_arcs').includes('REFERENCES messages')) {
+        const acols = colNames(ARCS_DDL).join(',');
         db.exec(`PRAGMA foreign_keys=OFF;
-            CREATE TABLE room_arcs_new (
-                room_arcs_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-                rooms_id_fk INTEGER NOT NULL REFERENCES rooms(rooms_id_pk),
-                title TEXT NOT NULL,
-                summary TEXT DEFAULT '',
-                status TEXT DEFAULT 'open' CHECK(status IN ('open','resolved','dropped')),
-                origin TEXT DEFAULT 'user' CHECK(origin IN ('user','smart')),
-                opened_messages_id_fk INTEGER REFERENCES messages(messages_id_pk) ON DELETE SET NULL,
-                closed_messages_id_fk INTEGER REFERENCES messages(messages_id_pk) ON DELETE SET NULL,
-                created TEXT DEFAULT (datetime('now')),
-                updated TEXT DEFAULT (datetime('now')));
-            INSERT INTO room_arcs_new (room_arcs_id_pk,rooms_id_fk,title,summary,status,origin,opened_messages_id_fk,closed_messages_id_fk,created,updated)
-                SELECT room_arcs_id_pk,rooms_id_fk,title,summary,status,origin,opened_messages_id_fk,closed_messages_id_fk,created,updated FROM room_arcs;
+            ${tableSql('room_arcs_new', ARCS_DDL)};
+            INSERT INTO room_arcs_new (${acols}) SELECT ${acols} FROM room_arcs;
             DROP TABLE room_arcs; ALTER TABLE room_arcs_new RENAME TO room_arcs;
             PRAGMA foreign_keys=ON`);
     }
@@ -761,22 +804,10 @@ export function migrateSchema() {
     if (!sqlOf('rooms').includes('REFERENCES mem_profiles')) {
         // Copy only columns both shapes share — ancient rooms tables may
         // lack columns entirely (defaults fill the gaps).
-        const ROOM_COLS = ['rooms_id_pk', 'name', 'ai_trigger', 'bg', 'mem_last_messages_id_fk',
-            'mem_refresh_count', 'mem_extract_count', 'mem_profiles_id_fk', 'max_context', 'owner_users_id_fk'];
-        const rhave = ROOM_COLS.filter(c => colsOf('rooms').includes(c));
+        const rhave = colNames(ROOM_DDL).filter(c => colsOf('rooms').includes(c));
         const rsel = rhave.map(c => c === 'mem_profiles_id_fk' ? 'NULLIF(mem_profiles_id_fk,0)' : c).join(',');
         db.exec(`PRAGMA foreign_keys=OFF;
-            CREATE TABLE rooms_new (
-                rooms_id_pk INTEGER PRIMARY KEY,
-                name TEXT NOT NULL DEFAULT '',
-                ai_trigger TEXT DEFAULT 'manual',
-                bg TEXT DEFAULT '',
-                mem_last_messages_id_fk INTEGER DEFAULT 0, -- stale-tolerant pointer; deliberately no REFERENCES
-                mem_refresh_count INTEGER DEFAULT 0,
-                mem_extract_count INTEGER DEFAULT 0,
-                mem_profiles_id_fk INTEGER REFERENCES mem_profiles(mem_profiles_id_pk) ON DELETE SET NULL,
-                max_context INTEGER DEFAULT 0,
-                owner_users_id_fk INTEGER REFERENCES users(users_id_pk));
+            ${tableSql('rooms_new', ROOM_DDL)};
             INSERT INTO rooms_new (${rhave.join(',')}) SELECT ${rsel} FROM rooms;
             DROP TABLE rooms; ALTER TABLE rooms_new RENAME TO rooms;
             PRAGMA foreign_keys=ON`);
@@ -785,50 +816,10 @@ export function migrateSchema() {
     // switch); the extraction/arc api-profile pickers become real nullable
     // FKs; sentinel 0 → NULL.
     if (!sqlOf('mem_profiles').includes('REFERENCES api_profiles')) {
-        const MP_COLS = ['mem_profiles_id_pk', 'users_id_fk', 'name', 'mem_every', 'mem_budget',
-            'mem_max', 'mem_max_fact', 'mem_max_event', 'mem_max_relationship', 'mem_max_preference',
-            'mem_extraction_prompt', 'mem_context_threshold', 'mem_response_length', 'mem_gen_budget',
-            'mem_unlimited', 'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh',
-            'mem_activity', 'extraction_api_profiles_id_fk', 'mem_canon_budget', 'mem_max_arcs',
-            'mem_arc_budget', 'arc_api_profiles_id_fk', 'mem_state', 'mem_state_every',
-            'mem_max_state', 'mem_state_budget', 'mem_state_prompt', 'mem_readonly',
-            'mem_prune_messages'];
-        const mcols = MP_COLS.filter(c => colsOf('mem_profiles').includes(c));
+        const mcols = colNames(MP_DDL).filter(c => colsOf('mem_profiles').includes(c));
         const msel = mcols.map(c => (c === 'extraction_api_profiles_id_fk' || c === 'arc_api_profiles_id_fk') ? `NULLIF(${c},0)` : c).join(',');
         db.exec(`PRAGMA foreign_keys=OFF;
-            CREATE TABLE mem_profiles_new (
-                mem_profiles_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-                users_id_fk INTEGER NOT NULL REFERENCES users(users_id_pk),
-                name TEXT NOT NULL,
-                mem_every INTEGER DEFAULT 10,
-                mem_budget INTEGER DEFAULT 800,
-                mem_max INTEGER DEFAULT 50,
-                mem_max_fact INTEGER DEFAULT 15,
-                mem_max_event INTEGER DEFAULT 15,
-                mem_max_relationship INTEGER DEFAULT 15,
-                mem_max_preference INTEGER DEFAULT 15,
-                mem_extraction_prompt TEXT DEFAULT '',
-                mem_context_threshold INTEGER DEFAULT 80,
-                mem_response_length INTEGER DEFAULT 2000,
-                mem_gen_budget INTEGER DEFAULT 2000,
-                mem_unlimited INTEGER DEFAULT 0,
-                mem_unified INTEGER DEFAULT 1,
-                mem_triggers INTEGER DEFAULT 1,
-                mem_autotune INTEGER DEFAULT 0,
-                mem_refresh INTEGER DEFAULT 1,
-                mem_activity INTEGER DEFAULT 0,
-                extraction_api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk) ON DELETE SET NULL,
-                mem_canon_budget INTEGER DEFAULT 800,
-                mem_max_arcs INTEGER DEFAULT 10,
-                mem_arc_budget INTEGER DEFAULT 700,
-                arc_api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk) ON DELETE SET NULL,
-                mem_state INTEGER DEFAULT 0,
-                mem_state_every INTEGER DEFAULT 1,
-                mem_max_state INTEGER DEFAULT 30,
-                mem_state_budget INTEGER DEFAULT 400,
-                mem_state_prompt TEXT DEFAULT '',
-                mem_readonly INTEGER DEFAULT 0,
-                mem_prune_messages INTEGER DEFAULT 0);
+            ${tableSql('mem_profiles_new', MP_DDL)};
             INSERT INTO mem_profiles_new (${mcols.join(',')}) SELECT ${msel} FROM mem_profiles;
             DROP TABLE mem_profiles; ALTER TABLE mem_profiles_new RENAME TO mem_profiles;
             PRAGMA foreign_keys=ON`);
