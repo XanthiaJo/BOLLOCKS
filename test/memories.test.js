@@ -47,64 +47,134 @@ describe('memories', () => {
         await s.post('rooms/delete', { id: room });
         await s.post('cards/delete', { id: card });
     });
+
+    test('dedupe retires retold smart events under the newer telling', async () => {
+        const room = (await s.post('rooms', { name: 'Dedupe room' })).json.id;
+        const seed = async (content, triggers) => {
+            const id = (await s.post('memories', { room, content, type: 'event', triggers })).json.id;
+            await s.post('memories/update', { id, origin: 'smart' });
+            return id;
+        };
+        // Two tellings of one event share their rare trigger words; a
+        // distinct event and a user-authored row must stay untouched.
+        const oldTelling = await seed('A flapjack vanished from the bed overnight, leaving crumbs.', 'flapjack,crumbs,buddy,mystery');
+        const newTelling = await seed('Rackington named Blake the flapjack culprit after clearing Buddy.', 'flapjack,crumbs,blake,culprit');
+        const distinct = await seed('Buddy claimed the pillow by sitting on it.', 'pillow,claim');
+        const userMem = (await s.post('memories', { room, content: 'Karima baked the flapjack.', type: 'event', triggers: 'flapjack,crumbs' })).json.id;
+
+        const merged = (await s.post('memories/dedupe', { room })).json.merged;
+        assert.deepEqual(merged, [[oldTelling, newTelling]]);
+
+        const mems = (await s.get(`memories?card=-1&room=${room}`)).json.memories;
+        assert.equal(mems.find(m => m.id === oldTelling).superseded_by_memories_id_fk, newTelling);
+        assert.equal(mems.find(m => m.id === distinct).superseded_by_memories_id_fk, null);
+        assert.equal(mems.find(m => m.id === userMem).superseded_by_memories_id_fk, null);
+        await s.post('rooms/delete', { id: room });
+    });
+
+    test('link merges chains by created date regardless of drop direction', async () => {
+        const room = (await s.post('rooms', { name: 'Link room' })).json.id;
+        const seed = async content => (await s.post('memories', { room, content, type: 'event', triggers: 'x' })).json.id;
+        const sup = async id => (await s.get(`memories?card=-1&room=${room}`)).json.memories.find(m => m.id === id).superseded_by_memories_id_fk;
+
+        const older = await seed('Buddy napped on the bed.');
+        await new Promise(r => setTimeout(r, 1100)); // created is second-resolution
+        const newer = await seed('Buddy moved to the bowl.');
+
+        // Dragging the newer onto the older still leaves the newer live —
+        // `created` resolves order, not drop direction.
+        assert.equal((await s.post('memories/link', { id: newer, target: older })).status, 200);
+        assert.equal(await sup(older), newer);
+        assert.equal(await sup(newer), null);
+
+        // Merging chains: a head with a draft behind it re-points whole.
+        await new Promise(r => setTimeout(r, 1100));
+        const third = await seed('Buddy finally settled in the doorway.');
+        await s.post('memories/link', { id: newer, target: third });
+        assert.equal(await sup(newer), third);   // old head → new head
+        assert.equal(await sup(older), newer);   // draft keeps its own pointer
+        // Linking a superseded row re-resolves through its head — same
+        // chain now, so it's a no-op rather than a duplicate pointer.
+        assert.equal((await s.post('memories/link', { id: older, target: third })).status, 200);
+        assert.equal(await sup(older), newer);
+
+        // Dropping a card on itself is a no-op, not a tombstone.
+        const lone = await seed('Karima made fudge.');
+        assert.equal((await s.post('memories/link', { id: lone, target: lone })).status, 200);
+        assert.equal(await sup(lone), null);
+
+        // Drag-out: unlink detaches a superseded row back to live, and
+        // its draft keeps pointing at it (the head it built stays put).
+        assert.equal((await s.post('memories/unlink', { id: older })).status, 200);
+        assert.equal(await sup(older), null);
+        assert.equal(await sup(newer), third); // old chain unaffected
+        // Unlink with a target re-points the row under that chain's head.
+        assert.equal((await s.post('memories/unlink', { id: older, target: newer })).status, 200);
+        assert.equal(await sup(older), third); // newer's head is third
+        // Unlinking a live row is a no-op.
+        assert.equal((await s.post('memories/unlink', { id: lone })).status, 200);
+        assert.equal(await sup(lone), null);
+        await s.post('rooms/delete', { id: room });
+    });
+
+    test('user-sorted rows are invisible to the dedupe sweep', async () => {
+        const room = (await s.post('rooms', { name: 'Curated room' })).json.id;
+        const seed = async content => {
+            const id = (await s.post('memories', { room, content, type: 'event', triggers: 'fudge,rivalry' })).json.id;
+            await s.post('memories/update', { id, origin: 'smart' });
+            return id;
+        };
+        const sup = async id => (await s.get(`memories?card=-1&room=${room}`)).json.memories.find(m => m.id === id);
+        // Identical trigger vocab — every pair here would chain in a sweep.
+        const x1 = await seed('Buddy won the fudge.');
+        const x2 = await seed('Buddy claimed the fudge again.');
+        const y1 = await seed('Buddy scored the fudge.');
+        const y2 = await seed('Buddy took the fudge once more.');
+        // Hand-arrange the y pair: link then pull y1 back out — both stay
+        // flagged as user-sorted, which must immunise them from the sweep.
+        await s.post('memories/link', { id: y1, target: y2 });
+        await s.post('memories/unlink', { id: y1 });
+        assert.equal((await sup(y1)).user_sorted, 1);
+        const merged = (await s.post('memories/dedupe', { room })).json.merged;
+        assert.deepEqual(merged, [[x1, x2]]);
+        assert.equal((await sup(y1)).superseded_by_memories_id_fk, null);
+        assert.equal((await sup(y2)).superseded_by_memories_id_fk, null);
+        await s.post('rooms/delete', { id: room });
+    });
 });
 
 // Older builds re-add a `source` column to a migrated memories table (their
 // migrateSchema ALTERs it back when missing), leaving both source and origin.
 // The rebuild must keep an existing origin='smart' instead of re-deriving
 // everything from source — otherwise every smart row flattens to 'user'.
-test('memories rebuild preserves origin when source column is also present', async () => {
-    const dir = tmp('data');
-    fs.mkdirSync(path.join(dir), { recursive: true });
-    const db = new DatabaseSync(path.join(dir, 'app.db'));
-    db.exec(`CREATE TABLE memories (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-        content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')),
-        type TEXT DEFAULT 'fact', origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart')),
-        triggers TEXT DEFAULT '', source TEXT DEFAULT 'manual')`);
-    db.prepare("INSERT INTO memories (content,origin,source) VALUES ('smart fact','smart','manual'),('perm fact','user','manual'),('old auto','user','auto')").run();
-    db.close();
-
-    const srv = await boot(dir);
-    try {
-        const check = new DatabaseSync(path.join(dir, 'app.db'));
-        const rows = check.prepare('SELECT content,origin FROM memories').all();
-        check.close();
-        const by = Object.fromEntries(rows.map(r => [r.content, r.origin]));
-        assert.equal(by['smart fact'], 'smart');
-        assert.equal(by['perm fact'], 'user');
-        assert.equal(by['old auto'], 'smart');
-    } finally {
-        await srv.stop();
-    }
-});
-
-// The triggers comma-list column becomes memory_triggers rows (one per
-// keyword). The harvest must split, trim, lowercase, and drop the column.
-test('migration splits memories.triggers into memory_triggers rows', async () => {
+test('fresh DB boots with the canonical schema', async () => {
     const dir = tmp('data');
     fs.mkdirSync(dir, { recursive: true });
-    const db = new DatabaseSync(path.join(dir, 'app.db'));
-    db.exec(`CREATE TABLE memories (memories_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
-        content TEXT NOT NULL, created TEXT DEFAULT (datetime('now')), type TEXT DEFAULT 'fact',
-        origin TEXT NOT NULL DEFAULT 'user' CHECK(origin IN ('user','smart')),
-        triggers TEXT DEFAULT '')`);
-    db.exec(`INSERT INTO memories (content,triggers) VALUES
-        ('tea memory','Tea, Dr Pepper ,WEB SEARCH'),
-        ('quiet memory',''),
-        ('solo memory','bedtime')`);
-    db.close();
-
     const srv = await boot(dir);
     try {
         const check = new DatabaseSync(path.join(dir, 'app.db'));
-        const rows = check.prepare(`SELECT memories_id_fk AS id, word FROM memory_triggers WHERE memories_id_fk<=3 ORDER BY memories_id_fk, word`).all();
-        const cols = check.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
+        const cols = t => check.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
+        const mem = cols('memories');
+        for (const c of ['room_arcs_id_fk', 'state_key', 'superseded_by_memories_id_fk',
+            'last_fired_messages_id_fk', 'last_fired_at', 'user_sorted'])
+            assert.ok(mem.includes(c), `memories.${c}`);
+        const mp = cols('mem_profiles');
+        for (const c of ['mem_prune_messages', 'mem_readonly', 'extraction_api_profiles_id_fk',
+            'arc_api_profiles_id_fk', 'mem_state', 'mem_state_prompt'])
+            assert.ok(mp.includes(c), `mem_profiles.${c}`);
+        for (const legacy of ['auto_mem', 'mem_extraction_profile_id', 'mem_arc_profile_id'])
+            assert.ok(!mp.includes(legacy), `mem_profiles.${legacy} dropped`);
+        const rooms = cols('rooms');
+        for (const c of ['mem_profiles_id_fk', 'mem_last_messages_id_fk', 'mem_extract_count',
+            'mem_refresh_count', 'owner_users_id_fk'])
+            assert.ok(rooms.includes(c), `rooms.${c}`);
+        assert.ok(!rooms.includes('mem_last_messages_id'), 'legacy pointer dropped');
+        const msgs = cols('messages');
+        assert.ok(msgs.includes('supersedes_messages_id_fk'));
+        for (const t of ['room_arcs', 'memory_triggers', 'prompt_logs', 'prompt_profiles'])
+            assert.ok(check.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name=?`).get(t), t);
+        assert.equal(check.prepare('PRAGMA user_version').get().user_version, 8);
         check.close();
-        assert.deepEqual(rows.map(r => ({ ...r })), [
-            { id: 1, word: 'dr pepper' }, { id: 1, word: 'tea' }, { id: 1, word: 'web search' },
-            { id: 3, word: 'bedtime' },
-        ]);
-        assert.ok(!cols.includes('triggers'));
     } finally {
         await srv.stop();
     }

@@ -11,7 +11,7 @@ There are two kinds of memory, distinguished by `origin`:
 | Kind | `origin` | Created by | Scope | Lifetime |
 |---|---|---|---|---|
 | **Permanent** | `user` | User (always user-driven) | Room-shared or character (card) | Until user deletes it |
-| **Smart** | `smart` | AI extraction | **Room only** (shared) | Capped (`mem_max`); oldest auto dropped |
+| **Smart** | `smart` | AI extraction | **Room only** (shared) | Capped (`mem_max`) / dormant — auto-**retired**, never deleted |
 
 ### Permanent memories (user-driven)
 
@@ -32,7 +32,8 @@ There are two kinds of memory, distinguished by `origin`:
 - Extraction runs only through the room owner's configured extraction profile (`extraction_api_profiles_id_fk` on the memory profile). No fallback: if it is unset, missing, or belongs to someone other than the room owner, extraction is skipped.
 - **Smart memories belong to the chat (room) only** - they are always stored as shared room memories (no `memory_cards` row).
   - Rationale: deciding whether an extracted fact belongs to a specific character vs. the chat as a whole is ambiguous and error-prone. Keep smart memories room-scoped; users can promote a fact to a character's permanent memory manually if desired.
-- Capped to `mem_max` per room (oldest `origin='smart'` dropped). Permanent memories are never subject to the cap.
+- Capped to `mem_max` per room (oldest live `origin='smart'` rows **retire** — see Retirement below). Under cap pressure the room runs a **consolidation sweep first** (`dedupeRoom` — merges retold events into chains) so duplicates free slots before any real memory retires. Permanent memories are never subject to the cap.
+- **Dormancy pruning:** with `mem_prune_messages > 0` on the profile (new profiles default to 50; existing profiles stay 0/off after upgrade), a triggered smart memory that hasn't reached a prompt within the last N room messages retires itself. Injection stamps `last_fired_messages_id_fk` + `last_fired_at` on every memory that actually makes the prompt (budget-capped rows that never make the cut are precisely what the sweep retires). A memory gets the full window from creation before it can be retired. Canon (no triggers) is exempt — always injected by design — as are `state` rows, folded arc rows, and permanent memories.
 - Watermark (`mem_last_messages_id_fk`) advances only after a successful extraction.
 
 ## Scoping model
@@ -54,7 +55,7 @@ memory (memories)  -- standalone entity; no room/card FKs
 Injection at generation time (see `generateReply`):
 1. Shared room memories (no `memory_cards` row, trigger-filtered, budget-capped).
 2. This card's own memories (linked via `memory_cards`, trigger-filtered, budget-capped against remaining budget).
-3. Budget = `rooms.mem_budget` tokens.
+3. Budget = `mem_budget` on the room's followed `mem_profiles` row.
 
 ## Ownership & permissions
 
@@ -62,7 +63,7 @@ Injection at generation time (see `generateReply`):
 |---|---|---|
 | Create | User (via UI/API) | System (extraction) |
 | Read | Room members / card owners | Room members |
-| Edit content/type/triggers | Card owner or room member | No (read-only; regenerate via extraction) |
+| Edit content/type/triggers | Card owner or room member | Room member |
 | Delete | Card owner or room member | Room member (or auto-capped) |
 | Move between scopes (card ↔ shared) | User (via move) | No |
 
@@ -103,7 +104,7 @@ flowchart TD
     CheckInterval -- no --> Skip
     CheckInterval -- yes --> Extract["LLM extracts facts<br/>room owner's configured profile"]
     Extract --> StoreShared["INSERT as shared room memory<br/>(no memory_cards row)"]
-    StoreShared --> Cap["Cap to mem_max<br/>drop oldest auto"]
+    StoreShared --> Cap["Cap + dormancy sweep<br/>retire (tombstone), never delete"]
     Cap --> Watermark[Advance watermark]
     Watermark --> SmartList
 
@@ -129,21 +130,21 @@ flowchart TD
 | `/api/room/memsettings` | POST | room owner only | `{room, memProfile}`. Point the room at one of the owner's own `mem_profiles` (0 clears). |
 | `/api/lastmem?room=` | GET | user | Latest `origin='smart'` memory in room. |
 
-## Known issues to fix (tracked)
+## Known issues
 
-1. `/api/memories/delete`, `/triggers`, `/move` read `b.world_books_id_pk` instead of `b.id` — mismatched with frontend. Fix to `b.id`.
-2. `/api/memories/triggers` filters by `rooms_id_pk` instead of `memories_id_pk` — would update all memories in a room. Fix filter.
-3. No ownership/auth checks on memory endpoints or memsettings. Add per the table above.
-4. Smart extraction stores everything as shared (strips `[Name]`) — acceptable per design; document it.
-5. ~~Extraction profile (`set_profile`) not persisted~~ — resolved: `extraction_api_profiles_id_fk` on the memory profile is used, and it must belong to the room owner (no fallback).
-6. `POST /api/memories` doesn't accept `type`/`triggers` from frontend.
-7. Consider adding `updated` timestamp and `owner_users_id_fk` for audit.
+Tracked on GitHub rather than in this doc — see the
+[issue list](https://github.com/XanthiaJo/BOLLOCKS/issues). The historical
+list that used to live here was stale on review: the `world_books_id_pk`
+fallback ([#149](https://github.com/XanthiaJo/BOLLOCKS/issues/149)) and the
+`updated`/`owner` audit columns ([#150](https://github.com/XanthiaJo/BOLLOCKS/issues/150))
+are still open; the auth gaps, trigger filter, `set_profile`, and
+`type`/`triggers` acceptance were all fixed since.
 
 ## Open design questions
 
 - Should permanent card memories be visible across rooms if the same card is in multiple rooms? Currently scoped per room. Leaning: keep per-room (matches smart memories; avoids cross-room leakage).
 - Should smart memories ever be attributed to a character? Decided no — room-scoped only, to avoid ambiguity. Users can promote manually.
-- Should there be a "global character memory" (ST-style)? Deferred; would need a memory with no `room_memories` link + UI scope selector.
+- "Global character memory" (ST-style) — deferred, tracked as [#144](https://github.com/XanthiaJo/BOLLOCKS/issues/144).
 
 ## Canon & arcs
 
@@ -181,12 +182,34 @@ block (capped by `mem_state_budget`).
 **Supersede** = `memories.superseded_by_memories_id_fk` marks a smart
 memory retired by a newer one. The extraction prompt lists the room's
 current smart memories numbered; a bullet written `- [supersede N]
-new fact` stores the new memory and points the old row at it. Superseded
-rows stop injecting everywhere (memory block, canon, arc details), don't
-occupy the per-type/`mem_max` cap slots, and stay in the list with a
-`superseded` badge for audit. The FK is `ON DELETE SET NULL` — deleting
+new fact` stores the new memory and points the old row at it. Untagged
+retellings are caught anyway: each new smart `event` is compared against
+the room's live events by IDF-weighted trigger overlap (`memdedupe.js`,
+shared rare words count, ubiquitous room vocabulary doesn't) and scores
+above `DEDUPE_MIN` chain the same way — `POST /api/memories/dedupe`
+re-runs that sweep pairwise for cleanup. When the scorer can't see a
+retelling (fully paraphrased triggers — [#141](https://github.com/XanthiaJo/BOLLOCKS/issues/141) tracks an LLM consolidation pass), drag one live card onto another
+on the Memories page — `POST /api/memories/link` merges the two chains
+with the newest-`created` head staying live. The inverse works too:
+drag a dimmed history card out of a chain and `POST /api/memories/unlink`
+detaches it back to live (or re-points it under a target's head when
+dropped on another card). Hand-arranged rows get `user_sorted=1`, which
+makes them invisible to `dedupeNew`/`dedupeRoom` in both roles — the
+sweep never re-sorts what a user placed. Superseded rows stop injecting
+everywhere (memory block, canon, arc details), don't occupy the
+per-type/`mem_max` cap slots, and collapse under the replacement's
+`history ▸` toggle for audit. The FK is `ON DELETE SET NULL` — deleting
 the replacement revives the original. Only `origin='smart'` rows are
-offered as targets; user memories are never retired by extraction.
+offered or swept as targets; user memories are never retired.
+
+**Retirement** = the same tombstone (`superseded_by = self`) used when
+the *system* retires a memory rather than a newer version replacing it —
+cap overflow and dormancy pruning both retire this way instead of the
+old hard `DELETE`. Self-tombstoned rows leave every live query and sit
+in the Retracted accordion on the Memories page. Deleting one stays
+deleted (no successor to revive), but deleting a retired *chain head*
+still `SET NULL`s its drafts' pointers — the drafts revive to live, the
+same undo hatch as deleting a supersede replacement.
 
 ### Who does what
 
@@ -257,9 +280,8 @@ reaches context exactly the way a spoken line does.
 ### Schema
 
 ```sql
--- canon is "no memory_triggers rows" — no flag column. A user_version=8
--- migration clears triggers off rows from the old canon=1 era so they
--- stay always-injected; the column itself is then dropped.
+-- canon is "no memory_triggers rows" — no flag column (the old canon=1
+-- era predates the schema baseline; see the CREATE TABLE block in db.js).
 ALTER TABLE mem_profiles ADD COLUMN mem_canon_budget INTEGER DEFAULT 800;
 
 CREATE TABLE IF NOT EXISTS room_arcs (
@@ -290,10 +312,24 @@ ALTER TABLE memories ADD COLUMN state_key TEXT;
 -- subject key for type='state' rows — the diff handle
 ALTER TABLE memories ADD COLUMN superseded_by_memories_id_fk INTEGER
     REFERENCES memories(memories_id_pk) ON DELETE SET NULL;
+
+-- Dormancy tracking (memories) + prune window (mem_profiles):
+ALTER TABLE memories ADD COLUMN last_fired_messages_id_fk INTEGER;
+ALTER TABLE memories ADD COLUMN last_fired_at TEXT;
+ALTER TABLE mem_profiles ADD COLUMN mem_prune_messages INTEGER DEFAULT 0;
+
+-- Arc folding (smart rows consolidate under their thread) + manual curation:
+ALTER TABLE memories ADD COLUMN room_arcs_id_fk INTEGER
+    REFERENCES room_arcs(room_arcs_id_pk) ON DELETE SET NULL;
+ALTER TABLE memories ADD COLUMN user_sorted INTEGER DEFAULT 0;
+-- 1 = drag-arranged by a user; excluded from dedupe sweeps in both roles
 ```
 
-All additive in `migrateSchema()`; the new `mem_*` columns ride
-`MEM_PROFILE_FIELDS`; `room_arcs` is covered by `deleteRoomCascade`.
+These ALTERs document the additions column-by-column; the canonical
+shape lives in the `CREATE TABLE` block at the top of `db.js` (the schema
+baseline — pre-baseline migration machinery was retired at `user_version` 8).
+New `mem_*` columns ride `MEM_PROFILE_FIELDS`; `room_arcs` is covered by
+`deleteRoomCascade`.
 
 ### Canon (injection-only, no extra LLM calls)
 
@@ -337,6 +373,13 @@ All additive in `migrateSchema()`; the new `mem_*` columns ride
   memories fold; canon stays top-level. The call uses
   `arc_api_profiles_id_fk`, falling back to `extraction_api_profiles_id_fk`,
   owner-owned as usual — no profile configured = consolidation off.
+- **Reopening re-anchors the span** — flipping a closed arc back to `open`
+  (the Stories Reopen button via `arcs/update`, or an `[arc]` tag on a
+  closed thread) resets `opened_messages_id_fk` to the latest message and
+  clears the stale close anchor. A second consolidation therefore covers
+  only the continuation — without it, a re-close would re-summarize the
+  whole history since the original open and fold unrelated memories
+  extracted in the meantime into the arc.
 - Injection: closed arcs with summaries render `Earlier events:` under the
   same `arcs` block when a title word reappears in context **or** a folded
   memory's trigger fires — matching details ride under the headline as
@@ -358,7 +401,7 @@ correctly.
   injecting every turn" critique — keyword gating stays the relevance
   mechanism, canon is just its absence.
 - Arc `summary` overwrite vs. append — overwrite for now (one line per arc,
-  cheap injection); a beats timeline would need its own cap.
+  cheap injection); a beats timeline is tracked as [#145](https://github.com/XanthiaJo/BOLLOCKS/issues/145).
 - `arc_api_profiles_id_fk` — now drives `consolidateArc` (chapter summaries
-  on close), with `extraction_api_profiles_id_fk` as fallback. Still unused
-  for a separate arc *extraction* pass; add if tag-folding proves unreliable.
+  on close), with `extraction_api_profiles_id_fk` as fallback. A separate
+  arc *extraction* pass is conditional work: [#146](https://github.com/XanthiaJo/BOLLOCKS/issues/146).

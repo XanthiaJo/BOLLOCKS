@@ -22,8 +22,8 @@
 - **Personas** — your own player character; your messages carry its name and avatar
 - **Import existing SillyTavern characters** (V1/V2/V3 PNG + JSON) **and LoreBooks**
 - **World books** — keyword-triggered and constant lore entries, linkable per chat
-- **Memories** — manual (per-character or shared) and smart (AI-extracted room memories with type tags and trigger keywords); a memory with no triggers is canon — always injected
-- **Story threads** — room-scoped arcs the extraction pass opens/updates/closes, or you manage by hand; injected while open
+- **Memories** — manual (per-character or shared) and smart (AI-extracted, typed + trigger-keyworded) with a full auditable lifecycle: supersede chains instead of edits, a keyed scene-state snapshot, dormancy pruning that retires instead of deletes, and drag-link curation for retellings — a memory with no triggers is canon, always injected
+- **Story threads** — room-scoped arcs the extraction pass opens/updates/closes, or you manage by hand; injected while open, summarized and folded under on close
 - **AI activation** — manual / every message / named / round-robin, plus per-member talkativeness
 - **Context caps** — per-chat and per-profile token limits; history middle-trims to fit
 - **Live updates** — messages, deletions and memory extraction stream to all clients
@@ -72,7 +72,7 @@ Lorebooks. Pick a book in the sidebar and its entries show as full cards — tit
 
 ## Memories
 
-Two tabs: **Manual** — memories you write yourself (shared with the room, or scoped to one character) — and **Smart** — what the extraction pass has learned in the picked chat. Type tags and trigger keywords show on each card; clearing the keywords makes a memory canon (always in the prompt). Smart memories can be promoted to manual.
+Two tabs: **Manual** — memories you write yourself (shared with the room, or scoped to one character) — and **Smart** — what the extraction pass has learned in the picked chat: typed memories, a **State** accordion for the current scene snapshot, and a **Retracted** accordion for pruned ones. Type tags and trigger keywords show on each card; clearing the keywords makes a memory canon (always in the prompt). Retellings collapse under `history ▸` — automatically by the dedupe sweep, or by hand: drag one card onto another to link, drag a dimmed one out to detach. Smart memories can be promoted to manual.
 
 ![Memories](docs/screenshots/memories.png)
 
@@ -84,7 +84,7 @@ Room-scoped story threads, Manual/Smart tabs again — opened by you or by extra
 
 ## Memory profiles
 
-The dials for the extraction side: which connection profile does the reading, how often it runs, caps per memory type, injection budgets, thread tracking. Saved as named profiles a room can follow — following a profile is what switches smart memories on.
+The dials for the extraction side: which connection profile does the reading, how often it runs, caps per memory type, injection budgets, thread tracking, scene-state snapshots, and dormancy pruning (consolidation runs before any cap retirement). Saved as named profiles a room can follow — following a profile is what switches smart memories on.
 
 ![Memory profiles](docs/screenshots/memsettings.png)
 
@@ -196,6 +196,9 @@ erDiagram
         int mem_max_arcs
         int mem_arc_budget
         int arc_api_profiles_id_fk FK
+        int mem_state "scene snapshot on"
+        int mem_readonly "extract off, inject on"
+        int mem_prune_messages "dormancy window"
     }
     MEMORIES {
         int memories_id_pk PK
@@ -203,6 +206,10 @@ erDiagram
         string type
         string origin "user|smart"
         int room_arcs_id_fk FK "folded under"
+        string state_key "scene slot"
+        int superseded_by_memories_id_fk FK "null = live"
+        int last_fired_messages_id_fk "fired watermark"
+        int user_sorted "hand-arranged"
     }
     MEMORY_TRIGGERS {
         int memories_id_fk PK,FK
@@ -222,6 +229,7 @@ erDiagram
         string title
         string status "open|resolved|dropped"
         string origin "user|smart"
+        string summary "consolidated span"
         int opened_messages_id_fk FK
         int closed_messages_id_fk FK
     }
@@ -241,6 +249,7 @@ erDiagram
     CARDS ||--o{ MEMORY_CARDS : scoped
     ROOM_ARCS }o--o| MESSAGES : anchors
     ROOM_ARCS ||--o{ MEMORIES : "consolidates"
+    MEMORIES }o--o| MEMORIES : supersedes
 ```
 
 ### Lore
@@ -313,15 +322,15 @@ erDiagram
 - **api_profiles** — connections (`api_url`, `model`, `key`, `active`, `headers`, `context_size`, `max_response`)
 - **cards** — characters (owner, ST fields, `is_persona`, `api_profiles_id_fk` override, `avatar`)
 - **room_members** — junction: which cards sit in which rooms, with per-room `talkativeness` (persona card = human)
-- **rooms** — chats (`ai_trigger`, `max_context`, `bg`, `mem_profiles_id_fk` → the memory profile it follows, `owner_users_id_fk`, `mem_last_messages_id_fk` extraction watermark + `mem_refresh_count`)
+- **rooms** — chats (`ai_trigger`, `max_context`, `bg`, `mem_profiles_id_fk` → the memory profile it follows, `owner_users_id_fk`, `mem_last_messages_id_fk` extraction watermark, `mem_refresh_count` + `mem_extract_count` cadence counters)
 - **messages** — chat log (`rooms_id_fk`, `cards_id_fk` sender, `text`, `supersedes_messages_id_fk` edit chain)
-- **memories** — facts shared via junctions, not room/card columns: `type` (fact/event/relationship/preference), `origin` (`user` manual vs `smart` extracted); no `memory_triggers` rows = canon (always injected)
+- **memories** — facts shared via junctions, not room/card columns: `type` (fact/event/relationship/preference), `origin` (`user` manual vs `smart` extracted); no `memory_triggers` rows = canon (always injected). Lifecycle columns: `state_key` (scene-state slot, replaced values supersede), `superseded_by_memories_id_fk` (replacement chain — NULL = live; self-reference = retired), `last_fired_*` (dormancy watermarks), `user_sorted` (drag-arranged rows exempt from dedupe)
 - **room_memories** — junction: which memories a room can inject
 - **memory_cards** — junction: narrows a memory to one character (unlinked = room-shared)
 - **memory_triggers** — one row per trigger keyword; keyword-gates injection
 - **room_arcs** — story threads (`status` open/resolved/dropped, `origin` user/smart, message anchors); open threads inject on every reply; on close the arc's span is summarized and its smart memories fold under it (`memories.room_arcs_id_fk`), re-emerging via `Earlier events:` when re-evoked
-- **mem_profiles** — named memory presets a room follows (following = on): extraction cadence/model/prompt, per-type caps, canon + thread budgets, extraction/arc connection pickers
-- **prompt_profiles** — named prompt-assembly presets (`prompt_order` block sequence, `active`)
+- **mem_profiles** — named memory presets a room follows (following = on): extraction cadence/model/prompt, per-type caps, canon + thread budgets, scene-state fields, dormancy-pruning window, read-only switch, extraction/arc connection pickers
+- **prompt_profiles** — named prompt-assembly presets (`prompt_order` block sequence, `active`, `include_time`)
 - **prompt_logs** — newest 50 LLM calls per room (`kind` reply|extract, request JSON, raw response, token usage) — the prompt inspector's durable half
 - **world_books** — lorebooks (owner, name)
 - **room_books** — junction: which books feed which rooms

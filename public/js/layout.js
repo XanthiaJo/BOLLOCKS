@@ -299,8 +299,8 @@ function mpCloseEditor(){
   v.remove();
 }
 
-// Transient "saved" toast — pages call this after a successful write so the
-// form can stay open instead of vanishing.
+// Transient "saved" toast — every explicit save flashes this so a write is
+// always acknowledged, whether the form stays open or collapses.
 function mpFlashSaved(msg = 'Saved') {
     let t = document.getElementById('mpsaved');
     if (!t) {
@@ -312,6 +312,26 @@ function mpFlashSaved(msg = 'Saved') {
     t.classList.add('show');
     clearTimeout(t._t);
     t._t = setTimeout(() => t.classList.remove('show'), 1600);
+}
+
+/* Memory-profile picker — the "which profile does this chat follow"
+   select + hint shared by the Memories and Stories pages. Renders into
+   #smart_mprof / #smart_mprof_hint; the room owner picks from their own
+   profiles, everyone else just sees the followed name. */
+function renderMprofPicker(rm, memProfiles) {
+    const escP = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const followed = (rm?.mem_profiles_id_fk) && (memProfiles.find(x => x.mem_profiles_id_pk === rm.mem_profiles_id_fk)) || null;
+    const mprofOpts = (memProfiles || []).map(p => `<option value="${p.mem_profiles_id_pk}">${escP(p.name)}</option>`).join('');
+    // Non-owners can't see the owner's profile list — show the followed name only.
+    const followedName = followed?.name || rm?.mem_profile_name || null;
+    const sel = document.getElementById('smart_mprof');
+    sel.innerHTML = rm?.is_owner ? `<option value="0">Disabled</option>` + mprofOpts : `<option>${escP(followedName || 'Disabled')}</option>`;
+    sel.value = String(rm?.mem_profiles_id_fk ?? 0);
+    document.getElementById('smart_mprof_hint').textContent = rm?.is_owner
+        ? (followed ? `This chat follows "${followed.name}" — edit it on the Memory profiles page.`
+            : memProfiles.length ? 'Smart memories are off — pick a profile to enable.' : 'No profiles yet — create one on the Memory profiles page.')
+        : (followedName ? `This chat follows "${followedName}". ` : 'Smart memories are off. ') + 'Only the room owner can change the memory profile.';
+    sel.disabled = !rm?.is_owner;
 }
 
 /* Sidebar picker row — the single place this markup is built. All settings
@@ -411,3 +431,7 @@ function draftFields(ids) {
 function fillFields(d) {
     for (const [i, v] of Object.entries(d || {})) { const el = document.getElementById(i); if (!el) continue; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; }
 }
+
+/* trigList('a,b,c') -> 'a, b, c' — memory_triggers stores a bare
+   comma-joined string; always render it through this. */
+function trigList(s) { return (s || '').split(',').join(', '); }

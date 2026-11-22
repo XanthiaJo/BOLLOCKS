@@ -1,13 +1,11 @@
-// Upgrade test: build a populated DB with an older build (the PR's base
-// branch plus the deployed beta/master branches), then boot this checkout on
-// it and check nothing was lost, FKs and integrity are clean, and the
-// migrations are idempotent. Also runs the same checks on a fresh DB.
-//
-// Refs come from UPGRADE_FROM (space/comma separated) or default to
-// origin/$BASE_REF, origin/dev, origin/beta, origin/master — whichever exist.
+// Boot test: build a populated DB with the current build, restart on it
+// and check nothing was lost, FKs and integrity are clean, and booting is
+// idempotent. (Historical upgrade-from-old-build coverage was retired
+// with the migration machinery — the CREATE TABLE block in db.js is the
+// schema baseline.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import net from 'node:net';
@@ -16,28 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 const tmp = name => fs.mkdtempSync(path.join(os.tmpdir(), `bollocks-${name}-`));
-
-function upgradeRefs() {
-    const wanted = process.env.UPGRADE_FROM
-        ? process.env.UPGRADE_FROM.split(/[\s,]+/).filter(Boolean)
-        : [process.env.BASE_REF && `origin/${process.env.BASE_REF}`, 'origin/dev', 'origin/beta', 'origin/master'].filter(Boolean);
-    const seen = new Map();
-    for (const ref of wanted) {
-        let sha;
-        try { sha = git('rev-parse', '--verify', '--quiet', `${ref}^{commit}`); } catch { continue; }
-        if (!seen.has(sha)) seen.set(sha, ref);
-    }
-    return [...seen].map(([sha, ref]) => ({ sha, ref }));
-}
-
-function extract(sha) {
-    const dir = tmp('src');
-    execFileSync('sh', ['-c', `git archive ${sha} src public package.json | tar -x -C "${dir}"`], { cwd: ROOT });
-    return dir;
-}
-
 const freePort = () => new Promise((resolve, reject) => {
     const s = net.createServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); });
     s.on('error', reject);
@@ -197,24 +174,3 @@ test('fresh DB: current build boots, populates and reboots cleanly', async () =>
     assertHealthy(before, 'fresh DB');
     await upgradeAndVerify(dataDir, before, ids, 'fresh DB');
 });
-
-const refs = upgradeRefs();
-if (!refs.length) test('upgrade from older builds', { skip: 'no upgrade refs found (fetch origin or set UPGRADE_FROM)' }, () => {});
-for (const { ref, sha } of refs) {
-    test(`upgrade from ${ref} (${sha.slice(0, 7)})`, async t => {
-        const appDir = extract(sha);
-        const dataDir = tmp('data');
-        let old;
-        try { old = await boot(appDir, dataDir); } catch (e) {
-            // An old build that can't start on an empty DB can't produce one to upgrade.
-            // Not this PR's fault, but say so loudly.
-            t.diagnostic(`${ref} cannot boot on a fresh DB: ${e.message.split('\n').find(l => /Error/.test(l)) || e.message}`);
-            return t.skip(`${ref} cannot boot on a fresh DB`);
-        }
-        let ids;
-        try { ids = await populate(old); } finally { await old.stop(); }
-        assert.ok(ids.room && ids.card, `could not populate a DB with ${ref}: ${JSON.stringify(ids)}`);
-        const before = snapshot(dataDir);
-        await upgradeAndVerify(dataDir, before, ids, `upgrade from ${ref}`);
-    });
-}

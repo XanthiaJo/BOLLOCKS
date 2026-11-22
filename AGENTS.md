@@ -42,7 +42,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | Path | Purpose |
 |---|---|
 | `data/` | Runtime state, gitignored: `app.db` (SQLite), `cards/*.png` (avatars), `bg/*.png` (room backgrounds). Never commit it |
-| `scripts/` | Node ESM maintenance scripts run manually: `backfill-triggers.mjs` (LLM-fill memory trigger keywords on a live server), `pull-st-connection.mjs` (import a SillyTavern host's API connection over ssh) |
+| `scripts/` | Node ESM maintenance scripts run manually: `backfill-triggers.mjs` (LLM-fill memory trigger keywords on a live server), `pull-st-connection.mjs` (import a SillyTavern host's API connection over ssh), `screenshots.mjs` (Playwright — refresh docs/screenshots on a seeded instance; resolves playwright from node_modules or the npx cache, `BASE_URL`/`SHOTS_USER`/`SHOTS_PASS` env) |
 | `docs/memories.md` | Design doc for the memory system (kinds, ownership rules, extraction flow) |
 | `docs/tests.md` | Checklist of exactly what the test suite covers + known gaps it has surfaced |
 | `test/` | `node:test` suites run by `npm test`: `api-contract.test.js` (static frontend↔route checks), `upgrade.test.js` (migration/upgrade), one file per API domain (`auth`, `profile`, `rooms`, `access`, `cards`, `messages`, `world`, `memories`, `profiles`, `generate`, `users`, `update`), `pngcard.test.js` (card parser units), `helpers.js` (shared `boot()`/`mockLLM()`/`pub`/`asUser` harness) |
@@ -60,7 +60,7 @@ Route-handler conventions: routes are `export default { 'METHOD /path': handler 
 
 ## Data model
 
-Canonical column naming: `<table>_<col>_pk` for primary keys, `<referenced_table>_<col>_fk` for foreign keys (e.g. `rooms_id_pk`, `owner_users_id_fk`). The `CREATE TABLE` block at the top of `db.js` already uses canonical names; `migrateSchema()`'s `REN` map still renames legacy columns on old DBs. **FKs are enforced** (`PRAGMA foreign_keys=ON` at connect) — declared `ON DELETE` actions are the safety net behind the route-ordered delete chains in `lib/cascade.js`, so keep delete order correct rather than relying on cascades.
+Canonical column naming: `<table>_<col>_pk` for primary keys, `<referenced_table>_<col>_fk` for foreign keys (e.g. `rooms_id_pk`, `owner_users_id_fk`). The `CREATE TABLE` block at the top of `db.js` IS the canonical baseline — historical migrations were retired at `user_version` 8, so DBs from before that aren't upgraded. **FKs are enforced** (`PRAGMA foreign_keys=ON` at connect) — declared `ON DELETE` actions are the safety net behind the route-ordered delete chains in `lib/cascade.js`, so keep delete order correct rather than relying on cascades.
 
 Core tables:
 
@@ -77,7 +77,7 @@ Core tables:
 - `mem_profiles` — named memory-setting presets a room follows (`mem_*` columns; see `MEM_PROFILE_FIELDS` in `generate.js`).
 - `prompt_profiles` — per-user injection/prompt-assembly presets (`active` flag applies to all of the user's generations; `prompt_order` JSON array of `PROMPT_BLOCKS` keys, NULL = built-in cache-optimal order; `include_time` injects a current-time/last-message-age block below `history`).
 
-**Schema changes** go in `migrateSchema()` in `db.js`: additive `ALTER TABLE ... ADD COLUMN` guarded by `PRAGMA table_info` checks, or table rebuilds for FK changes; one-time data fixes are gated by `PRAGMA user_version` bumps. Never edit the top `CREATE TABLE` block alone — migrations must bring existing DBs along.
+**Schema changes** go in `migrateSchema()` in `db.js` AND in the top `CREATE TABLE` block: the CREATE block is the baseline for fresh installs, while guarded `ALTER TABLE ... ADD COLUMN` (checked via `PRAGMA table_info`) or table rebuilds bring existing DBs forward; one-time data fixes are gated by `PRAGMA user_version` bumps. Never add a column in only one of the two places.
 
 ## Generation pipeline (generate.js)
 

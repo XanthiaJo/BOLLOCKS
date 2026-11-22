@@ -45,6 +45,8 @@ export default [
         setupAcc: "readonly",
         draftFields: "readonly",
         fillFields: "readonly",
+        trigList: "readonly",
+        renderMprofPicker: "readonly",
       },
     },
     rules: {

@@ -110,7 +110,7 @@ async function saveBook(){
   const name=$('book_name').value.trim();if(!name)return;
   if(selBook)await api('world/books/update',{id:selBook,name});
   else{const r=await api('world/books',{name});if(r?.id)setSelBook(r.id);}
-  await load();fillBook(books.find(b=>b.id===selBook));
+  await load();fillBook(books.find(b=>b.id===selBook));mpFlashSaved();
 }
 async function delBook(id){if(confirm('Delete this book and all its entries?')){if(selBook===id)newBookPanel();await api('world/books/delete',{id});load()}}
 async function importBook(input){
@@ -148,7 +148,7 @@ async function saveEnt(){
   if(id)await api('world/update',{id:Number(id),...b});
   else await api('world',b);
   selEntry=0;$('editor').innerHTML='';$('editor').style.display='none';
-  load();
+  mpFlashSaved();load();
 }
 async function toggle(id,en){await api('world/update',{id,enabled:!!en});load()}
 async function del(id){if(confirm('Delete this entry?')){await api('world/delete',{id});if(selEntry===id)selEntry=0;load()}}
