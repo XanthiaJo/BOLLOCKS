@@ -102,6 +102,18 @@ describe('memories', () => {
         const lone = await seed('Karima made fudge.');
         assert.equal((await s.post('memories/link', { id: lone, target: lone })).status, 200);
         assert.equal(await sup(lone), null);
+
+        // Drag-out: unlink detaches a superseded row back to live, and
+        // its draft keeps pointing at it (the head it built stays put).
+        assert.equal((await s.post('memories/unlink', { id: older })).status, 200);
+        assert.equal(await sup(older), null);
+        assert.equal(await sup(newer), third); // old chain unaffected
+        // Unlink with a target re-points the row under that chain's head.
+        assert.equal((await s.post('memories/unlink', { id: older, target: newer })).status, 200);
+        assert.equal(await sup(older), third); // newer's head is third
+        // Unlinking a live row is a no-op.
+        assert.equal((await s.post('memories/unlink', { id: lone })).status, 200);
+        assert.equal(await sup(lone), null);
         await s.post('rooms/delete', { id: room });
     });
 });
