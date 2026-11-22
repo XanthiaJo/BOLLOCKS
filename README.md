@@ -196,6 +196,9 @@ erDiagram
         int mem_max_arcs
         int mem_arc_budget
         int arc_api_profiles_id_fk FK
+        int mem_state "scene snapshot on"
+        int mem_readonly "extract off, inject on"
+        int mem_prune_messages "dormancy window"
     }
     MEMORIES {
         int memories_id_pk PK
@@ -203,6 +206,10 @@ erDiagram
         string type
         string origin "user|smart"
         int room_arcs_id_fk FK "folded under"
+        string state_key "scene slot"
+        int superseded_by_memories_id_fk FK "null = live"
+        int last_fired_messages_id_fk "fired watermark"
+        int user_sorted "hand-arranged"
     }
     MEMORY_TRIGGERS {
         int memories_id_fk PK,FK
@@ -222,6 +229,7 @@ erDiagram
         string title
         string status "open|resolved|dropped"
         string origin "user|smart"
+        string summary "consolidated span"
         int opened_messages_id_fk FK
         int closed_messages_id_fk FK
     }
@@ -241,6 +249,7 @@ erDiagram
     CARDS ||--o{ MEMORY_CARDS : scoped
     ROOM_ARCS }o--o| MESSAGES : anchors
     ROOM_ARCS ||--o{ MEMORIES : "consolidates"
+    MEMORIES }o--o| MEMORIES : supersedes
 ```
 
 ### Lore
@@ -313,15 +322,15 @@ erDiagram
 - **api_profiles** — connections (`api_url`, `model`, `key`, `active`, `headers`, `context_size`, `max_response`)
 - **cards** — characters (owner, ST fields, `is_persona`, `api_profiles_id_fk` override, `avatar`)
 - **room_members** — junction: which cards sit in which rooms, with per-room `talkativeness` (persona card = human)
-- **rooms** — chats (`ai_trigger`, `max_context`, `bg`, `mem_profiles_id_fk` → the memory profile it follows, `owner_users_id_fk`, `mem_last_messages_id_fk` extraction watermark + `mem_refresh_count`)
+- **rooms** — chats (`ai_trigger`, `max_context`, `bg`, `mem_profiles_id_fk` → the memory profile it follows, `owner_users_id_fk`, `mem_last_messages_id_fk` extraction watermark, `mem_refresh_count` + `mem_extract_count` cadence counters)
 - **messages** — chat log (`rooms_id_fk`, `cards_id_fk` sender, `text`, `supersedes_messages_id_fk` edit chain)
-- **memories** — facts shared via junctions, not room/card columns: `type` (fact/event/relationship/preference), `origin` (`user` manual vs `smart` extracted); no `memory_triggers` rows = canon (always injected)
+- **memories** — facts shared via junctions, not room/card columns: `type` (fact/event/relationship/preference), `origin` (`user` manual vs `smart` extracted); no `memory_triggers` rows = canon (always injected). Lifecycle columns: `state_key` (scene-state slot, replaced values supersede), `superseded_by_memories_id_fk` (replacement chain — NULL = live; self-reference = retired), `last_fired_*` (dormancy watermarks), `user_sorted` (drag-arranged rows exempt from dedupe)
 - **room_memories** — junction: which memories a room can inject
 - **memory_cards** — junction: narrows a memory to one character (unlinked = room-shared)
 - **memory_triggers** — one row per trigger keyword; keyword-gates injection
 - **room_arcs** — story threads (`status` open/resolved/dropped, `origin` user/smart, message anchors); open threads inject on every reply; on close the arc's span is summarized and its smart memories fold under it (`memories.room_arcs_id_fk`), re-emerging via `Earlier events:` when re-evoked
-- **mem_profiles** — named memory presets a room follows (following = on): extraction cadence/model/prompt, per-type caps, canon + thread budgets, extraction/arc connection pickers
-- **prompt_profiles** — named prompt-assembly presets (`prompt_order` block sequence, `active`)
+- **mem_profiles** — named memory presets a room follows (following = on): extraction cadence/model/prompt, per-type caps, canon + thread budgets, scene-state fields, dormancy-pruning window, read-only switch, extraction/arc connection pickers
+- **prompt_profiles** — named prompt-assembly presets (`prompt_order` block sequence, `active`, `include_time`)
 - **prompt_logs** — newest 50 LLM calls per room (`kind` reply|extract, request JSON, raw response, token usage) — the prompt inspector's durable half
 - **world_books** — lorebooks (owner, name)
 - **room_books** — junction: which books feed which rooms
