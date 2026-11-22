@@ -369,7 +369,7 @@ describe('generation (mock LLM)', () => {
         llm.requests.length = 0;
         await s.post('generate', { room, card });
         const sys = JSON.parse(llm.requests.at(-1).body).messages[0].content;
-        assert.match(sys, /Scene:\n- Wren is in the kitchen/);
+        assert.match(sys, /Scene \(as of [^)]*\):\n- Wren is in the kitchen/);
         assert.ok(!sys.includes('Canon:\n- Wren is in the kitchen'));
         await s.post('memories/delete', { id: st });
     });

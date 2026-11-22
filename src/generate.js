@@ -48,7 +48,7 @@ const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords i
 // single memory bullet; [arc] advances and [arc-close] resolves a thread.
 // The core teaching is event-vs-thread: a memory is history, a thread is an
 // unresolved situation that stays open until something settles it.
-const MEM_ARCS_SUFFIX = ` Threads: a thread is NOT a memory — it is an open situation left pending until it resolves: a debt owed, a repair in progress, an investigation, a brewing conflict, a promise awaiting fulfilment. If the excerpt opens, advances, or resolves one, additionally output "- [arc-open] Title — what is underway", "- [arc] Title — the new development", or "- [arc-close] Title — how it settled". Reuse an open thread's title exactly when updating or closing it. The test: an event is closed when it happens ("Buddy broke the wheel" is [event]); a thread needs a resolution ("the wheel must be replaced before inspection" is a thread). Transient states — injuries, sanctions, pending fixes, ongoing suspicions — belong to threads, never [fact]: arcs close; facts linger as stale truth.`;
+const MEM_ARCS_SUFFIX = ` Threads: a thread is NOT a memory — it is an open situation left pending until it resolves: a debt owed, a repair in progress, an investigation, a brewing conflict, a promise awaiting fulfilment — or a bit building toward a payoff (someone inching an object toward a desk's edge across several messages is one thread, not three events). If the excerpt opens, advances, or resolves one, additionally output "- [arc-open] Title — what is underway", "- [arc] Title — the new development", or "- [arc-close] Title — how it settled". Reuse an open thread's title exactly when updating or closing it. If a numbered memory describes an earlier step of a situation still developing in this excerpt, that is a thread — open or advance it instead of logging another isolated [event]. The test: an event is closed when it happens ("Buddy broke the wheel" is [event]); a thread needs a resolution ("the wheel must be replaced before inspection" is a thread). Transient states — injuries, sanctions, pending fixes, ongoing suspicions — belong to threads, never [fact]: arcs close; facts linger as stale truth.`;
 
 // Scene-state snapshot prompt — a dedicated pass that answers "what is true
 // right now" (locations, held objects, ongoing conditions). The model emits
@@ -93,7 +93,7 @@ export const PROMPT_BLOCKS = [
     { key: 'arcs', label: 'Open threads',
         example: 'Open threads:\n- The stolen map — Aria suspects the harbor guild took it' },
     { key: 'scene', label: 'Scene state',
-        example: 'Scene:\n- Aria holds the stolen map.\n- The common room fire has burned low.' },
+        example: 'Scene (as of 2024-06-01 12:00):\n- Aria holds the stolen map.\n- The common room fire has burned low.' },
     { key: 'instructions', label: 'Instructions',
         example: "You are Aria and ONLY Aria — an NPC in a shared roleplay. The other characters listed are separate people speaking for themselves; do NOT speak for them or imitate them. Write ONLY Aria's next message." },
     { key: 'history', label: 'Chat history',
@@ -236,11 +236,15 @@ export async function generateReply(roomId, card) {
 
     // Scene state: the latest "what is true right now" snapshot — locations,
     // held objects, ongoing conditions. Always injected when present (it is
-    // by definition relevant), never trigger-gated, own token budget.
-    const sceneRows = cap(db.prepare(`SELECT m.content FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+    // by definition relevant), never trigger-gated, own token budget. The
+    // as-of stamp tells the model how old the sample is — sampled state,
+    // not a truth claim.
+    const sceneRows = cap(db.prepare(`SELECT m.content, m.created FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
         WHERE rm.rooms_id_fk=? AND m.type='state' AND m.room_arcs_id_fk IS NULL AND ${LIVE} ORDER BY m.memories_id_pk`).all(roomId),
         mem?.mem_state_budget ?? 400);
-    const sceneText = sceneRows.length ? 'Scene:\n' + sceneRows.map(m => '- ' + m.content).join('\n') : null;
+    const sceneText = sceneRows.length
+        ? `Scene (as of ${sceneRows.map(r => r.created).sort().at(-1).slice(0, 16)}):\n` + sceneRows.map(m => '- ' + m.content).join('\n')
+        : null;
 
     // Dormancy bookkeeping: a memory counts as fired only when it actually
     // reached the prompt — post-budget rows that never make the cut are
