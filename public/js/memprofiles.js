@@ -40,6 +40,7 @@ async function delMP(id){if(id<=0){setSelProf(0);load();return}if(confirm('Delet
 if(document.getElementById('pg_ext')){
   setupAcc(document.getElementById('pg_ext'),'mp_mem_acc_ext');
   setupAcc(document.getElementById('pg_inj'),'mp_mem_acc_inj');
+  setupAcc(document.getElementById('pg_prune'),'mp_mem_acc_prune');
   setupAcc(document.getElementById('pg_tbi'),'mp_mem_acc_tbi');
 }else setupAcc(document.getElementById('profpanel'),'mp_mem_acc');
 load();
