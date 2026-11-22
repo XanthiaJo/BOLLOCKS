@@ -43,10 +43,12 @@ talkativeness.
 
 ## Smart memory sections
 
-Today: smart memories are extracted one-per-interval by a second AI, typed
-(fact/event/relationship/preference) with trigger keywords, grounded
-against the room's character sheets so resolved states don't linger. They
-live in one room-scoped list; profiles control how/when extraction runs.
+Today: smart memories are extracted each interval by a second AI, typed
+(fact/event/relationship/preference) with trigger keywords, and live in a
+room-scoped list with an auditable lifecycle — supersede chains, scene-state
+keyed replacement, dormancy pruning, arc folding. Profiles control
+how/when extraction runs; drag-drop on the memories page merges or
+separates chains by hand.
 
 - [x] Typed smart memories with trigger keywords *(2026-11-07)*
 - [x] Shared + per-character permanent memories *(2026-11-07)*
@@ -59,7 +61,11 @@ live in one room-scoped list; profiles control how/when extraction runs.
   each generation
 - [ ] **Review flow** — glance at what extraction produced, discard noise
   (edit/promote shipped; a review-focused view hasn't)
-- [ ] **Dedup/merge** — collapse near-duplicate extracted facts over time
+- [x] **Dedup/merge** — retellings chain under the newest telling via an
+  IDF-weighted trigger-overlap scorer (insert-time + sweep + cap-pressure),
+  the writer's `[supersede N]` tag for true paraphrases, and manual
+  drag-link/unlink on the memories page (`user_sorted` exempts hand-arranged
+  rows) *(2026-11-22)*
 - [x] **Scene-state memories** — temporary states ("under sanction",
   "wheel pending") that decay instead of lingering as facts — keyed JSON
   set + scripted diff supersede *(2026-11-22)*
@@ -70,9 +76,13 @@ live in one room-scoped list; profiles control how/when extraction runs.
   *(2026-11-22)*
 - [x] **Dormancy pruning** — triggered smart memories that haven't fired
   into a prompt within `mem_prune_messages` retire themselves
-  (tombstone, never deleted); caps retire rather than hard-delete, and
+  (tombstone, never deleted); caps consolidate before retiring, and
   `last_fired_*` tracking makes the LRU signal visible on each card
   *(2026-11-22)*
+- [x] **Arc extractions** — smart arcs folded under their extraction thread,
+  `extractions ▸` toggle on the Stories page, `consolidateArc` summarizes the
+  span and folds its smart memories on close, reopen re-anchors to the
+  latest message *(2026-11-22)*
 
 ## Smaller items
 
