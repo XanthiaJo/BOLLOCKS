@@ -35,7 +35,7 @@ async function saveNew(){
     const r=await api('register',{handle,password});
     if(r.error)return alert(r.error);
     if(email)await api('admin/users/update',{id:r.id,email});
-    cancelNew();load();
+    cancelNew();mpFlashSaved();load();
 }
 function editUser(id){editId=id;load()}
 async function setAdmin(id,v){
@@ -50,7 +50,7 @@ async function saveEdit(){
     if(r.error)return alert(r.error);
     const p=$('edpass').value;
     if(p){const r2=await api('admin/users/password',{id:u.id,password:p});if(r2.error)return alert(r2.error)}
-    editId=0;load();
+    editId=0;mpFlashSaved();load();
 }
 async function delUser(id,handle){
     if(!confirm(`Delete ${handle}? Their cards, rooms, profiles and sessions all go with them.`))return;

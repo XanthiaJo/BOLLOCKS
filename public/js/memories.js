@@ -95,7 +95,7 @@ async function saveEdit(){
     const scope=Number($('em_scope_'+id).value)||0;
     if(scope!==(m.cards_id_fk||0)) await api('memories/move',{id,cardId:scope||null});
   }
-  editId=0;load();
+  editId=0;mpFlashSaved();load();
 }
 const memScope=id=>id?(roomCards.find(c=>c.id===id)?.name||'#'+id):'shared';
 async function load(){
@@ -140,7 +140,7 @@ async function dedupeMems(){
 }
 function newMem(){$('newbox').style.display='block';$('newmem').focus()}
 function cancelNew(){$('newmem').value='';$('newtrig').value='';$('newbox').style.display='none'}
-async function saveNew(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t,type:$('newtype').value,triggers:$('newtrig').value.trim()});$('newtrig').value='';load()}
+async function saveNew(){const t=$('newmem').value.trim();if(!t)return;$('newmem').value='';await api('memories',{cardId,room:ROOM,content:t,type:$('newtype').value,triggers:$('newtrig').value.trim()});$('newtrig').value='';mpFlashSaved();load()}
 // Every version a row superseded — walk superseded_by backwards.
 function chainBehind(id){const out=[],seen=new Set([id]),q=[id];
   while(q.length){const cid=q.shift();

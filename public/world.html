@@ -148,7 +148,7 @@ async function saveEnt(){
   if(id)await api('world/update',{id:Number(id),...b});
   else await api('world',b);
   selEntry=0;$('editor').innerHTML='';$('editor').style.display='none';
-  load();
+  mpFlashSaved();load();
 }
 async function toggle(id,en){await api('world/update',{id,enabled:!!en});load()}
 async function del(id){if(confirm('Delete this entry?')){await api('world/delete',{id});if(selEntry===id)selEntry=0;load()}}
