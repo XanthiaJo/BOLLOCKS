@@ -51,7 +51,7 @@ const MEM_PROFILE_FIELDS = ['mem_every', 'mem_budget', 'mem_max', 'mem_max_fact'
     'mem_context_threshold', 'mem_response_length', 'mem_gen_budget', 'mem_unlimited',
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
     'extraction_api_profiles_id_fk', 'mem_canon_budget', 'mem_max_arcs', 'mem_arc_budget',
-    'arc_api_profiles_id_fk', 'mem_state', 'mem_state_every', 'mem_max_state',
+    'arc_api_profiles_id_fk', 'mem_state', 'mem_state_every', 'mem_max_state', 'mem_prune_messages',
     'mem_state_budget', 'mem_state_prompt', 'mem_readonly'];
 
 // Named system-prompt sections in cache-optimal order (stable content first —
@@ -182,9 +182,11 @@ export async function generateReply(roomId, card) {
     const HAS_TRIG = `EXISTS (SELECT 1 FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk)`;
     const NO_TRIG = `NOT ${HAS_TRIG}`;
     const LIVE = `m.superseded_by_memories_id_fk IS NULL`; // retracted rows never inject
-    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND ${HAS_TRIG} AND ${LIVE} AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), budget, 0);
-    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND mc.cards_id_fk=? AND ${HAS_TRIG} AND ${LIVE} ORDER BY m.memories_id_pk DESC`)
-        .all(roomId, card.id).reverse().filter(active), budget, roomMems.reduce((a, r) => a + tok(r.content), 0));
+    const roomMemsSel = db.prepare(`SELECT m.memories_id_pk AS id, m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND ${HAS_TRIG} AND ${LIVE} AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active);
+    const roomMems = cap(roomMemsSel, budget, 0);
+    const memsSel = db.prepare(`SELECT m.memories_id_pk AS id, m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND mc.cards_id_fk=? AND ${HAS_TRIG} AND ${LIVE} ORDER BY m.memories_id_pk DESC`)
+        .all(roomId, card.id).reverse().filter(active);
+    const mems = cap(memsSel, budget, roomMems.reduce((a, r) => a + tok(r.content), 0));
 
     // Canon: memories with no trigger keywords are always-true — injected
     // every generation, bypassing the refresh counter, capped by their own
@@ -203,7 +205,7 @@ export async function generateReply(roomId, card) {
     // the detail pulls its chapter back up, and any matching details ride
     // under the headline as indented sub-lines.
     const STOP = new Set(['the', 'a', 'an', 'of', 'and', 'in', 'on', 'at', 'to', 'for', 'my', 'his', 'her', 'our']);
-    const folded = db.prepare(`SELECT m.content, m.room_arcs_id_fk AS arcId,${TRIG_SQL}
+    const folded = db.prepare(`SELECT m.memories_id_pk AS id, m.content, m.room_arcs_id_fk AS arcId,${TRIG_SQL}
         FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
         WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NOT NULL AND ${LIVE}`).all(roomId);
     const hitKids = folded.filter(active).reduce((m, c) => ((m[c.arcId] ||= []).push(c), m), {});
@@ -211,7 +213,7 @@ export async function generateReply(roomId, card) {
         WHERE rooms_id_fk=? AND status!='open' AND summary!='' ORDER BY updated DESC`).all(roomId)
         .filter(a => hitKids[a.id]?.length
             || a.title.toLowerCase().split(/[^a-z0-9']+/).filter(w => w.length > 2 && !STOP.has(w)).some(w => wordHit(scanText, w)))
-        .map(a => ({ content: `- ${a.title} — ${a.summary}`
+        .map(a => ({ id: a.id, content: `- ${a.title} — ${a.summary}`
             + (hitKids[a.id] || []).map(c => `\n  - ${c.content}`).join('') })),
         mem?.mem_arc_budget ?? 700);
     const arcText = (arcRows.length || pastArcs.length)
@@ -226,6 +228,18 @@ export async function generateReply(roomId, card) {
         WHERE rm.rooms_id_fk=? AND m.type='state' AND m.room_arcs_id_fk IS NULL AND ${LIVE} ORDER BY m.memories_id_pk`).all(roomId),
         mem?.mem_state_budget ?? 400);
     const sceneText = sceneRows.length ? 'Scene:\n' + sceneRows.map(m => '- ' + m.content).join('\n') : null;
+
+    // Dormancy bookkeeping: a memory counts as fired only when it actually
+    // reached the prompt — post-budget rows that never make the cut are
+    // exactly what the dormancy sweep retires. Canon/state are exempt from
+    // pruning so they aren't tracked.
+    const firedIds = [...(injectMem ? [...roomMems, ...mems] : []),
+        ...pastArcs.flatMap(a => hitKids[a.id] || [])].map(r => r.id);
+    if (firedIds.length) {
+        const wm = db.prepare('SELECT MAX(messages_id_pk) AS m FROM messages WHERE rooms_id_fk=?').get(roomId).m || 0;
+        db.prepare(`UPDATE memories SET last_fired_messages_id_fk=?, last_fired_at=datetime('now')
+            WHERE memories_id_pk IN (${firedIds.map(() => '?').join(',')})`).run(wm, ...firedIds);
+    }
 
     const memText = (injectMem && (roomMems.length || mems.length))
         ? (mem?.mem_unified
@@ -574,29 +588,49 @@ export async function maybeSummarize(roomId) {
     // Always signal completion — clients refresh lastmem on done even when
     // activity notifications (the flash) are disabled.
     push(roomId, { type: 'mem', phase: 'done', count: added, notify: !!mem.mem_activity });
-    // Cap stored smart memories per type — oldest entries of each type drop off.
-    // Superseded rows don't occupy cap slots (they're already retracted).
+    // Cap stored smart memories per type — oldest entries of each type
+    // retire (tombstone — self-supersede, never deleted). Superseded and
+    // folded-arc rows don't occupy cap slots, and retiring a chain head
+    // keeps its drafts superseded rather than resurrecting them like a
+    // hard delete did.
     for (const [type, col] of [['fact','mem_max_fact'],['event','mem_max_event'],['relationship','mem_max_relationship'],['preference','mem_max_preference']]) {
         const cap = mem[col] || 0;
         if (cap <= 0) continue;
-        db.prepare(`DELETE FROM memories WHERE origin='smart' AND type=? AND memories_id_pk IN
+        db.prepare(`UPDATE memories SET superseded_by_memories_id_fk=memories_id_pk WHERE origin='smart' AND type=? AND superseded_by_memories_id_fk IS NULL AND memories_id_pk IN
             (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type=? AND m.superseded_by_memories_id_fk IS NULL
+             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type=? AND m.superseded_by_memories_id_fk IS NULL AND m.room_arcs_id_fk IS NULL
              AND m.memories_id_pk NOT IN
                 (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
-                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type=? AND m2.superseded_by_memories_id_fk IS NULL ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
+                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type=? AND m2.superseded_by_memories_id_fk IS NULL AND m2.room_arcs_id_fk IS NULL ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
             .run(type, roomId, type, roomId, type, cap);
     }
     // Global cap (mem_max) as a safety net across all types.
     const totalCap = mem.mem_max || 0;
     if (totalCap > 0) {
-        db.prepare(`DELETE FROM memories WHERE origin='smart' AND type!='state' AND superseded_by_memories_id_fk IS NULL AND memories_id_pk IN
+        db.prepare(`UPDATE memories SET superseded_by_memories_id_fk=memories_id_pk WHERE origin='smart' AND type!='state' AND superseded_by_memories_id_fk IS NULL AND memories_id_pk IN
             (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type!='state' AND m.superseded_by_memories_id_fk IS NULL
+             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type!='state' AND m.superseded_by_memories_id_fk IS NULL AND m.room_arcs_id_fk IS NULL
              AND m.memories_id_pk NOT IN
                 (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
-                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type!='state' AND m2.superseded_by_memories_id_fk IS NULL ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
+                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type!='state' AND m2.superseded_by_memories_id_fk IS NULL AND m2.room_arcs_id_fk IS NULL ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
             .run(roomId, roomId, totalCap);
+    }
+    // Dormancy prune: triggered smart memories that haven't fired into a
+    // prompt within the last mem_prune_messages room messages tombstone
+    // themselves. Canon (no triggers) is exempt — always injected by
+    // design — and a memory gets the full window from creation to prove
+    // itself before it can be retired.
+    const pruneMsgs = mem.mem_prune_messages || 0;
+    if (pruneMsgs > 0) {
+        const wm = db.prepare('SELECT messages_id_pk AS id, send_date FROM messages WHERE rooms_id_fk=? ORDER BY messages_id_pk DESC LIMIT 1 OFFSET ?')
+            .get(roomId, pruneMsgs);
+        if (wm) db.prepare(`UPDATE memories SET superseded_by_memories_id_fk=memories_id_pk
+            WHERE origin='smart' AND superseded_by_memories_id_fk IS NULL AND room_arcs_id_fk IS NULL AND type!='state'
+              AND EXISTS (SELECT 1 FROM memory_triggers mt WHERE mt.memories_id_fk=memories.memories_id_pk)
+              AND memories_id_pk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)
+              AND created < ?
+              AND (last_fired_messages_id_fk IS NULL OR last_fired_messages_id_fk < ?)`)
+            .run(roomId, wm.send_date, wm.id);
     }
     // Cap open arcs — oldest-touched threads are dropped first.
     const arcMax = mem.mem_max_arcs ?? 10;

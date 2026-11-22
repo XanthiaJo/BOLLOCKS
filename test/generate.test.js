@@ -474,4 +474,47 @@ describe('generation (mock LLM)', () => {
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
+
+    test('dormancy pruning tombstones unfired smart memories; firing resets the clock', async () => {
+        const ext = await mockLLM('- [event] A filler event. (triggers: filler)');
+        try {
+            const profId = (await s.post('profiles', { name: 'Prn', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Prn', every: 1, profileId: profId, pruneMessages: 5 })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Prune room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            await s.post('members', { room: mroom, cardId: card }); // generate needs a non-persona member
+            // Rows the sweep must NOT touch: canon (no triggers — always
+            // injected by design) and user memories (origin guard).
+            const dormant = (await s.post('memories', { room: mroom, content: 'A stale event nobody mentions.', type: 'event', triggers: 'staleword' })).json.id;
+            await s.post('memories/update', { id: dormant, origin: 'smart' });
+            const canon = (await s.post('memories', { room: mroom, content: 'The house is old.', type: 'fact' })).json.id;
+            await s.post('memories/update', { id: canon, origin: 'smart' });
+            const userMem = (await s.post('memories', { room: mroom, content: 'Blake keeps a wrench.', type: 'fact', triggers: 'wrench' })).json.id;
+            const fired = (await s.post('memories', { room: mroom, content: 'The flapjack mystery gripped the room.', type: 'event', triggers: 'flapjack' })).json.id;
+            await s.post('memories/update', { id: fired, origin: 'smart' });
+            // Seeded rows must predate the watermark message's send_date
+            // (second resolution) so the age gate can match them.
+            await new Promise(r => setTimeout(r, 1100));
+            await s.post('say', { room: mroom, text: 'any news on the flapjack?' }); // msg1
+            // Fire `fired` — its trigger hits and it makes the prompt, so
+            // the sweep stamps last_fired = the room's newest message.
+            const g = await s.post('generate', { room: mroom, card });
+            assert.equal(g.status, 200); // msg2 = the reply
+            for (let i = 0; i < 4; i++) await s.post('say', { room: mroom, text: 'chatter ' + i }); // msgs 3-6
+            const get = async id => (await s.get(`memories?card=0&room=${mroom}`)).json.memories.find(x => x.memories_id_pk === id);
+            // Watermark is now msg1: dormant (never fired) tombstones while
+            // fired's stamp (msg1) is not < the watermark, so it lives.
+            await until(async () => (await get(dormant))?.superseded_by_memories_id_fk === dormant || null, 'dormant tombstone');
+            const f = await get(fired);
+            assert.equal(f.superseded_by_memories_id_fk, null);
+            assert.ok(f.last_fired_at, 'firing stamps last_fired_at');
+            assert.equal((await get(canon)).superseded_by_memories_id_fk, null);
+            assert.equal((await get(userMem)).superseded_by_memories_id_fk, null);
+            // One more message pushes the watermark past the stamp — an
+            // LRU retire, not an age-based delete.
+            await s.post('say', { room: mroom, text: 'even more chatter' }); // msg7
+            await until(async () => (await get(fired))?.superseded_by_memories_id_fk === fired || null, 'fired tombstone');
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
 });
