@@ -103,8 +103,10 @@ export async function boot(dataDir, env = {}) {
 
 /**
  * Minimal OpenAI-compatible API stand-in. Serves GET /v1/models and accepts
- * POST /v1/chat/completions, replying with `reply`. Records every request so
- * tests can assert on the prompt generateReply assembled.
+ * POST /v1/chat/completions, replying with `reply` — a fixed string, or a
+ * function of the request body when a suite needs per-call responses (e.g.
+ * extraction vs. the scene-state pass on the same connection). Records every
+ * request so tests can assert on the prompt generateReply assembled.
  */
 export async function mockLLM(reply = 'Mock reply.') {
     const requests = [];
@@ -117,7 +119,7 @@ export async function mockLLM(reply = 'Mock reply.') {
             if (req.method === 'GET' && req.url.endsWith('/models'))
                 return res.end(JSON.stringify({ data: [{ id: 'mock-13b' }, { id: 'mock-7b' }] }));
             res.end(JSON.stringify({
-                choices: [{ message: { role: 'assistant', content: reply } }],
+                choices: [{ message: { role: 'assistant', content: typeof reply === 'function' ? reply(body) : reply } }],
                 usage: { prompt_tokens: 42, completion_tokens: 3 },
             }));
         });

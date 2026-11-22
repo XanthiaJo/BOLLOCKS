@@ -81,7 +81,7 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 **`test/memories.test.js`**
 
 - [x] Create room-scoped and card-scoped memories; `card=-1`/`card=N` scoping
-- [x] Update content/type/triggers/origin; `/api/lastmem` returns latest `origin='smart'`
+- [x] Update content/type/triggers/origin; `/api/lastmem` returns latest `origin='smart'`; clearing triggers promotes a memory to canon
 - [x] `memories/move` toggles card↔room scope; delete unlinks and removes
 
 **`test/profiles.test.js` — connections & memory profiles**
@@ -97,12 +97,25 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 - [x] Leading `Name:` tag stripped from the reply; message stored as `kind:'ai'`; `genstats` recorded
 - [x] No AI member → 404; owner with no connection → 500 with a clear error
 - [x] `ai_trigger: 'all'` fires replies after a say (talkativeness 100); `'named'` fires only when the character is mentioned
+- [x] Smart-memory extraction (mock endpoint): typed tags land (`[event]` ≠ flattened to `fact`), one memory per run, trigger keywords parse
+- [x] Untriggered memories are canon: inject under their own `Canon:` block every turn, never double-inject; triggered memories stay out when keywords don't match
+- [x] Trigger matching is whole-word (`king` ≠ `looking`, `kings` fires) and scans the full fetched history, not just recent lines
+- [x] Arcs: API create/resolve/delete lifecycle (`origin='user'`); open threads inject under `Open threads:`; `[arc-open]`/`[arc]`/`[arc-close]` extraction tags drive `room_arcs` (`origin='smart'`)
+- [x] Arc consolidation: resolving writes a chronicler summary, folds the span's triggered smart memories (`room_arcs_id_fk`), and the folded detail's trigger pulls `Earlier events:` headline + indented detail into the prompt
 
 **`test/users.test.js`**
 
 - [x] `GET /api/users` lists seeded users; self-delete and unknown-handle delete refused (400)
 - [x] `users/delete` and authenticated `register` are admin-only (first registered user); non-admin → 403
 - [x] `world` entry create/update/delete requires owning the entry's book — users can't write into each other's lorebooks
+
+**`test/update.test.js` — update check (mock GitHub API via `BOLLOCKS_GH_API`)**
+
+- [x] `cmpVersion` ordering: stable beats prereleases of the same numbers; `beta.3 > beta.2`; numeric (not lexical) prerelease bumps
+- [x] stable = `releases/latest`; no release yet (404) → `latest: null`, not an update
+- [x] beta = newest `vX.Y.Z-beta.N` prerelease only (stable/alpha releases skipped)
+- [x] nightly = dev tip commit (short sha + message + link); `update` is true/false, null when the running build has no git sha to compare
+- [x] unknown channel falls back to stable; the route requires a session (401 otherwise)
 
 ## `test/pngcard.test.js` — card parser units
 
@@ -119,7 +132,7 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 ## Deliberately not covered
 
 - [ ] Real LLM output — the mock endpoint covers the request/response contract deterministically; a real-model check belongs in a manual smoke script, not CI
-- [ ] `maybeSummarize` smart-memory extraction (requires `auto_mem`; same mock could drive it if desired)
+- [ ] `maybeSummarize` cadence edge cases (context-threshold trigger, per-type caps, watermark retry on failure) — extraction itself is covered; the gating branches aren't
 - [ ] Browser-side behavior (401→login redirects, localStorage) — needs a DOM; asserted indirectly via contract tests
 - [ ] `scripts/` maintenance utilities (interactive, need SSH/live server)
 - [ ] Theme/CSS correctness — no visual testing infrastructure

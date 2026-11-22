@@ -11,8 +11,12 @@ export const roomMember = (roomId, u) => !!u && (roomOwnerOnly(roomId, u) ||
 // Memory lives in at least one room u sits in.
 export const memoryShared = (id, u) => db.prepare('SELECT rooms_id_fk AS r FROM room_memories WHERE memories_id_fk=?')
     .all(id).some(x => roomMember(x.r, u));
-// First registered user is the site admin (user admin lives on the Connection page).
-export const isAdmin = u => !!u && u.users_id_pk === db.prepare('SELECT MIN(users_id_pk) m FROM users').get().m;
+// Site admins carry users.admin=1 (the first registered user is backfilled
+// as admin). Rows from before the column existed fall back to first-user.
+export const isAdmin = u =>
+    !!u && (u.admin !== undefined && u.admin !== null
+        ? !!u.admin
+        : u.users_id_pk === db.prepare('SELECT MIN(users_id_pk) m FROM users').get().m);
 // Entry is in a book u owns, or attached to no book at all.
 export const worldEntryOk = (id, u) => !!u && (!db.prepare('SELECT 1 FROM book_entries WHERE world_entries_id_fk=?').get(id) ||
     !!db.prepare(`SELECT 1 FROM book_entries be JOIN world_books wb ON wb.world_books_id_pk=be.world_books_id_fk

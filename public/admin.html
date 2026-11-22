@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BOLLOCKS · Admin</title>
+<link rel="stylesheet" href="css/layout.css">
+</head>
+<body>
+<div id="content">
+<main>
+  <div class="cvhead">
+    <h2>User management</h2>
+    <span class="cvbtns"><button class="act" id="btn_new" onclick="newUser()">+ New user</button></span>
+  </div>
+  <div class="panel" id="newbox" style="display:none">
+    <div class="edhead" data-save="saveNew" data-cancel="cancelNew"><h3>New user</h3></div>
+    <div class="row"><span class="lbl">Handle</span><input id="newhandle" placeholder="handle" style="width:200px"></div>
+    <div class="row"><span class="lbl">Email <small>(optional)</small></span><input id="newemail" placeholder="email" type="email" style="width:240px"></div>
+    <div class="row"><span class="lbl">Password</span><input id="newpass" placeholder="password" type="password" style="width:200px"></div>
+    <div class="hint">They can change their handle, email and password under Profile Settings.</div>
+  </div>
+  <div class="panel" id="list"></div>
+</main>
+</div>
+<script src="js/layout.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

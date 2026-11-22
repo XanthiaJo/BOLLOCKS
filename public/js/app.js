@@ -3,7 +3,7 @@ let me = '';
 let room = Number(localStorage.mp_room || 1);
 let es = null;
 let roomIsOwner = false;
-let allUsers = [], allCards = [], memberCur = new Set();
+let allUsers = [], allCards = [], memberCur = new Set(), roomMembers = [];
 
 const AS = '';
 const $ = id => document.getElementById(id);
@@ -71,6 +71,8 @@ function addMsg(m, stick) {
 }
 
 async function loadRoom() {
+    typing.clear();
+    renderTyping();
     // Self-heal a stale room id (e.g. room 1 when only room 2 exists).
     try {
         const { rooms: rr } = await get('rooms');
@@ -90,7 +92,6 @@ async function loadRoom() {
                 ? `<span class="mname">${m.card_name}</span>` +
                   `<input type="range" class="talk" data-mine="${m.mine ? 1 : 0}" min="0" max="100" value="${m.talkativeness ?? 50}" title="talkativeness" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setTalk(${m.cards_id_fk},this.value)">` +
                   `<span class="tv">${m.talkativeness ?? 50}%</span>` +
-                  `<button class="fgen" title="Generate" onclick="genCard(${m.cards_id_fk},this)">▶</button>` +
                   `<button class="frem" title="Remove" onclick="remMember(${m.cards_id_fk},null,this)">✕</button>`
                 : `<span>${m.card_name || m.persona_name || m.handle || '?'} <small>${m.kind}</small></span>` +
                   `<button class="frem" title="Remove" onclick="remMember(null,${m.users_id_fk},this)">✕</button>`) +
@@ -98,6 +99,8 @@ async function loadRoom() {
         .join('') + `<div class="member" style="margin-top:6px"><select id="addpick" style="flex:1;font-size:.85em"></select>` +
             `<button class="fgen" title="Add" onclick="addMember()">+</button></div>`;
     renderLastMem(r.lastMem);
+    roomMembers = r.members || [];
+    $('npcmenu').hidden = true;
     memberCur = new Set((r.members || []).flatMap(m => [m.cards_id_fk ? 'c' + m.cards_id_fk : null, m.users_id_fk ? 'u' + m.users_id_fk : null]).filter(Boolean));
     const [{ users }, { cards }] = await Promise.all([get('users'), get('cards')]);
     allUsers = users || []; allCards = cards || [];
@@ -109,11 +112,16 @@ async function loadRoom() {
         const d = JSON.parse(e.data);
         if (d.type === 'message' && d.message.rooms_id_fk === room) {
             addMsg(d.message);
+            if (typing.delete(d.message.name)) renderTyping(); // their reply arrived
             get(`lastmem?room=${room}`).then(renderLastMem);
             renderToks();
         }
+        if (d.type === 'typing') noteTyping(d);
         if (d.type === 'delete') document.querySelector(`li[data-mid="${d.id}"]`)?.remove();
-        if (d.type === 'mem') mpFlashSaved(d.phase === 'done' ? (d.count ? `${d.count} new memories` : 'Memories updated') : 'Extracting memories…');
+        if (d.type === 'mem') {
+            if (d.notify !== false) mpFlashSaved(d.phase === 'done' ? (d.count ? `${d.count} new memories` : 'Memories updated') : 'Extracting memories…');
+            if (d.phase === 'done') get(`lastmem?room=${room}`).then(renderLastMem);
+        }
     };
     // Network drops auto-retry, but an HTTP error response leaves the source
     // CLOSED forever — reopen it or live updates silently stop until refresh.
@@ -234,32 +242,99 @@ async function newRoom() {
 }
 
 let persona = null;
+let meId = 0;
+// Typing indicator: names currently composing, keyed so AI entries (server-
+// cleared) and human pings (auto-expire) coexist. AI entries get a long
+// safety timeout in case the server dies mid-generation.
+const typing = new Map();
+function renderTyping() {
+    const names = [...typing.keys()];
+    $('typing').textContent = !names.length ? ''
+        : names.length === 1 ? `${names[0]} is typing…`
+        : `${names.slice(0, -1).join(', ')} and ${names.at(-1)} are typing…`;
+}
+function noteTyping(d) {
+    if (d.user && d.user === meId) return; // own ping echoes back
+    if (!d.name || d.off) typing.delete(d.name);
+    else {
+        clearTimeout(typing.get(d.name)?.timer);
+        typing.set(d.name, { timer: setTimeout(() => { typing.delete(d.name); renderTyping(); }, d.ai ? 90000 : 4000) });
+    }
+    renderTyping();
+}
+let lastTypePing = 0;
+// Slash-command palette: typing "/…" opens completions above the composer.
+// Server resolves these in /api/say — /roll for contested outcomes, /ruling
+// for owner adjudication (hidden from non-owners; server 403s anyway).
+const COMMANDS = [
+    { cmd: '/roll', usage: '/roll NdS±K [vs TARGET]', hint: 'resolve a contested outcome — the server rolls' },
+    { cmd: '/ruling', usage: '/ruling <decision>', hint: 'post an authoritative ruling', owner: true },
+];
+let cmdMatches = [], cmdSel = 0;
+const cmdOpen = () => !$('cmdmenu').hidden;
+function cmdFilter() {
+    const m = $('in').value.match(/^\/(\w*)$/);
+    cmdMatches = m ? COMMANDS.filter(c => c.cmd.startsWith('/' + m[1]) && (!c.owner || roomIsOwner)) : [];
+    if (!cmdMatches.length) { $('cmdmenu').hidden = true; return; }
+    cmdSel = Math.min(cmdSel, cmdMatches.length - 1);
+    $('cmdmenu').innerHTML = cmdMatches.map((c, i) =>
+        `<div class="cmd${i === cmdSel ? ' sel' : ''}" onmousedown="pickCmd(${i});event.preventDefault()"><code>${esc(c.usage)}</code><small>${esc(c.hint)}</small></div>`).join('');
+    $('cmdmenu').hidden = false;
+}
+function pickCmd(i) {
+    $('in').value = cmdMatches[i].cmd + ' ';
+    $('cmdmenu').hidden = true;
+    $('in').focus();
+}
+function cmdNav(d) { cmdSel = (cmdSel + d + cmdMatches.length) % cmdMatches.length; cmdFilter(); }
+
 // Enter-sends is a per-device pref (mp_entersend): default off on touch
 // devices where Enter is for newlines, on for pointer devices.
 const enterSend = () => $('entersend')?.checked ?? true;
 function inKey(e) {
+    if (cmdOpen()) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); cmdNav(1); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); cmdNav(-1); return; }
+        if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); pickCmd(cmdSel); return; }
+        if (e.key === 'Escape') { e.preventDefault(); $('cmdmenu').hidden = true; return; }
+    }
     if (e.key === 'Enter' && !e.shiftKey && enterSend()) { e.preventDefault(); say(); }
 }
 async function say() {
     const text = $('in').value.trim();
     if (!text) return;
+    $('cmdmenu').hidden = true;
     $('in').value = '';
     $('in').style.height = 'auto';
     const m = await api('say', { room, cardId: persona?.id || null, text });
     if (m?.id) addMsg(m, true); // own message always snaps — SSE may be a dead socket
+    else if (m?.error) alert(m.error);
 }
-async function gen() {
-    const r = await api('generate', { room });
-    if (r.error) alert(r.error);
-    renderToks();
+// NPC ▸ opens a picker of the room's AI members — explicit is friendlier
+// than server-picks-the-first, and much easier to hit on a phone.
+function npcMenu() {
+    const el = $('npcmenu');
+    if (!el.hidden) { el.hidden = true; return; }
+    const ais = roomMembers.filter(m => m.kind === 'ai' && m.cards_id_fk);
+    el.innerHTML = ais.length
+        ? ais.map(m => `<div class="opt" onmousedown="pickNpc(${m.cards_id_fk});event.preventDefault()"><img src="/api/avatar?id=${m.cards_id_fk}" onerror="this.style.display='none'"><span>${m.card_name}</span></div>`).join('')
+        : '<div class="note">no AI members in this room</div>';
+    el.hidden = false;
+    setTimeout(() => document.addEventListener('mousedown', function h(e) {
+        if (!el.contains(e.target)) { el.hidden = true; document.removeEventListener('mousedown', h); }
+    }), 0);
+}
+async function pickNpc(cardId) {
+    $('npcmenu').hidden = true;
+    await genCard(cardId);
 }
 async function genCard(cardId, btn) {
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     try {
         const r = await api('generate', { room, card: cardId });
         if (r.error) alert(r.error);
     } finally {
-        btn.disabled = false;
+        if (btn) btn.disabled = false;
     }
     renderToks();
 }
@@ -273,7 +348,6 @@ function renderLastMem(m) {
     $('lastmem').innerHTML = m ? `<div style="font-size:.8em;color:var(--muted);line-height:1.4">${m.text}</div>` : '<div style="font-size:.8em;color:var(--neutral)">none yet</div>';
 }
 let lastStats = null;
-const PAGE_LINKS = { 'World Info': '/world.html', 'Memories': '/memories.html' };
 function showModal(title, text) {
     let v = document.getElementById('partview');
     if (!v) {
@@ -289,7 +363,16 @@ function showModal(title, text) {
         <button onclick="document.getElementById('partview').remove()">Close</button></div>`;
 }
 function showRequest() { showModal('Request JSON', JSON.stringify(lastStats?.request, null, 2)); }
-function showPart(k) { showModal(k, (lastStats?.texts || {})[k]); }
+function showPart(k) {
+    const t = (lastStats?.texts || {})[k];
+    if (k.startsWith('(')) return showModal(k, t); // never sent — show raw text
+    const json = k === 'Chat History' && lastStats?.request
+        // Exactly the message objects sent — excludes the system prompt
+        // and the trailing "Name:" nudge.
+        ? lastStats.request.messages.filter(m => m.role !== 'system').slice(0, -1)
+        : { role: 'system', content: t };
+    showModal(k, JSON.stringify(json, null, 2));
+}
 async function renderToks() {
     const { stats } = await get('genstats?room=' + room);
     lastStats = stats;
@@ -307,13 +390,10 @@ async function renderToks() {
         (scale !== 1 ? `<small style="color:var(--faint)">sections ≈ scaled to actual total</small>` : '') +
         entries.map(([k, v]) => {
             const shown = k.startsWith('(') ? v : Math.round(v * scale);
-            const href = PAGE_LINKS[k];
             const hasText = k in (lastStats?.texts || {});
-            const lbl = href
-                ? `<a href="${href}" style="color:var(--muted)">${k}</a>`
-                : hasText
-                    ? `<a href="#" onclick="showPart('${k}');return false" style="color:var(--muted)">${k}</a>`
-                    : `<span>${k}</span>`;
+            const lbl = hasText
+                ? `<a href="#" onclick="showPart('${k}');return false" style="color:var(--muted)" title="View JSON sent for this section">${k}</a>`
+                : `<span>${k}</span>`;
             return `<div style="display:flex;justify-content:space-between;font-size:.8em;color:var(--muted)" title="est ${v}"><span>${lbl}</span><span>${shown}</span></div>`;
         }).join('');
 }
@@ -329,8 +409,18 @@ async function start() {
             $('newmsgs')?.classList.remove('on');
         }
     });
+    $('in').addEventListener('input', cmdFilter);
+    $('in').addEventListener('blur', () => { $('cmdmenu').hidden = true; });
+    $('in').addEventListener('input', () => {
+        const now = Date.now();
+        if ($('in').value.trim() && now - lastTypePing > 2000) {
+            lastTypePing = now;
+            api('typing', { room, cardId: persona?.id || null }).catch(() => {});
+        }
+    });
     const m = await get('me');
     me = m.handle || 'you';
+    meId = m.id || 0;
     persona = m.persona || null;
     const { rooms } = await get('rooms');
     if (rooms && rooms.length && !rooms.some(r => r.id === room)) {
