@@ -37,9 +37,12 @@ const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords i
 const MEM_ARCS_SUFFIX = ` Threads: a thread is NOT a memory — it is an open situation left pending until it resolves: a debt owed, a repair in progress, an investigation, a brewing conflict, a promise awaiting fulfilment. If the excerpt opens, advances, or resolves one, additionally output "- [arc-open] Title — what is underway", "- [arc] Title — the new development", or "- [arc-close] Title — how it settled". Reuse an open thread's title exactly when updating or closing it. The test: an event is closed when it happens ("Buddy broke the wheel" is [event]); a thread needs a resolution ("the wheel must be replaced before inspection" is a thread). Transient states — injuries, sanctions, pending fixes, ongoing suspicions — belong to threads, never [fact]: arcs close; facts linger as stale truth.`;
 
 // Scene-state snapshot prompt — a dedicated pass that answers "what is true
-// right now" (locations, held objects, ongoing conditions). Unlike extracted
-// memories it is not cumulative: each pass replaces the previous snapshot.
-export const MEM_STATE_PROMPT = `You track the current scene state of a roleplay chat. From the latest messages, describe what is true RIGHT NOW: where each person is, where important objects are and who holds them, ongoing activities or conditions. This is a snapshot — describe only the current state, not history or events. System lines — "Ruling: …" decisions and "… rolls … → N" dice results — are authoritative outcomes. When participants disagree about what is true, the most recent message wins. Output one entry per line in the format "- [state] current state fact". If the scene state is unchanged or nothing is trackable, reply with just "-".`;
+// right now" (locations, held objects, ongoing conditions). The model emits
+// a keyed JSON set — one entry per subject — and the script owns the diff:
+// a subject's new value supersedes its old one, subjects absent from the set
+// are retracted. Unlike extracted memories it is not cumulative.
+export const MEM_STATE_PROMPT = `You track the current scene state of a roleplay chat as a keyed set. From the latest messages (and the previous set, if one is shown), describe what is true RIGHT NOW: where each person is, where important objects are and who holds them, ongoing activities or conditions. Output a single JSON object mapping each subject to its current state, e.g. {"Wren":"in the kitchen","blue tin":"on the counter","common room fire":"burned low"}.
+Rules: exactly one entry per subject — the value IS the current truth and replaces whatever was true before. Carry unchanged subjects forward with their exact keys so the diff stays clean. Snapshot, not history — no events, no past states. System lines — "Ruling: …" decisions and "… rolls … → N" dice results — are authoritative outcomes. When participants disagree about what is true, the most recent message wins. If nothing is trackable, reply {}. Output only the JSON object, no prose.`;
 
 // Fields a memory profile can override on a room's mem_* settings.
 const MEM_PROFILE_FIELDS = ['mem_every', 'mem_budget', 'mem_max', 'mem_max_fact',
@@ -177,15 +180,16 @@ export async function generateReply(roomId, card) {
     const TRIG_SQL = `(SELECT GROUP_CONCAT(mt.word,',') FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk) AS triggers`;
     const HAS_TRIG = `EXISTS (SELECT 1 FROM memory_triggers mt WHERE mt.memories_id_fk=m.memories_id_pk)`;
     const NO_TRIG = `NOT ${HAS_TRIG}`;
-    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND ${HAS_TRIG} AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), budget, 0);
-    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND mc.cards_id_fk=? AND ${HAS_TRIG} ORDER BY m.memories_id_pk DESC`)
+    const LIVE = `m.superseded_by_memories_id_fk IS NULL`; // retracted rows never inject
+    const roomMems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND ${HAS_TRIG} AND ${LIVE} AND NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk) ORDER BY m.memories_id_pk DESC`).all(roomId).reverse().filter(active), budget, 0);
+    const mems = cap(db.prepare(`SELECT m.content,${TRIG_SQL} FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk JOIN memory_cards mc ON mc.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND mc.cards_id_fk=? AND ${HAS_TRIG} AND ${LIVE} ORDER BY m.memories_id_pk DESC`)
         .all(roomId, card.id).reverse().filter(active), budget, roomMems.reduce((a, r) => a + tok(r.content), 0));
 
     // Canon: memories with no trigger keywords are always-true — injected
     // every generation, bypassing the refresh counter, capped by their own
     // budget. Shared canon + this card's canon both apply.
     const canonRows = cap(db.prepare(`SELECT m.content FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-        WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND m.type!='state' AND ${NO_TRIG} AND (NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk)
+        WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NULL AND m.type!='state' AND ${LIVE} AND ${NO_TRIG} AND (NOT EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk)
             OR EXISTS (SELECT 1 FROM memory_cards mc WHERE mc.memories_id_fk=m.memories_id_pk AND mc.cards_id_fk=?))
         ORDER BY m.memories_id_pk`).all(roomId, card.id), mem?.mem_canon_budget ?? 800);
     const canonText = canonRows.length ? 'Canon:\n' + canonRows.map(m => '- ' + m.content).join('\n') : null;
@@ -200,7 +204,7 @@ export async function generateReply(roomId, card) {
     const STOP = new Set(['the', 'a', 'an', 'of', 'and', 'in', 'on', 'at', 'to', 'for', 'my', 'his', 'her', 'our']);
     const folded = db.prepare(`SELECT m.content, m.room_arcs_id_fk AS arcId,${TRIG_SQL}
         FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-        WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NOT NULL`).all(roomId);
+        WHERE rm.rooms_id_fk=? AND m.room_arcs_id_fk IS NOT NULL AND ${LIVE}`).all(roomId);
     const hitKids = folded.filter(active).reduce((m, c) => ((m[c.arcId] ||= []).push(c), m), {});
     const pastArcs = cap(db.prepare(`SELECT room_arcs_id_pk AS id, title, summary FROM room_arcs
         WHERE rooms_id_fk=? AND status!='open' AND summary!='' ORDER BY updated DESC`).all(roomId)
@@ -218,7 +222,7 @@ export async function generateReply(roomId, card) {
     // held objects, ongoing conditions. Always injected when present (it is
     // by definition relevant), never trigger-gated, own token budget.
     const sceneRows = cap(db.prepare(`SELECT m.content FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-        WHERE rm.rooms_id_fk=? AND m.type='state' AND m.room_arcs_id_fk IS NULL ORDER BY m.memories_id_pk`).all(roomId),
+        WHERE rm.rooms_id_fk=? AND m.type='state' AND m.room_arcs_id_fk IS NULL AND ${LIVE} ORDER BY m.memories_id_pk`).all(roomId),
         mem?.mem_state_budget ?? 400);
     const sceneText = sceneRows.length ? 'Scene:\n' + sceneRows.map(m => '- ' + m.content).join('\n') : null;
 
@@ -304,6 +308,7 @@ export async function generateReply(roomId, card) {
     parts.Memories = tok(memText);
     parts.Canon = tok(canonText);
     parts['Open Threads'] = tok(arcText);
+    parts.Scene = tok(sceneText);
     parts['Current Time'] = tok(timeText);
 
     // Section texts for the chat sidebar's click-to-view prompt inspector.
@@ -319,6 +324,7 @@ export async function generateReply(roomId, card) {
         'Memories': memText,
         'Canon': canonText,
         'Open Threads': arcText,
+        'Scene': sceneText,
         'Current Time': timeText,
         'Chat History': history.map(m => `${m.name}: ${m.text}`).join('\n'),
     };
@@ -451,11 +457,27 @@ export async function maybeSummarize(roomId) {
     const arcsSuffix = (mem.mem_max_arcs ?? 10) > 0
         ? MEM_ARCS_SUFFIX + (openArcs.length ? ` Currently open threads: ${openArcs.join('; ')}.` : '')
         : '';
+    // Supersede-eligible memories — smart, live, shared, non-state, unfolded —
+    // listed with reference numbers so the writer can retire one by emitting
+    // "- [supersede N] new fact". User memories are never offered: only the
+    // system retracts what the system wrote.
+    const supersedable = db.prepare(`SELECT m.memories_id_pk AS id, m.type, m.content FROM memories m
+        JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+        WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type!='state' AND m.room_arcs_id_fk IS NULL
+          AND m.superseded_by_memories_id_fk IS NULL
+        ORDER BY m.memories_id_pk DESC LIMIT 30`).all(roomId).reverse();
+    const supersedeSuffix = supersedable.length
+        ? ' If the memory you write updates or contradicts a current memory, write it as "- [supersede N] …" where N is the number of the memory it replaces — the old memory is retired, never keep both.'
+        : '';
+    const memList = supersedable.length
+        ? 'Current memories (numbered — a [supersede N] tag retires one):\n'
+            + supersedable.map((m, i) => `${i + 1}) [${m.type}] ${m.content}`).join('\n') + '\n\n'
+        : '';
     const reqBody = {
         model: conn.model || 'local',
         messages: [
-            { role: 'system', content: mem.mem_extraction_prompt?.trim() || (MEM_EXTRACT_PROMPT + (mem.mem_triggers ? MEM_TRIGGERS_SUFFIX : '') + arcsSuffix) },
-            { role: 'user', content: sheet + 'Recent chat:\n' + excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
+            { role: 'system', content: mem.mem_extraction_prompt?.trim() || (MEM_EXTRACT_PROMPT + (mem.mem_triggers ? MEM_TRIGGERS_SUFFIX : '') + arcsSuffix + supersedeSuffix) },
+            { role: 'user', content: sheet + memList + 'Recent chat:\n' + excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
         ],
         temperature: 0.3, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
     };
@@ -484,13 +506,14 @@ export async function maybeSummarize(roomId) {
         // drive room_arcs, anything else ([Name]/[shared] scope tags) is
         // stripped. The old single-strip order silently flattened every
         // [event]/[preference]/[relationship] line to 'fact'.
-        let type = 'fact', arc = null;
-        for (let i = 0; i < 3; i++) {
+        let type = 'fact', arc = null, supersedes = null;
+        for (let i = 0; i < 4; i++) {
             const t = fact.match(/^\[([^\]]+)\]\s*/);
             if (!t) break;
             const w = t[1].trim().toLowerCase();
             if (['fact', 'event', 'relationship', 'preference'].includes(w)) type = w;
             else if (['arc', 'arc-open', 'arc-close'].includes(w)) arc = w;
+            else if (/^supersedes?\s*[:#]?\s*\d+$/.test(w)) supersedes = parseInt(w.match(/\d+/)[0], 10);
             fact = fact.slice(t[0].length).trimStart();
         }
         if (arc) {
@@ -515,6 +538,12 @@ export async function maybeSummarize(roomId) {
             const mid = ins.run(fact, type).lastInsertRowid;
             for (const w of triggers.split(',')) { const word = w.trim(); if (word) insTrig.run(mid, word); }
             linkRoom.run(roomId, mid); added++;
+            // [supersede N]: the new memory retires list entry N — marked, not
+            // deleted, so the audit trail survives (FK SET NULL revives the
+            // original if the replacement is ever deleted).
+            const target = supersedes && supersedable[supersedes - 1];
+            if (target) db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?')
+                .run(mid, target.id);
             // One memory per extraction run — but keep scanning the rest of
             // the output for [arc*] lines.
         }
@@ -532,26 +561,27 @@ export async function maybeSummarize(roomId) {
     // activity notifications (the flash) are disabled.
     push(roomId, { type: 'mem', phase: 'done', count: added, notify: !!mem.mem_activity });
     // Cap stored smart memories per type — oldest entries of each type drop off.
+    // Superseded rows don't occupy cap slots (they're already retracted).
     for (const [type, col] of [['fact','mem_max_fact'],['event','mem_max_event'],['relationship','mem_max_relationship'],['preference','mem_max_preference']]) {
         const cap = mem[col] || 0;
         if (cap <= 0) continue;
         db.prepare(`DELETE FROM memories WHERE origin='smart' AND type=? AND memories_id_pk IN
             (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type=?
+             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type=? AND m.superseded_by_memories_id_fk IS NULL
              AND m.memories_id_pk NOT IN
                 (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
-                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type=? ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
+                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type=? AND m2.superseded_by_memories_id_fk IS NULL ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
             .run(type, roomId, type, roomId, type, cap);
     }
     // Global cap (mem_max) as a safety net across all types.
     const totalCap = mem.mem_max || 0;
     if (totalCap > 0) {
-        db.prepare(`DELETE FROM memories WHERE origin='smart' AND type!='state' AND memories_id_pk IN
+        db.prepare(`DELETE FROM memories WHERE origin='smart' AND type!='state' AND superseded_by_memories_id_fk IS NULL AND memories_id_pk IN
             (SELECT m.memories_id_pk FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
-             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type!='state'
+             WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type!='state' AND m.superseded_by_memories_id_fk IS NULL
              AND m.memories_id_pk NOT IN
                 (SELECT m2.memories_id_pk FROM memories m2 JOIN room_memories rm2 ON rm2.memories_id_fk=m2.memories_id_pk
-                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type!='state' ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
+                 WHERE rm2.rooms_id_fk=? AND m2.origin='smart' AND m2.type!='state' AND m2.superseded_by_memories_id_fk IS NULL ORDER BY m2.memories_id_pk DESC LIMIT ?))`)
             .run(roomId, roomId, totalCap);
     }
     // Cap open arcs — oldest-touched threads are dropped first.
@@ -571,18 +601,20 @@ export async function maybeSummarize(roomId) {
     // memories aren't dropped purely for exceeding the current budget.
     // (Budgets live on the memory profile now — rooms only carry the FK.)
     if (mem.mem_autotune && mem.mem_profiles_id_pk) {
-        const used = db.prepare(`SELECT COALESCE(SUM(LENGTH(m.content)/4.0),0) AS s FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart'`).get(roomId)?.s || 0;
+        const used = db.prepare(`SELECT COALESCE(SUM(LENGTH(m.content)/4.0),0) AS s FROM memories m JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.superseded_by_memories_id_fk IS NULL`).get(roomId)?.s || 0;
         const b = mem.mem_budget || 800;
         if (used > b && b < 8000) db.prepare('UPDATE mem_profiles SET mem_budget=? WHERE mem_profiles_id_pk=?').run(Math.ceil(used), mem.mem_profiles_id_pk);
     }
 }
 
 // Scene-state snapshot — answers "what is true right now" (locations, held
-// objects, ongoing conditions). Unlike accumulated memories a snapshot is
-// not cumulative: each pass deletes the previous live [state] rows and
-// writes a fresh set. Runs on the extraction connection every
-// mem_state_every extraction runs; state rows are room-shared, carry no
-// triggers (always relevant → always injected), and skip arc folding.
+// objects, ongoing conditions) as a keyed JSON set: one entry per subject.
+// The script owns the diff — a subject's new value supersedes its old row in
+// place, subjects absent from the set are retracted, unchanged entries keep
+// their rows. Contradictory states can't stack: a subject has exactly one
+// current value. Runs on the extraction connection every mem_state_every
+// extraction runs; state rows are room-shared, carry no triggers (always
+// relevant → always injected), and skip arc folding.
 async function maybeUpdateState(roomId, mem, conn) {
     const room = db.prepare('SELECT mem_extract_count FROM rooms WHERE rooms_id_pk=?').get(roomId);
     const every = Math.max(1, mem.mem_state_every || 1);
@@ -592,11 +624,18 @@ async function maybeUpdateState(roomId, mem, conn) {
     const excerpt = db.prepare(MSG_SQL + ' WHERE m.rooms_id_fk=? ORDER BY m.messages_id_pk DESC LIMIT 30')
         .all(roomId).reverse();
     if (!excerpt.length) return;
+    // The live set, keyed by subject — shown to the model so unchanged
+    // subjects keep their exact keys (a renamed key diffs as retract+insert).
+    const rows = db.prepare(`SELECT m.memories_id_pk AS id, m.state_key, m.content FROM memories m
+        JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+        WHERE rm.rooms_id_fk=? AND m.type='state' AND m.origin='smart'
+        AND m.superseded_by_memories_id_fk IS NULL ORDER BY m.memories_id_pk`).all(roomId);
+    const prev = rows.length ? 'Current set:\n' + rows.map(r => '- ' + r.content).join('\n') + '\n\n' : '';
     const reqBody = {
         model: conn.model || 'local',
         messages: [
             { role: 'system', content: mem.mem_state_prompt?.trim() || MEM_STATE_PROMPT },
-            { role: 'user', content: excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
+            { role: 'user', content: prev + 'Recent chat:\n' + excerpt.map(m => `${m.name}: ${m.text}`).join('\n') },
         ],
         temperature: 0.2, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
     };
@@ -611,26 +650,52 @@ async function maybeUpdateState(roomId, mem, conn) {
         const data = await resp.json();
         const text = data?.choices?.[0]?.message?.content?.trim() || '';
         logPrompt(roomId, null, 'state', reqBody, text, data?.usage);
-        // State lines: strip bullet + any type tag, keep the text as-is —
-        // parens stay content (state never stores triggers; it is always
-        // injected, so trigger-gating would wrongly hide it).
-        const fresh = text.split('\n')
-            .map(l => l.replace(/^\s*[-*•]\s*/, '').replace(/^\[(fact|event|relationship|preference|state)\]\s*/i, '').trim())
-            .filter(f => f.length > 5 && f !== '-');
-        if (!fresh.length) return; // keep the last good snapshot rather than wipe
+        // The set string: one JSON object, subject → current state. Grab the
+        // first {...} span — models wrap output in prose/fences. Non-string
+        // values are coerced except objects (a nested state is a misfire).
+        let set = null;
+        const j = text.match(/\{[\s\S]*\}/);
+        if (j) {
+            try {
+                const o = JSON.parse(j[0]);
+                if (o && typeof o === 'object' && !Array.isArray(o)) {
+                    set = new Map();
+                    for (const [k, v] of Object.entries(o)) {
+                        const key = k.trim(), val = String(v ?? '').trim();
+                        if (key && val && (typeof v !== 'object' || v === null)) set.set(key, val);
+                    }
+                }
+            } catch { /* unparseable — keep the last good snapshot */ }
+        }
+        if (!set?.size) return;
         const cap = Math.max(0, mem.mem_max_state ?? 30);
-        const lines = cap > 0 ? fresh.slice(0, cap) : [];
+        const entries = cap > 0 ? [...set.entries()].slice(0, cap) : [];
         db.exec('BEGIN');
         try {
-            // Wholesale replace: the old snapshot is stale truth — deleting
-            // it is the lifecycle (raw pass output stays in prompt_logs).
-            db.prepare(`DELETE FROM memories WHERE type='state' AND origin='smart' AND memories_id_pk IN
-                (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)`).run(roomId);
-            const ins = db.prepare("INSERT INTO memories (content,type,origin) VALUES (?, 'state', 'smart')");
+            // History is kept: a changed value gets a fresh row and the old
+            // one points at it via superseded_by; a dropped key is tombstoned
+            // (superseded_by = self — retracted, no successor). "Current" is
+            // always exactly the live row per subject — no latest-version
+            // ambiguity for injection or UI.
+            const byKey = new Map(rows.map(r => [r.state_key?.toLowerCase(), r]));
+            const seen = new Set();
+            const ins = db.prepare("INSERT INTO memories (content,type,origin,state_key) VALUES (?, 'state', 'smart', ?)");
             const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
-            for (const fact of lines) linkRoom.run(roomId, ins.run(fact).lastInsertRowid);
+            const sup = db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?');
+            for (const [subject, val] of entries) {
+                const content = `${subject} — ${val}`;
+                const ex = byKey.get(subject.toLowerCase());
+                if (!ex) { linkRoom.run(roomId, ins.run(content, subject).lastInsertRowid); continue; }
+                seen.add(ex.id);
+                if (ex.content === content) continue;
+                const nid = ins.run(content, subject).lastInsertRowid;
+                linkRoom.run(roomId, nid);
+                sup.run(nid, ex.id);
+            }
+            const tomb = db.prepare('UPDATE memories SET superseded_by_memories_id_fk=memories_id_pk WHERE memories_id_pk=?');
+            for (const r of rows) if (!seen.has(r.id)) tomb.run(r.id);
             db.exec('COMMIT');
-            if (mem.mem_activity) console.log(`[mem] activity: state snapshot refreshed for room ${roomId} (${lines.length} entries)`);
+            if (mem.mem_activity) console.log(`[mem] activity: state snapshot refreshed for room ${roomId} (${entries.length} entries)`);
         } catch (e) { db.exec('ROLLBACK'); throw e; }
     } catch (e) {
         if (mem.mem_activity) console.log(`[mem] activity: state snapshot failed for room ${roomId} (${e.message})`);
@@ -694,6 +759,7 @@ export async function consolidateArc(roomId, arcId) {
     // timestamps are extraction-time, so they always postdate the close
     // anchor's send_date.)
     db.prepare(`UPDATE memories SET room_arcs_id_fk=? WHERE origin='smart' AND room_arcs_id_fk IS NULL
+        AND superseded_by_memories_id_fk IS NULL
         AND created >= ?
         AND memories_id_pk IN (SELECT memories_id_fk FROM room_memories WHERE rooms_id_fk=?)
         AND EXISTS (SELECT 1 FROM memory_triggers mt WHERE mt.memories_id_fk=memories.memories_id_pk)`)

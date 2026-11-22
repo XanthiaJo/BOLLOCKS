@@ -204,7 +204,7 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 .tab.on{background:var(--accent);color:var(--white);border-color:var(--accent)}
 
 /* small type tag chips (memory types etc.) */
-.mtag{display:inline-block;font-size:.7em;font-weight:700;padding:1px 6px;border-radius:3px;background:var(--mtag);color:var(--muted);margin-right:4px}
+.mtag{display:inline-block;font-size:.7em;font-weight:700;padding:1px 6px;border-radius:3px;background:var(--mtag);color:var(--muted);margin-right:4px;text-transform:capitalize}
 .mtag.mevent{background:var(--ok-deep);color:var(--mev)}
 .mtag.mrelationship{background:var(--mrel-bg);color:var(--mrel)}
 .mtag.mpreference{background:var(--mpref-bg);color:var(--mpref)}
