@@ -11,6 +11,7 @@ import { db } from '../db.js';
 import { send, readBody } from '../lib/util.js';
 import { roomMember, memoryShared } from '../lib/access.js';
 import { consolidateArc } from '../generate.js';
+import { dedupeRoom } from '../lib/memdedupe.js';
 
 export default {
     'GET /api/lastmem': async (req, res, u) => {
@@ -79,6 +80,14 @@ export default {
             db.exec('COMMIT');
         } catch (e) { db.exec('ROLLBACK'); throw e; }
         send(res, 200, { ok: true });
+    },
+    // Manual retelling sweep — same check extraction runs on each new
+    // memory, applied pairwise across the room's live smart events.
+    // Returns [[oldId, newId], ...] pairs it chained.
+    'POST /api/memories/dedupe': async (req, res, u) => {
+        const b = await readBody(req);
+        if (!roomMember(b.room || 1, u)) return send(res, 403, { error: 'not a room member' });
+        send(res, 200, { merged: dedupeRoom(b.room || 1) });
     },
     'POST /api/memories/triggers': async (req, res, u) => {
         const b = await readBody(req);

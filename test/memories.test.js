@@ -47,6 +47,30 @@ describe('memories', () => {
         await s.post('rooms/delete', { id: room });
         await s.post('cards/delete', { id: card });
     });
+
+    test('dedupe retires retold smart events under the newer telling', async () => {
+        const room = (await s.post('rooms', { name: 'Dedupe room' })).json.id;
+        const seed = async (content, triggers) => {
+            const id = (await s.post('memories', { room, content, type: 'event', triggers })).json.id;
+            await s.post('memories/update', { id, origin: 'smart' });
+            return id;
+        };
+        // Two tellings of one event share their rare trigger words; a
+        // distinct event and a user-authored row must stay untouched.
+        const oldTelling = await seed('A flapjack vanished from the bed overnight, leaving crumbs.', 'flapjack,crumbs,buddy,mystery');
+        const newTelling = await seed('Rackington named Blake the flapjack culprit after clearing Buddy.', 'flapjack,crumbs,blake,culprit');
+        const distinct = await seed('Buddy claimed the pillow by sitting on it.', 'pillow,claim');
+        const userMem = (await s.post('memories', { room, content: 'Karima baked the flapjack.', type: 'event', triggers: 'flapjack,crumbs' })).json.id;
+
+        const merged = (await s.post('memories/dedupe', { room })).json.merged;
+        assert.deepEqual(merged, [[oldTelling, newTelling]]);
+
+        const mems = (await s.get(`memories?card=-1&room=${room}`)).json.memories;
+        assert.equal(mems.find(m => m.id === oldTelling).superseded_by_memories_id_fk, newTelling);
+        assert.equal(mems.find(m => m.id === distinct).superseded_by_memories_id_fk, null);
+        assert.equal(mems.find(m => m.id === userMem).superseded_by_memories_id_fk, null);
+        await s.post('rooms/delete', { id: room });
+    });
 });
 
 // Older builds re-add a `source` column to a migrated memories table (their
