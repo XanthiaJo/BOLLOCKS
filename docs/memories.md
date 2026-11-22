@@ -11,7 +11,7 @@ There are two kinds of memory, distinguished by `origin`:
 | Kind | `origin` | Created by | Scope | Lifetime |
 |---|---|---|---|---|
 | **Permanent** | `user` | User (always user-driven) | Room-shared or character (card) | Until user deletes it |
-| **Smart** | `smart` | AI extraction | **Room only** (shared) | Capped (`mem_max`); oldest auto dropped |
+| **Smart** | `smart` | AI extraction | **Room only** (shared) | Capped (`mem_max`) / dormant — auto-**retired**, never deleted |
 
 ### Permanent memories (user-driven)
 
@@ -32,7 +32,8 @@ There are two kinds of memory, distinguished by `origin`:
 - Extraction runs only through the room owner's configured extraction profile (`extraction_api_profiles_id_fk` on the memory profile). No fallback: if it is unset, missing, or belongs to someone other than the room owner, extraction is skipped.
 - **Smart memories belong to the chat (room) only** - they are always stored as shared room memories (no `memory_cards` row).
   - Rationale: deciding whether an extracted fact belongs to a specific character vs. the chat as a whole is ambiguous and error-prone. Keep smart memories room-scoped; users can promote a fact to a character's permanent memory manually if desired.
-- Capped to `mem_max` per room (oldest `origin='smart'` dropped). Permanent memories are never subject to the cap.
+- Capped to `mem_max` per room (oldest live `origin='smart'` rows **retire** — see Retirement below). Under cap pressure the room runs a **consolidation sweep first** (`dedupeRoom` — merges retold events into chains) so duplicates free slots before any real memory retires. Permanent memories are never subject to the cap.
+- **Dormancy pruning:** with `mem_prune_messages > 0` on the profile (new profiles default to 50; existing profiles stay 0/off after upgrade), a triggered smart memory that hasn't reached a prompt within the last N room messages retires itself. Injection stamps `last_fired_messages_id_fk` + `last_fired_at` on every memory that actually makes the prompt (budget-capped rows that never make the cut are precisely what the sweep retires). A memory gets the full window from creation before it can be retired. Canon (no triggers) is exempt — always injected by design — as are `state` rows, folded arc rows, and permanent memories.
 - Watermark (`mem_last_messages_id_fk`) advances only after a successful extraction.
 
 ## Scoping model
@@ -103,7 +104,7 @@ flowchart TD
     CheckInterval -- no --> Skip
     CheckInterval -- yes --> Extract["LLM extracts facts<br/>room owner's configured profile"]
     Extract --> StoreShared["INSERT as shared room memory<br/>(no memory_cards row)"]
-    StoreShared --> Cap["Cap to mem_max<br/>drop oldest auto"]
+    StoreShared --> Cap["Cap + dormancy sweep<br/>retire (tombstone), never delete"]
     Cap --> Watermark[Advance watermark]
     Watermark --> SmartList
 
@@ -192,6 +193,15 @@ per-type/`mem_max` cap slots, and collapse under the replacement's
 `history ▸` toggle for audit. The FK is `ON DELETE SET NULL` — deleting
 the replacement revives the original. Only `origin='smart'` rows are
 offered or swept as targets; user memories are never retired.
+
+**Retirement** = the same tombstone (`superseded_by = self`) used when
+the *system* retires a memory rather than a newer version replacing it —
+cap overflow and dormancy pruning both retire this way instead of the
+old hard `DELETE`. Self-tombstoned rows leave every live query and sit
+in the Retracted accordion on the Memories page. Deleting one stays
+deleted (no successor to revive), but deleting a retired *chain head*
+still `SET NULL`s its drafts' pointers — the drafts revive to live, the
+same undo hatch as deleting a supersede replacement.
 
 ### Who does what
 
@@ -295,6 +305,11 @@ ALTER TABLE memories ADD COLUMN state_key TEXT;
 -- subject key for type='state' rows — the diff handle
 ALTER TABLE memories ADD COLUMN superseded_by_memories_id_fk INTEGER
     REFERENCES memories(memories_id_pk) ON DELETE SET NULL;
+
+-- Dormancy tracking (memories) + prune window (mem_profiles):
+ALTER TABLE memories ADD COLUMN last_fired_messages_id_fk INTEGER;
+ALTER TABLE memories ADD COLUMN last_fired_at TEXT;
+ALTER TABLE mem_profiles ADD COLUMN mem_prune_messages INTEGER DEFAULT 0;
 ```
 
 All additive in `migrateSchema()`; the new `mem_*` columns ride

@@ -211,7 +211,7 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 
 /* settings panels — add class="settings" to a .panel for the
    label/caption-left, control-right grid rows */
-.settings h4{color:var(--dim);margin:16px 0 4px;font-size:.85em;text-transform:uppercase;letter-spacing:.04em}
+.settings h4{color:var(--text);margin:16px 0 4px;font-size:.85em;text-transform:uppercase;letter-spacing:.04em}
 .settings .lbl{margin-top:12px}
 .settings .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:0 12px;margin:12px 0 4px}
 .settings .row .lbl{grid-column:1;margin-top:0}

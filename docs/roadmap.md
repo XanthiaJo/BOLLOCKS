@@ -68,6 +68,11 @@ live in one room-scoped list; profiles control how/when extraction runs.
 - [x] **Retraction/supersede** — `[supersede N]` extraction tags mark a
   smart memory replaced by a newer one (kept for audit, never injected)
   *(2026-11-22)*
+- [x] **Dormancy pruning** — triggered smart memories that haven't fired
+  into a prompt within `mem_prune_messages` retire themselves
+  (tombstone, never deleted); caps retire rather than hard-delete, and
+  `last_fired_*` tracking makes the LRU signal visible on each card
+  *(2026-11-22)*
 
 ## Smaller items
 

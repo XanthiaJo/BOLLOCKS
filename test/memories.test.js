@@ -102,6 +102,37 @@ test('memories rebuild preserves origin when source column is also present', asy
     }
 });
 
+// The mem_profiles rebuild (api_profiles FK normalisation) rewrites the
+// table from a hardcoded column list — any column added by an earlier
+// ALTER that isn't in the list is silently dropped on first boot.
+test('mem_profiles rebuild keeps the dormancy-pruning column', async () => {
+    const dir = tmp('data');
+    fs.mkdirSync(dir, { recursive: true });
+    const db = new DatabaseSync(path.join(dir, 'app.db'));
+    // Pre-FK schema: no REFERENCES api_profiles, so the rebuild fires.
+    // user_version=8 skips the legacy one-time data fixes (they're for
+    // real old DBs and assume columns this fake table never had).
+    db.exec(`CREATE TABLE mem_profiles (mem_profiles_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
+        users_id_fk INTEGER, name TEXT, mem_every INTEGER DEFAULT 10, mem_readonly INTEGER DEFAULT 0);
+        PRAGMA user_version=8`);
+    db.prepare("INSERT INTO mem_profiles (users_id_fk,name,mem_readonly) VALUES (1,'old prof',1)").run();
+    db.close();
+    const srv = await boot(dir);
+    try {
+        const check = new DatabaseSync(path.join(dir, 'app.db'));
+        const mp = check.prepare('PRAGMA table_info(mem_profiles)').all().map(c => c.name);
+        assert.ok(mp.includes('mem_prune_messages'), 'prune window survives rebuild');
+        const row = check.prepare('SELECT name,mem_readonly FROM mem_profiles').get();
+        assert.equal(row.name, 'old prof'); // row carried across too
+        const mc = check.prepare('PRAGMA table_info(memories)').all().map(c => c.name);
+        assert.ok(mc.includes('last_fired_messages_id_fk'), 'fired watermark');
+        assert.ok(mc.includes('last_fired_at'));
+        check.close();
+    } finally {
+        await srv.stop();
+    }
+});
+
 // The triggers comma-list column becomes memory_triggers rows (one per
 // keyword). The harvest must split, trim, lowercase, and drop the column.
 test('migration splits memories.triggers into memory_triggers rows', async () => {

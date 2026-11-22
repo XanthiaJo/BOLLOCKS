@@ -33,12 +33,6 @@
       <h4>Extraction</h4>
       <span class="hint">When and how new chat gets turned into stored memories.</span>
       <div class="row"><span class="lbl" title="How many new messages before the extractor summarizes them." title="How many new messages before the extractor summarizes them.">Extract after every N new messages</span><span class="hint">How often the memory-writer runs. Smaller = more up-to-date but more API calls. Default: 10.</span><input type="number" id="set_every" min="2" max="100" style="width:80px;display:inline-block"></div>
-      <div class="row"><span class="lbl" title="Cap on auto-extracted memories (total); oldest are dropped.">Max stored smart memories (total)</span><span class="hint">Overall cap across all types — oldest are forgotten first. 0 = unlimited. Default: 50.</span><input type="number" id="set_max" min="0" max="5000" style="width:80px;display:inline-block"></div>
-      <span class="hint">Caps per memory type — the oldest of that type drop first. 0 = no per-type limit (the total cap still applies). Default: 15 each.</span>
-      <div class="row"><span class="lbl">Max per type — fact</span><span class="hint">things that are true</span><input type="number" id="set_max_fact" min="0" max="500" style="width:80px;display:inline-block"></div>
-      <div class="row"><span class="lbl">Max per type — event</span><span class="hint">things that happened</span><input type="number" id="set_max_event" min="0" max="500" style="width:80px;display:inline-block"></div>
-      <div class="row"><span class="lbl">Max per type — relationship</span><span class="hint">how characters feel about each other</span><input type="number" id="set_max_rel" min="0" max="500" style="width:80px;display:inline-block"></div>
-      <div class="row"><span class="lbl">Max per type — preference</span><span class="hint">likes and dislikes</span><input type="number" id="set_max_pref" min="0" max="500" style="width:80px;display:inline-block"></div>
       <div>
         <div class="lbl" title="The instruction sent to the memory LLM when summarizing chat into memories. Leave blank for default.">Extraction prompt template</div>
         <span class="hint">Custom instructions for the memory-writer (e.g. focus on plot, ignore OOC). Leave blank for the built-in prompt — <a href="#" onclick="toggleDefPrompt(this);return false" style="color:var(--muted)">show it</a>.</span>
@@ -98,6 +92,24 @@
 
     </div>
 
+    <div class="pgroup" id="pg_prune">
+      <div class="pgt">Pruning &amp; consolidation</div>
+      <span class="hint">Stored-memory housekeeping — how the room keeps its smart memories from piling up. When a cap is exceeded, retold events are merged into chains first (newest telling wins); retirement only touches what's still over.</span>
+
+      <h4>Caps</h4>
+      <span class="hint">How many live smart memories a room may hold — overflow retires oldest-first after consolidation.</span>
+      <div class="row"><span class="lbl" title="Cap on auto-extracted memories (total); oldest are retired.">Max stored smart memories (total)</span><span class="hint">Overall cap across all types — oldest are retired first. 0 = unlimited. Default: 50.</span><input type="number" id="set_max" min="0" max="5000" style="width:80px;display:inline-block"></div>
+      <span class="hint">Caps per memory type — the oldest of that type retire first. 0 = no per-type limit (the total cap still applies). Default: 15 each.</span>
+      <div class="row"><span class="lbl">Max per type — fact</span><span class="hint">things that are true</span><input type="number" id="set_max_fact" min="0" max="500" style="width:80px;display:inline-block"></div>
+      <div class="row"><span class="lbl">Max per type — event</span><span class="hint">things that happened</span><input type="number" id="set_max_event" min="0" max="500" style="width:80px;display:inline-block"></div>
+      <div class="row"><span class="lbl">Max per type — relationship</span><span class="hint">how characters feel about each other</span><input type="number" id="set_max_rel" min="0" max="500" style="width:80px;display:inline-block"></div>
+      <div class="row"><span class="lbl">Max per type — preference</span><span class="hint">likes and dislikes</span><input type="number" id="set_max_pref" min="0" max="500" style="width:80px;display:inline-block"></div>
+
+      <h4>Dormancy</h4>
+      <span class="hint">A memory earns its slot by being injected — these settings retire the ones that stopped mattering.</span>
+      <div class="row"><span class="lbl" title="Retire triggered smart memories whose keywords haven't brought them back into a prompt within the last N room messages.">Prune dormant after N messages</span><span class="hint">A smart memory that hasn't fired within the last N messages retires itself. Canon (no keywords) is exempt. 0 = off (default 50).</span><input type="number" id="set_prune_msgs" min="0" max="5000" value="50" style="width:80px;display:inline-block"></div>
+    </div>
+
     <div class="pgroup" id="pg_tbi">
       <div class="pgt">To be implemented</div>
       <span class="hint">Planned features — these controls are placeholders and don't save yet.</span>
@@ -106,32 +118,6 @@
       <div class="ph">
         <div class="row"><span class="lbl" title="How many AI replies pass before a memory extraction runs." title="How many AI replies pass before a memory extraction runs.">Extract after every N AI messages</span><input value="10" disabled style="width:80px"></div>
         <div class="row"><span class="lbl" title="Cap on session-scoped (temporary) memories; oldest drop off." title="Cap on session-scoped (temporary) memories; oldest drop off.">Max session memories</span><input value="30" disabled style="width:80px"></div>
-      </div>
-
-      <h4>Current Summary</h4>
-      <div class="ph">
-        <div class="row"><span class="lbl" title="Summarize early when context usage exceeds this percent." title="Summarize early when context usage exceeds this percent.">Context threshold (%)</span><input value="80" disabled style="width:80px"></div>
-        <div class="row"><span class="lbl" title="Max tokens for the summarizer response." title="Max tokens for the summarizer response.">Response length (tokens)</span><input value="2000" disabled style="width:80px"></div>
-        <div class="lbl" title="Format the rolling summary is injected with.">Summary template</div>
-        <textarea disabled style="min-height:50px"></textarea>
-      </div>
-
-      <h4>Scene History</h4>
-      <div class="ph">
-        <label class="cb"><input type="checkbox" disabled> Use AI scene detection</label>
-        <div class="row"><span class="lbl" title="How many recent scene summaries to retain." title="How many recent scene summaries to retain.">Keep last N scenes</span><input value="5" disabled style="width:80px"></div>
-      </div>
-
-      <h4>Consolidation</h4>
-      <div class="ph">
-        <div class="row"><span class="lbl" title="Merge N pending fact-memories into one consolidated entry." title="Merge N pending fact-memories into one consolidated entry.">Consolidate [fact] after N unprocessed</span><input value="4" disabled style="width:80px"></div>
-        <div class="row"><span class="lbl" title="Same, for relationship-type memories." title="Same, for relationship-type memories.">Consolidate [relationship] after N</span><input value="3" disabled style="width:80px"></div>
-        <div class="row"><span class="lbl" title="Same, for preference-type memories." title="Same, for preference-type memories.">Consolidate [preference] after N</span><input value="3" disabled style="width:80px"></div>
-        <div class="row"><span class="lbl" title="Same, for event-type memories." title="Same, for event-type memories.">Consolidate [event] after N</span><input value="4" disabled style="width:80px"></div>
-        <div class="row"><span class="lbl" title="Same, for scene summaries." title="Same, for scene summaries.">Consolidate [scene] after N</span><input value="3" disabled style="width:80px"></div>
-        <div class="row"><span class="lbl" title="Same, for character revelations." title="Same, for character revelations.">Consolidate [revelation] after N</span><input value="3" disabled style="width:80px"></div>
-        <div class="row"><span class="lbl" title="Same, for character development notes." title="Same, for character development notes.">Consolidate [development] after N</span><input value="3" disabled style="width:80px"></div>
-        <div class="row"><span class="lbl" title="Same, for detail memories." title="Same, for detail memories.">Consolidate [detail] after N</span><input value="3" disabled style="width:80px"></div>
       </div>
 
       <h4>Profiles</h4>
@@ -155,15 +141,6 @@
       <div class="ph">
         <label class="cb"><input type="checkbox" disabled> Auto-check after each response</label>
         <label class="cb"><input type="checkbox" disabled> Auto-repair contradictions</label>
-      </div>
-
-      <h4>Deduplication</h4>
-      <div class="ph">
-        <label class="cb"><input type="checkbox" disabled> Use semantic embeddings</label>
-        <div class="row"><span class="lbl" title="Service providing embeddings." title="Service providing embeddings.">Embedding source</span><input placeholder="ollama / openai" disabled></div>
-        <div class="row"><span class="lbl" title="Endpoint for the embeddings service." title="Endpoint for the embeddings service.">Embedding URL</span><input disabled></div>
-        <div class="row"><span class="lbl" title="Model used for embeddings, e.g. nomic-embed-text." title="Model used for embeddings, e.g. nomic-embed-text.">Embedding model</span><input placeholder="nomic-embed-text" disabled></div>
-        <label class="cb"><input type="checkbox" disabled> Keep model in memory</label>
       </div>
     </div>
 

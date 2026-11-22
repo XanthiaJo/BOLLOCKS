@@ -79,14 +79,14 @@ export default {
             b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId || null,
             b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId || null,
             b.state ? 1 : 0, b.stateEvery ?? 1, b.maxState ?? 30, b.stateBudget ?? 400, b.statePrompt || '',
-            b.readonly ? 1 : 0];
+            b.readonly ? 1 : 0, b.pruneMessages ?? 50];
         const id = db.prepare(`INSERT INTO mem_profiles (users_id_fk,name,mem_every,mem_budget,mem_max,
             mem_max_fact,mem_max_event,mem_max_relationship,mem_max_preference,mem_extraction_prompt,
             mem_context_threshold,mem_response_length,mem_gen_budget,mem_unlimited,mem_unified,mem_triggers,
             mem_autotune,mem_refresh,mem_activity,extraction_api_profiles_id_fk,
             mem_canon_budget,mem_max_arcs,mem_arc_budget,arc_api_profiles_id_fk,
-            mem_state,mem_state_every,mem_max_state,mem_state_budget,mem_state_prompt,mem_readonly)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+            mem_state,mem_state_every,mem_max_state,mem_state_budget,mem_state_prompt,mem_readonly,mem_prune_messages)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
             .run(u.users_id_pk, b.name, ...vals).lastInsertRowid;
         send(res, 200, { id });
     },
@@ -99,7 +99,7 @@ export default {
             mem_autotune=?, mem_refresh=?, mem_activity=?, extraction_api_profiles_id_fk=?,
             mem_canon_budget=?, mem_max_arcs=?, mem_arc_budget=?, arc_api_profiles_id_fk=?,
             mem_state=?, mem_state_every=?, mem_max_state=?, mem_state_budget=?, mem_state_prompt=?,
-            mem_readonly=?
+            mem_readonly=?, mem_prune_messages=?
             WHERE mem_profiles_id_pk=? AND users_id_fk=?`)
             .run(String(b.name ?? '').trim(), b.every ?? 10, b.budget ?? 800, b.max ?? 50,
                 b.maxFact ?? 50, b.maxEvent ?? 50, b.maxRel ?? 50, b.maxPref ?? 50,
@@ -108,7 +108,7 @@ export default {
                 b.autotune ? 1 : 0, b.refresh ?? 1, b.activity ? 1 : 0, b.profileId || null,
                 b.canonBudget ?? 800, b.maxArcs ?? 10, b.arcBudget ?? 700, b.arcProfileId || null,
                 b.state ? 1 : 0, b.stateEvery ?? 1, b.maxState ?? 30, b.stateBudget ?? 400, b.statePrompt || '',
-                b.readonly ? 1 : 0,
+                b.readonly ? 1 : 0, b.pruneMessages ?? 50,
                 b.id, u.users_id_pk);
         send(res, 200, { ok: true });
     },
