@@ -131,11 +131,9 @@ One file per domain; each boots its own isolated server (`test/helpers.js`):
 
 ## Deliberately not covered
 
-- [ ] Real LLM output — the mock endpoint covers the request/response contract deterministically; a real-model check belongs in a manual smoke script, not CI
-- [ ] `maybeSummarize` cadence edge cases (context-threshold trigger, per-type caps, watermark retry on failure) — extraction itself is covered; the gating branches aren't
-- [ ] Browser-side behavior (401→login redirects, localStorage) — needs a DOM; asserted indirectly via contract tests
-- [ ] `scripts/` maintenance utilities (interactive, need SSH/live server)
-- [ ] Theme/CSS correctness — no visual testing infrastructure
+Tracked as [#147](https://github.com/XanthiaJo/BOLLOCKS/issues/147): real
+LLM output, `maybeSummarize` cadence edge cases, browser-side behavior,
+`scripts/` utilities, theme/CSS correctness.
 
 ## Running
 

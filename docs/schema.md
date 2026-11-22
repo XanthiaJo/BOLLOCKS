@@ -81,14 +81,9 @@ stay as safety nets.
 
 ## Stage 3 — optional / cosmetic
 
-- **Room extraction bookkeeping** (`mem_last_messages_id_fk`,
-  `mem_refresh_count`): single-valued pointers on `rooms`, technically
-  fine, but would sit more honestly in a `room_state(room_id, key, value)`
-  or on `room_memories`-adjacent state. Low value either way.
-- **Index audit**: junction PKs cover `(room, member)` order; queries
-  filtering by the second column alone (e.g. "all rooms card X sits in")
-  rely on SQLite auto-indexes. Worth a `EXPLAIN QUERY PLAN` pass on the
-  hot reads; add reverse indexes only where a scan shows.
+Tracked as [#93](https://github.com/XanthiaJo/BOLLOCKS/issues/93): a
+`room_state` table for extraction bookkeeping on `rooms`, and an
+index audit on the junction tables.
 - [x] **`migrateSchema()` consolidation** — done. The fossil record
   (every historical `*_new` rebuild, the `REN` rename map, uv-gated
   data fixes) was deleted outright: the top `CREATE TABLE` block now

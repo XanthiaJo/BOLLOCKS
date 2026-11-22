@@ -144,7 +144,7 @@ flowchart TD
 
 - Should permanent card memories be visible across rooms if the same card is in multiple rooms? Currently scoped per room. Leaning: keep per-room (matches smart memories; avoids cross-room leakage).
 - Should smart memories ever be attributed to a character? Decided no — room-scoped only, to avoid ambiguity. Users can promote manually.
-- Should there be a "global character memory" (ST-style)? Deferred; would need a memory with no `room_memories` link + UI scope selector.
+- "Global character memory" (ST-style) — deferred, tracked as [#144](https://github.com/XanthiaJo/BOLLOCKS/issues/144).
 
 ## Canon & arcs
 
@@ -188,7 +188,7 @@ the room's live events by IDF-weighted trigger overlap (`memdedupe.js`,
 shared rare words count, ubiquitous room vocabulary doesn't) and scores
 above `DEDUPE_MIN` chain the same way — `POST /api/memories/dedupe`
 re-runs that sweep pairwise for cleanup. When the scorer can't see a
-retelling (fully paraphrased triggers), drag one live card onto another
+retelling (fully paraphrased triggers — [#141](https://github.com/XanthiaJo/BOLLOCKS/issues/141) tracks an LLM consolidation pass), drag one live card onto another
 on the Memories page — `POST /api/memories/link` merges the two chains
 with the newest-`created` head staying live. The inverse works too:
 drag a dimmed history card out of a chain and `POST /api/memories/unlink`
@@ -401,7 +401,7 @@ correctly.
   injecting every turn" critique — keyword gating stays the relevance
   mechanism, canon is just its absence.
 - Arc `summary` overwrite vs. append — overwrite for now (one line per arc,
-  cheap injection); a beats timeline would need its own cap.
+  cheap injection); a beats timeline is tracked as [#145](https://github.com/XanthiaJo/BOLLOCKS/issues/145).
 - `arc_api_profiles_id_fk` — now drives `consolidateArc` (chapter summaries
-  on close), with `extraction_api_profiles_id_fk` as fallback. Still unused
-  for a separate arc *extraction* pass; add if tag-folding proves unreliable.
+  on close), with `extraction_api_profiles_id_fk` as fallback. A separate
+  arc *extraction* pass is conditional work: [#146](https://github.com/XanthiaJo/BOLLOCKS/issues/146).
