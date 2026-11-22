@@ -367,11 +367,29 @@ function seedExamples(room) {
         for (const w of (triggers || '').split(',')) { const word = w.trim().toLowerCase(); if (word) insTrig.run(id, word); }
         db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(room, id);
         if (cardId) db.prepare('INSERT INTO memory_cards (memories_id_fk,cards_id_fk) VALUES (?,?)').run(id, cardId);
+        return id;
     };
     mem('The House has a leaning apple tree in the back garden.', 'fact', 'user', 'garden, apple', 0);
     mem('Residents take their tea strong — Wren keeps biscuits in the blue tin.', 'preference', 'user', 'tea, biscuits', 0);
     mem('Wren once fixed the upstairs window during a storm without being asked.', 'event', 'user', 'window, storm', wren);
     mem('Wren considers everyone under the roof hers to look after.', 'relationship', 'smart', 'wren, caretaker', 0);
+
+    // Consolidation sample: the same beat retold three ways with fully
+    // paraphrased trigger vocab (the case the lexical scorer can't catch).
+    // The two older tellings sit superseded under the newest — `history ▸`
+    // on the card shows the chain a dedupe sweep or drag-link would make.
+    const mTin1 = mem('Wren set the blue tin back on the counter after tea.', 'event', 'smart', 'wren, tin, counter', 0);
+    const mTin2 = mem('She moved it again — tin went from counter to windowsill.', 'event', 'smart', 'moved, windowsill', 0);
+    const mTin3 = mem('The tin ended up on the sill by the end of the evening.', 'event', 'smart', 'sill, evening', 0);
+    db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?').run(mTin2, mTin1);
+    db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?').run(mTin3, mTin2);
+    // A pruned dead-end: retired with no successor (self-tombstone) — shows
+    // in the Retracted accordion as cap/dormancy output rather than merge.
+    db.prepare('UPDATE memories SET superseded_by_memories_id_fk=memories_id_pk WHERE memories_id_pk=?')
+        .run(mem('Someone left a muddy boot by the back door.', 'event', 'smart', 'boot, mud', 0));
+    // Fired-watermark variety for the cards' `fired …` / `never fired` meta.
+    db.prepare("UPDATE memories SET last_fired_messages_id_fk=1, last_fired_at=datetime('now') WHERE memories_id_pk=?")
+        .run(mTin3);
 
     // Scene-state sample — subject→state rows keyed exactly like the state
     // pass writes them (state_key is the diff handle).
