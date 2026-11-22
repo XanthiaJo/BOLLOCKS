@@ -88,6 +88,8 @@ Core tables:
 
 ## Frontend conventions
 
+**Read `docs/style.md` before doing frontend work** — it's the component/style guide: design tokens, `.card`/`.btns`/`.acc`/`.rprof` anatomy, layout.js helpers, and the render idioms. Don't guess layout behavior; the grid/flex details are documented there.
+
 - Plain browser JS in each page's inline `<script>` + `app.js` for chat. No modules, no imports — pages share helpers via `layout.js` globals and copy this boilerplate:
   ```js
   const H=()=>({'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.mp_token||'')});
@@ -101,6 +103,8 @@ Core tables:
 - **Sidebar anatomy** — every settings page declares a bare `<aside id="rsidebar"></aside>` and calls `initSidebar({tabs, sections, buttons, footer})` (layout.js); the skeleton (tabs → h3 → list → buttons → caption) exists only there. Picker rows render through `rprofRow()` and style via `.rprof` (layout.css): `sel:` is the single accent "selected" state, "in use/active" is a `.badge` — don't hand-write row HTML or per-page highlight classes.
 - **Mobile (≤`--mob`px, 700)** — the breakpoint is `--mob` in `layout.css` `:root`; JS reads it (`layout.js` `mob()`). `var()` can't appear inside `@media`, so media-query literals duplicate it — keep them in sync. Every page needs `<meta name="viewport" content="width=device-width, initial-scale=1">` or the media queries silently never fire. Sidebars become overlay drawers under the nav (`.open` class, `.mp-scrim` behind); the ☰/⚙ nav toggles enforce one-open-at-a-time, and picking a `.room`/`.rprof` row auto-closes. Hover-only affordances (`.delm`, `.rbtns`) must get `display` fallbacks inside the media query or they're unreachable on touch.
 - **Content area** — browsing pages share one skeleton: `.cvhead` (title left, contextual `act`/`sec` buttons right) → new-item `.panel` with `.edhead` → `#list` of `.card` rows. "Add" always means a `+ New X` action opening that form — never a permanently-open input box.
+- **`.card` anatomy** — `.card` is a **grid**, not flex: `grid-template-columns:1fr 92px` in `layout.css` (pages can override — `characters.html` uses `64px 1fr auto`). Column 1 is the content cell (`.comment`/`.name`, `.desc`, `.keys`, `.meta` stack normally); column 2 is `.btns`, a `flex-direction:column` stack of narrow action buttons (Edit/Delete/etc). For a full-width row under both columns (confirm rows, pickers), append a third grid child with `grid-column:1/-1` — don't try to squeeze multi-button rows into `.btns`' 92px column, they overflow it. Note the global `input,textarea,select,button` rule gives every button `margin:3px 0` — strip it (`margin:0`) when aligning ad-hoc button rows with `.btns` items.
+- **Accordions** — `setupAcc(panelEl, storageKey, openDefaultTitles)` (layout.js) wraps every `<h4>` + its following siblings into `.acc` collapsible sections. Open state persists in `localStorage[storageKey]` keyed by the **h4's text** — keep dynamic content (counts etc.) out of the h4 or you break the persistence key; put it in a trailing `.hint` inside the section header instead. `openDefaultTitles` = titles open on first visit; omitted means all collapsed.
 - **Editor forms** — every editor panel starts with `<div class="edhead" data-save="fn" data-cancel="fn"><h3 id="edtitle"></h3></div>`; layout.js injects the shared `[Cancel][Save]` pair (wired lazily to the named globals; call `initEdHeads(root)` after injecting form markup dynamically). Saves are explicit — never `onchange` auto-save. **In-place edits** (world entries, memories): a selected row's card swaps for the form via `class="card editing"`; preserve unsaved input across re-renders with `draftFields(ids)`/`fillFields(d)`; cancel collapses the card back. Where a blank form is the page's only content, cancel instead re-clears it.
 - Logout: nav link → `GET /api/logout` (deletes session server-side + clears cookie + redirects); the click handler clears `localStorage.mp_token`.
 
@@ -118,6 +122,8 @@ Core tables:
 npm install
 npm start      # runs: node src/server.js (default PORT 8100, override with env PORT)
                # data dir defaults to ./data; override with env BOLLOCKS_DATA
+               # BOLLOCKS_DEV_USER=<handle> auto-logs every request in as that
+               # user (login screen skipped) — dev only, never set in prod
                # (e.g. point at an sshfs mount to share another host's live DB)
 npm run lint   # ESLint checks
 npm run lint:fix

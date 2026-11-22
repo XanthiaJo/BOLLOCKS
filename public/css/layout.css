@@ -204,7 +204,7 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 .tab.on{background:var(--accent);color:var(--white);border-color:var(--accent)}
 
 /* small type tag chips (memory types etc.) */
-.mtag{display:inline-block;font-size:.7em;font-weight:700;padding:1px 6px;border-radius:3px;background:var(--mtag);color:var(--muted);margin-right:4px}
+.mtag{display:inline-block;font-size:.7em;font-weight:700;padding:1px 6px;border-radius:3px;background:var(--mtag);color:var(--muted);margin-right:4px;text-transform:capitalize}
 .mtag.mevent{background:var(--ok-deep);color:var(--mev)}
 .mtag.mrelationship{background:var(--mrel-bg);color:var(--mrel)}
 .mtag.mpreference{background:var(--mpref-bg);color:var(--mpref)}
@@ -223,17 +223,26 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
 .settings .row input:not([type=number]):not([type=checkbox]){width:200px}
 .settings input[type=number]{display:inline-block}
 .settings .ph{opacity:.45;pointer-events:none;margin-top:4px}
+.settings .row.btotal{border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
+.settings .row.boff{opacity:.45}
+#budget_total{font-weight:700;color:var(--text)}
+
+/* sub-panels inside a .panel — e.g. memory profile's Extraction/Injection
+   split; accent tint keeps them distinct from the parent panel */
+.pgroup{background:var(--accent-bg);border:1px solid var(--accent);border-radius:8px;padding:10px;margin:14px 0}
+.pgt{font-weight:700;color:var(--text);margin:0 0 2px;font-size:.95em}
 
 /* accordion — setupAcc() wraps <h4> sections; usable on any page */
 .acc{background:var(--surface3);border:1px solid var(--line2);border-radius:8px;margin:10px 0;overflow:hidden;box-shadow:0 2px 6px var(--shadow)}
-.acc-h{background:var(--input);padding:7px 10px;cursor:pointer;font-size:.9em;font-weight:700;color:var(--muted);display:flex;justify-content:space-between;align-items:center;user-select:none}
+.acc-h{background:var(--input);padding:7px 10px;cursor:pointer;font-size:.9em;font-weight:700;color:var(--text);display:flex;justify-content:space-between;align-items:center;user-select:none}
 .acc-h:hover{background:var(--input2)}
 .acc-h .arrow{transition:transform .15s;font-size:.9em}
 .acc-t{min-width:0}
-.acc-h .hint{font-weight:400;margin:2px 0 0}
+.acc-h .hint{font-weight:400;margin:2px 0 0;color:var(--muted)}
 .acc-h.open .arrow{transform:rotate(90deg)}
 .acc-b{padding:8px 10px;display:none}
 .acc-b.open{display:block}
+.acc-ph .acc-h{opacity:.65}
 
 /* Nav link strip — transparent wrapper on desktop (display:contents keeps
    nav's gap applying to the links); on mobile it hides and the ☰ menu's
@@ -269,4 +278,8 @@ main{max-width:860px;margin:24px auto;padding:0 16px;overflow-y:auto;width:100%}
   .settings .row>:last-child{grid-column:1;grid-row:auto;justify-self:start!important}
   .settings .row input:not([type=checkbox]):not([type=number]),
   .settings .row select,.settings .row textarea{width:100%!important}
+
+  /* 16px minimum on text controls — anything smaller makes iOS/Android
+     zoom the page on focus, which is the main pain editing on a phone. */
+  input,textarea,select{font-size:16px}
 }

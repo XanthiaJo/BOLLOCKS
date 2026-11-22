@@ -230,7 +230,8 @@ export function migrateSchema() {
     const rcols = db.prepare('PRAGMA table_info(rooms)').all().map(c => c.name);
     if (!rcols.includes('ai_trigger')) db.exec("ALTER TABLE rooms ADD COLUMN ai_trigger TEXT DEFAULT 'manual'");
     if (!rcols.includes('bg')) db.exec("ALTER TABLE rooms ADD COLUMN bg TEXT DEFAULT ''");
-    if (!rcols.includes('mem_last_messages_id')) db.exec('ALTER TABLE rooms ADD COLUMN mem_last_messages_id INTEGER DEFAULT 0');
+    if (!rcols.includes('mem_last_messages_id') && !rcols.includes('mem_last_messages_id_fk'))
+        db.exec('ALTER TABLE rooms ADD COLUMN mem_last_messages_id INTEGER DEFAULT 0');
     if (!rcols.includes('mem_refresh_count')) db.exec('ALTER TABLE rooms ADD COLUMN mem_refresh_count INTEGER DEFAULT 0');
     // Extraction-run counter — paces the scene-state pass ("every N runs").
     if (!rcols.includes('mem_extract_count')) db.exec('ALTER TABLE rooms ADD COLUMN mem_extract_count INTEGER DEFAULT 0');
@@ -368,7 +369,6 @@ export function migrateSchema() {
         mem_canon_budget: 'INTEGER DEFAULT 800',
         mem_max_arcs: 'INTEGER DEFAULT 10',
         mem_arc_budget: 'INTEGER DEFAULT 700',
-        mem_arc_profile_id: 'INTEGER DEFAULT 0',
         // Scene-state snapshot settings — "what is true right now"
         // (locations, held objects, conditions), refreshed wholesale.
         mem_state: 'INTEGER DEFAULT 0',
@@ -376,7 +376,16 @@ export function migrateSchema() {
         mem_max_state: 'INTEGER DEFAULT 30',
         mem_state_budget: 'INTEGER DEFAULT 400',
         mem_state_prompt: "TEXT DEFAULT ''",
+        // Read-only mode: injection keeps reading stored memories but the
+        // memory-writer never runs — protects memories from mutation.
+        mem_readonly: 'INTEGER DEFAULT 0',
     })) if (!mpcols.includes(col)) db.exec(`ALTER TABLE mem_profiles ADD COLUMN ${col} ${def}`);
+    // mem_arc_profile_id is added under its legacy name — ren() below maps it
+    // to arc_api_profiles_id_fk. Skip the add when the renamed column already
+    // exists or the dead column respawns every boot (migrations must be
+    // idempotent for the upgrade test).
+    if (!mpcols.includes('mem_arc_profile_id') && !mpcols.includes('arc_api_profiles_id_fk'))
+        db.exec('ALTER TABLE mem_profiles ADD COLUMN mem_arc_profile_id INTEGER DEFAULT 0');
     // members = entity (card/user + talkativeness); room_members = junction.
     if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='room_members'").get()) {
         db.exec(`CREATE TABLE room_members (
@@ -701,6 +710,16 @@ export function migrateSchema() {
     // memories rebuild above.
     if (!colsOf('memories').includes('room_arcs_id_fk'))
         db.exec('ALTER TABLE memories ADD COLUMN room_arcs_id_fk INTEGER REFERENCES room_arcs(room_arcs_id_pk) ON DELETE SET NULL');
+    // Scene-state set: state rows carry their subject key so the snapshot
+    // pass can diff entry-by-entry (supersede in place, drop retracted
+    // subjects) instead of wiping the whole set each run.
+    if (!colsOf('memories').includes('state_key'))
+        db.exec('ALTER TABLE memories ADD COLUMN state_key TEXT');
+    // Extraction can mark a smart memory superseded by a newer one —
+    // retracted rows stop injecting but stay on record (SET NULL revives
+    // the original if its replacement is deleted).
+    if (!colsOf('memories').includes('superseded_by_memories_id_fk'))
+        db.exec('ALTER TABLE memories ADD COLUMN superseded_by_memories_id_fk INTEGER REFERENCES memories(memories_id_pk) ON DELETE SET NULL');
     // Arc message anchors → nullable FKs (the arc survives its anchor
     // message being deleted).
     if (!sqlOf('room_arcs').includes('REFERENCES messages')) {
@@ -756,7 +775,7 @@ export function migrateSchema() {
             'mem_unlimited', 'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh',
             'mem_activity', 'extraction_api_profiles_id_fk', 'mem_canon_budget', 'mem_max_arcs',
             'mem_arc_budget', 'arc_api_profiles_id_fk', 'mem_state', 'mem_state_every',
-            'mem_max_state', 'mem_state_budget', 'mem_state_prompt'];
+            'mem_max_state', 'mem_state_budget', 'mem_state_prompt', 'mem_readonly'];
         const mcols = MP_COLS.filter(c => colsOf('mem_profiles').includes(c));
         const msel = mcols.map(c => (c === 'extraction_api_profiles_id_fk' || c === 'arc_api_profiles_id_fk') ? `NULLIF(${c},0)` : c).join(',');
         db.exec(`PRAGMA foreign_keys=OFF;
@@ -790,7 +809,8 @@ export function migrateSchema() {
                 mem_state_every INTEGER DEFAULT 1,
                 mem_max_state INTEGER DEFAULT 30,
                 mem_state_budget INTEGER DEFAULT 400,
-                mem_state_prompt TEXT DEFAULT '');
+                mem_state_prompt TEXT DEFAULT '',
+                mem_readonly INTEGER DEFAULT 0);
             INSERT INTO mem_profiles_new (${mcols.join(',')}) SELECT ${msel} FROM mem_profiles;
             DROP TABLE mem_profiles; ALTER TABLE mem_profiles_new RENAME TO mem_profiles;
             PRAGMA foreign_keys=ON`);
@@ -915,6 +935,38 @@ function seedExamples(room) {
     mem('Residents take their tea strong — Wren keeps biscuits in the blue tin.', 'preference', 'user', 'tea, biscuits', 0);
     mem('Wren once fixed the upstairs window during a storm without being asked.', 'event', 'user', 'window, storm', wren);
     mem('Wren considers everyone under the roof hers to look after.', 'relationship', 'smart', 'wren, caretaker', 0);
+
+    // Scene-state sample — subject→state rows keyed exactly like the state
+    // pass writes them (state_key is the diff handle).
+    const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
+    const state = (key, val) => {
+        const id = db.prepare("INSERT INTO memories (content,type,origin,state_key) VALUES (?, 'state', 'smart', ?)")
+            .run(`${key} — ${val}`, key).lastInsertRowid;
+        db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(room, id);
+        return id;
+    };
+    state('Wren', 'in the kitchen, refilling the kettle');
+    state('the blue tin', 'on the counter, half full');
+    // History samples: the window's earlier state sits superseded under the
+    // current row (the chain the diff would have written); 'the storm' is a
+    // retracted tombstone (superseded_by self — dropped, no successor).
+    const winOld = state('the upstairs window', 'cracked open, draughty');
+    const winNew = state('the upstairs window', 'repaired, no longer draughty');
+    db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?').run(winNew, winOld);
+    db.prepare('UPDATE memories SET superseded_by_memories_id_fk=memories_id_pk WHERE memories_id_pk=?')
+        .run(state('the storm', 'rattling the shutters'));
+    state('the locked door', 'still locked');
+
+    // Story threads: one open manual arc, one resolved smart arc with a
+    // folded detail memory — it stays quiet until its trigger re-evokes the
+    // chapter under "Earlier events:".
+    const iarc = db.prepare("INSERT INTO room_arcs (rooms_id_fk,title,summary,status,origin) VALUES (?,?,?,?,?)");
+    iarc.run(room, 'The greenhouse pane', 'A pane cracked in the last storm; taped for now but needs replacing before frost.', 'open', 'user');
+    const closedArc = iarc.run(room, 'The missing biscuit tin', 'The blue tin vanished for a day — found under the settle behind a stack of blankets.', 'resolved', 'smart').lastInsertRowid;
+    const folded = db.prepare("INSERT INTO memories (content,type,origin,room_arcs_id_fk) VALUES (?, 'event', 'smart', ?)")
+        .run('The blue tin was found under the settle, biscuits intact.', closedArc).lastInsertRowid;
+    insTrig.run(folded, 'tin');
+    db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)').run(room, folded);
 
     const imsg = db.prepare('INSERT INTO messages (rooms_id_fk,cards_id_fk,text) VALUES (?,?,?)');
     imsg.run(room, null, 'Welcome to BOLLOCKS — this is a seeded example chat. Set up an API connection on the Connection page, then say something and Wren will answer.');

@@ -163,10 +163,30 @@ Canon is static; arcs open, progress, close.
 right now" snapshot — locations, held objects, ongoing conditions. A
 dedicated memory-writer pass (`mem_state` on the profile, every
 `mem_state_every` extraction runs, paced by `rooms.mem_extract_count`)
-rewrites the snapshot wholesale: the previous `[state]` rows are deleted,
-not accumulated. State rows carry no triggers, never fold into arcs, are
-excluded from the canon query and the global `mem_max` cap, and inject as
-their own `Scene:` prompt block (capped by `mem_state_budget`).
+emits the scene as a **keyed JSON set** — one `subject → state` entry per
+thing worth tracking (`{"Wren":"in the kitchen","blue tin":"on the
+counter"}`) — and the script owns the diff against the **live** rows
+(`superseded_by IS NULL`, keyed by `memories.state_key`): a subject's new
+value stores a fresh row and points the old row's `superseded_by` at it,
+subjects absent from the set are retracted as tombstones
+(`superseded_by = self` — retired with no successor), unchanged entries
+keep their rows. Contradictory states can't stack — the live set is
+always exactly one row per subject, and the superseded chain is the
+subject's history (browsable per entry in the State accordion). The model
+sees the current set so it carries unchanged keys forward. State rows
+carry no triggers, never fold into arcs, are excluded from the canon query
+and the global `mem_max` cap, and inject as their own `Scene:` prompt
+block (capped by `mem_state_budget`).
+
+**Supersede** = `memories.superseded_by_memories_id_fk` marks a smart
+memory retired by a newer one. The extraction prompt lists the room's
+current smart memories numbered; a bullet written `- [supersede N]
+new fact` stores the new memory and points the old row at it. Superseded
+rows stop injecting everywhere (memory block, canon, arc details), don't
+occupy the per-type/`mem_max` cap slots, and stay in the list with a
+`superseded` badge for audit. The FK is `ON DELETE SET NULL` — deleting
+the replacement revives the original. Only `origin='smart'` rows are
+offered as targets; user memories are never retired by extraction.
 
 ### Who does what
 
@@ -264,6 +284,12 @@ ALTER TABLE mem_profiles ADD COLUMN arc_api_profiles_id_fk INTEGER
 -- NULL = share extraction_api_profiles_id_fk; non-NULL = dedicated pass
 -- (reserved, must still belong to the room owner). NULLed on
 -- api_profile/user delete.
+
+-- Scene-state set + supersede (both NULLable, memories only):
+ALTER TABLE memories ADD COLUMN state_key TEXT;
+-- subject key for type='state' rows — the diff handle
+ALTER TABLE memories ADD COLUMN superseded_by_memories_id_fk INTEGER
+    REFERENCES memories(memories_id_pk) ON DELETE SET NULL;
 ```
 
 All additive in `migrateSchema()`; the new `mem_*` columns ride

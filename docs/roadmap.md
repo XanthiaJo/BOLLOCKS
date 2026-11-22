@@ -60,13 +60,14 @@ live in one room-scoped list; profiles control how/when extraction runs.
 - [ ] **Review flow** — glance at what extraction produced, discard noise
   (edit/promote shipped; a review-focused view hasn't)
 - [ ] **Dedup/merge** — collapse near-duplicate extracted facts over time
-- [ ] **Scene-state memories** — temporary states ("under sanction",
-  "wheel pending") that decay instead of lingering as facts (PR #99)
+- [x] **Scene-state memories** — temporary states ("under sanction",
+  "wheel pending") that decay instead of lingering as facts — keyed JSON
+  set + scripted diff supersede *(2026-11-22)*
 - [ ] **Per-character smart scope** — extraction currently writes
   room-scoped; character-scoped smart memories are the natural next step
-- [ ] **Retraction/supersede** — extracted facts have no expiry; a way to
-  mark a memory superseded when the world moves on (editing by hand is
-  the current answer)
+- [x] **Retraction/supersede** — `[supersede N]` extraction tags mark a
+  smart memory replaced by a newer one (kept for audit, never injected)
+  *(2026-11-22)*
 
 ## Smaller items
 

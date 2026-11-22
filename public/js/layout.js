@@ -363,6 +363,43 @@ function initEdHeads(root = document) {
 }
 initEdHeads();
 
+/* Accordion — wraps each <h4> inside `panel` (plus the siblings up to the
+   next h4) into an .acc collapsible section; open sections persist under
+   `key` in localStorage, or default to `openDefault` titles on first use.
+   setupAcc(document.getElementById('profpanel'), 'mp_mem_acc') */
+function setupAcc(panel, key, openDefault = []) {
+    if (!panel) return;
+    const escAcc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const stored = localStorage[key];
+    let openSet = null; try { openSet = stored == null ? null : new Set(JSON.parse(stored)); } catch { }
+    if (!openSet) openSet = new Set(openDefault);
+    const saveAcc = () => { localStorage[key] = JSON.stringify([...panel.querySelectorAll('.acc-h.open')].map(h => h.dataset.acc)); };
+    for (const h of [...panel.querySelectorAll('h4')]) {
+        const wrap = document.createElement('div'); wrap.className = 'acc';
+        const header = document.createElement('div'); header.className = 'acc-h';
+        header.dataset.acc = h.textContent.trim();
+        const title = document.createElement('div'); title.className = 'acc-t';
+        title.innerHTML = escAcc(h.textContent);
+        const arrow = document.createElement('span'); arrow.className = 'arrow'; arrow.textContent = '▸';
+        header.append(title, arrow);
+        const body = document.createElement('div'); body.className = 'acc-b';
+        const toMove = []; let node = h.nextSibling;
+        while (node && !(node.nodeType === 1 && node.tagName === 'H4')) { toMove.push(node); node = node.nextSibling; }
+        h.parentNode.insertBefore(wrap, h);
+        wrap.appendChild(header); wrap.appendChild(body);
+        for (const n of toMove) body.appendChild(n);
+        // An intro hint right after the h4 belongs on the header line.
+        if (body.firstElementChild?.classList.contains('hint')) title.append(body.firstElementChild);
+        // Sections where every control is disabled are placeholders — tag
+        // the wrap so they can be dimmed (they live in the tbi panel).
+        if (!body.querySelector('input:not([disabled]),select:not([disabled]),textarea:not([disabled])'))
+            wrap.classList.add('acc-ph');
+        h.remove();
+        if (openSet.has(header.dataset.acc)) { header.classList.add('open'); body.classList.add('open'); }
+        header.onclick = () => { header.classList.toggle('open'); body.classList.toggle('open'); saveAcc(); };
+    }
+}
+
 /* In-place edit helpers — preserve unsaved input across a list re-render:
    const d = draftFields(['a','b']); list.innerHTML = …; fillFields(d);
    Keyed by element id; checkboxes round-trip via .checked. */

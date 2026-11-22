@@ -361,10 +361,16 @@ describe('generation (mock LLM)', () => {
         await s.post('memories/delete', { id: st });
     });
 
-    test('scene-state pass writes a snapshot that replaces the previous one', async () => {
-        // One mock serves both calls: extraction parses these as facts, the
-        // state pass re-parses the same lines as a [state] snapshot.
-        const ext = await mockLLM('- Wren is in the kitchen.\n- The blue tin is on the counter.');
+    test('scene-state pass diffs a keyed JSON set — supersedes changed, tombstones absent', async () => {
+        // One mock serves both calls: the extraction prompt gets a fact
+        // bullet; the state prompt (asks for a "keyed set") gets a different
+        // JSON set per run.
+        let stateCalls = 0;
+        const ext = await mockLLM(body => body.includes('keyed set')
+            ? (++stateCalls === 1
+                ? '{"Wren":"in the kitchen","blue tin":"on the counter","hearth fire":"burning"}'
+                : '{"Wren":"by the door","blue tin":"on the counter"}')
+            : '- [fact] Wren keeps biscuits in the blue tin.');
         try {
             const profId = (await s.post('profiles', { name: 'State', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
             const mp = (await s.post('memprofiles', { name: 'State', auto: true, every: 1,
@@ -376,18 +382,58 @@ describe('generation (mock LLM)', () => {
             await s.post('say', { room: mroom, text: 'scene one' });
             const first = await until(async () => {
                 const st = await states();
-                return st.length === 2 ? st : null;
+                return st.length === 3 ? st : null;
             }, 'first snapshot');
-            const firstIds = new Set(first.map(m => m.memories_id_pk));
+            const byKey = Object.fromEntries(first.map(m => [m.state_key, m]));
+            assert.equal(byKey['Wren'].content, 'Wren — in the kitchen');
+            assert.equal(byKey['blue tin'].content, 'blue tin — on the counter');
             await s.post('say', { room: mroom, text: 'scene two' });
-            // Second run: the snapshot must stay 2 entries — run one's rows
-            // are deleted, not stacked (visible rows are all new ids).
-            const after = await until(async () => {
+            // Second run: Wren's new value supersedes via a fresh row (the
+            // old one stays as history), the unchanged tin keeps its row,
+            // the absent fire is retracted as a self-referencing tombstone.
+            const all = await until(async () => {
                 const st = await states();
-                return st.length === 2 && st.every(m => !firstIds.has(m.memories_id_pk)) ? st : null;
-            }, 'refreshed snapshot');
-            assert.ok(after.some(m => m.content === 'Wren is in the kitchen.'));
-            assert.ok(after.every(m => !m.triggers)); // state is never trigger-gated
+                const live = st.filter(m => !m.superseded_by_memories_id_fk);
+                return live.length === 2 && live.some(m => m.content === 'Wren — by the door') ? st : null;
+            }, 'diffed snapshot');
+            const live = all.filter(m => !m.superseded_by_memories_id_fk);
+            const liveByKey = Object.fromEntries(live.map(m => [m.state_key, m]));
+            const newWren = liveByKey['Wren'];
+            assert.notEqual(newWren.memories_id_pk, byKey['Wren'].memories_id_pk);
+            const oldWren = all.find(m => m.memories_id_pk === byKey['Wren'].memories_id_pk);
+            assert.equal(oldWren.superseded_by_memories_id_fk, newWren.memories_id_pk);
+            assert.equal(liveByKey['blue tin'].memories_id_pk, byKey['blue tin'].memories_id_pk);
+            const fire = all.find(m => m.state_key === 'hearth fire');
+            assert.equal(fire.superseded_by_memories_id_fk, fire.memories_id_pk);
+            assert.ok(live.every(m => !m.triggers)); // state is never trigger-gated
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
+
+    test('extraction [supersede N] retires the older smart memory', async () => {
+        const ext = await mockLLM('- [supersede 1][fact] The blue tin is now empty.');
+        try {
+            const profId = (await s.post('profiles', { name: 'Sup', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Sup', auto: true, every: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Sup room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            // A live smart memory the writer can retire — seeded via the API
+            // (origin 'user') then promoted, since extraction is the only
+            // producer of 'smart' rows.
+            const oldId = (await s.post('memories', { room: mroom, content: 'The blue tin is full of biscuits.', type: 'fact', triggers: 'tin' })).json.id;
+            await s.post('memories/update', { id: oldId, origin: 'smart' });
+            await s.post('say', { room: mroom, text: 'Wren ate the last biscuit.' });
+            const mems = await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                const old = m?.find(x => x.memories_id_pk === oldId);
+                return old?.superseded_by_memories_id_fk ? m : null;
+            }, 'superseded memory');
+            const old = mems.find(m => m.memories_id_pk === oldId);
+            const neu = mems.find(m => m.memories_id_pk === old.superseded_by_memories_id_fk);
+            assert.equal(neu.content, 'The blue tin is now empty.');
+            assert.equal(neu.type, 'fact');
+            // The extraction prompt carried the numbered current-memories list.
+            assert.match(ext.requests.at(-1).body, /Current memories.*1\) \[fact\] The blue tin is full/s);
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
