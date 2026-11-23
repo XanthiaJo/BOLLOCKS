@@ -50,6 +50,16 @@ const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger keywords i
 // unresolved situation that stays open until something settles it.
 const MEM_ARCS_SUFFIX = ` Threads: a thread is NOT a memory — it is an open situation left pending until it resolves: a debt owed, a repair in progress, an investigation, a brewing conflict, a promise awaiting fulfilment — or a bit building toward a payoff (someone inching an object toward a desk's edge across several messages is one thread, not three events). If the excerpt opens, advances, or resolves one, additionally output "- [arc-open] Title — what is underway", "- [arc] Title — the new development", or "- [arc-close] Title — how it settled". Reuse an open thread's title exactly when updating or closing it. If a numbered memory describes an earlier step of a situation still developing in this excerpt, that is a thread — open or advance it instead of logging another isolated [event]. The test: an event is closed when it happens ("Buddy broke the wheel" is [event]); a thread needs a resolution ("the wheel must be replaced before inspection" is a thread). Transient states — injuries, sanctions, pending fixes, ongoing suspicions — belong to threads, never [fact]: arcs close; facts linger as stale truth.`;
 
+// Periodic LLM dedupe pass — unlike the scripted trigger-overlap sweep it
+// can see through paraphrases. The model reviews the room's live memories
+// and retires true duplicates by emitting merge lines: each [supersede N]
+// tag folds that numbered row into the fresh memory the line carries.
+export const MEM_SWEEP_PROMPT = `You deduplicate stored memories from a roleplay chat. Below is a numbered list of the room's live memories.
+Find entries that say the SAME thing — one event retold, one fact restated, one feeling rephrased — even in different words. For each duplicate group, write ONE merge line:
+- [supersede N] [supersede M] The single best version of that memory. (trigger, keywords)
+Each [supersede] tag retires that numbered row — your line replaces all of them at once. Keep the most complete phrasing, name the subject in a full sentence, and always add trigger keywords in parentheses so the merged memory can resurface.
+Merge ONLY true duplicates — different facts or events about the same people, places, or objects are not duplicates and stay separate. When in doubt, leave both. If nothing duplicates, reply exactly "- none".`;
+
 // Scene-state snapshot prompt — a dedicated pass that answers "what is true
 // right now" (locations, held objects, ongoing conditions). The model emits
 // a keyed JSON set — one entry per subject — and the script owns the diff:
@@ -65,7 +75,8 @@ export const MEM_PROFILE_FIELDS = ['mem_every', 'mem_budget', 'mem_max', 'mem_ma
     'mem_unified', 'mem_triggers', 'mem_autotune', 'mem_refresh', 'mem_activity',
     'extraction_api_profiles_id_fk', 'mem_canon_budget', 'mem_max_arcs', 'mem_arc_budget',
     'arc_api_profiles_id_fk', 'mem_state', 'mem_state_every', 'mem_max_state', 'mem_prune_messages',
-    'mem_state_budget', 'mem_state_prompt', 'mem_readonly'];
+    'mem_state_budget', 'mem_state_prompt', 'mem_readonly',
+    'mem_sweep', 'mem_sweep_every', 'sweep_api_profiles_id_fk'];
 
 // Named system-prompt sections in cache-optimal order (stable content first —
 // see the assembly comment in generateReply). The user's active
@@ -595,6 +606,9 @@ export async function maybeSummarize(roomId) {
     // Always signal completion — clients refresh lastmem on done even when
     // activity notifications (the flash) are disabled.
     push(roomId, { type: 'mem', phase: 'done', count: added, notify: !!mem.mem_activity });
+    // Optional LLM sweep on its own cadence — merges paraphrased duplicates
+    // before the cap machinery below has to judge what's still over.
+    if (mem.mem_sweep) await maybeLlmSweep(roomId, mem, conn);
     // Consolidation before eviction: under cap pressure, sweep for
     // retellings first — a merged pair frees a live slot without retiring
     // anything, so pileups collapse instead of evicting real memories.
@@ -759,6 +773,83 @@ async function maybeUpdateState(roomId, mem, conn) {
         } catch (e) { db.exec('ROLLBACK'); throw e; }
     } catch (e) {
         if (mem.mem_activity) console.log(`[mem] activity: state snapshot failed for room ${roomId} (${e.message})`);
+    }
+}
+
+// LLM dedupe sweep: every mem_sweep_every extraction runs, the model
+// reviews the room's live memories and merges true duplicates — the
+// paraphrased retellings the scripted trigger-overlap sweep can't see.
+// Uses the profile's sweep API profile, falling back to the extraction
+// connection the caller already resolved.
+async function maybeLlmSweep(roomId, mem, fallbackConn) {
+    const room = db.prepare('SELECT mem_extract_count, owner_users_id_fk FROM rooms WHERE rooms_id_pk=?').get(roomId);
+    const every = Math.max(1, mem.mem_sweep_every || 5);
+    if ((room.mem_extract_count || 0) % every !== 0) return;
+    let conn = fallbackConn;
+    if (mem.sweep_api_profiles_id_fk) {
+        const sw = db.prepare('SELECT *, api_profiles_id_pk AS id FROM api_profiles WHERE api_profiles_id_pk=?').get(mem.sweep_api_profiles_id_fk);
+        // Same ownership gate as extraction — a profile owned by someone
+        // else is ignored, not used.
+        if (sw?.api_url && sw.users_id_fk === room.owner_users_id_fk) conn = { ...sw, apiUrl: sw.api_url };
+    }
+    // The candidate list mirrors what extraction offers for [supersede N]:
+    // live, smart, non-state, unfolded — plus user_sorted rows stay out so
+    // hand-arranged chains are never rewritten by a sweep.
+    const rows = db.prepare(`SELECT m.memories_id_pk AS id, m.type, m.content FROM memories m
+        JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
+        WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type!='state' AND m.room_arcs_id_fk IS NULL
+          AND m.superseded_by_memories_id_fk IS NULL AND m.user_sorted IS NOT 1
+        ORDER BY m.memories_id_pk LIMIT 100`).all(roomId);
+    if (rows.length < 2) return;
+    const reqBody = {
+        model: conn.model || 'local',
+        messages: [
+            { role: 'system', content: MEM_SWEEP_PROMPT },
+            { role: 'user', content: 'Live memories (numbered):\n' + rows.map((m, i) => `${i + 1}) [${m.type}] ${m.content}`).join('\n') },
+        ],
+        temperature: 0.2, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
+    };
+    try {
+        const resp = await llmFetch(conn, reqBody);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const text = data?.choices?.[0]?.message?.content?.trim() || '';
+        logPrompt(roomId, null, 'sweep', reqBody, text, data?.usage);
+        const ins = db.prepare("INSERT INTO memories (content,type,origin) VALUES (?,?, 'smart')");
+        const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
+        const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
+        const sup = db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?');
+        const retired = new Set();
+        let merged = 0;
+        for (const line of text.split('\n')) {
+            let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
+            let type = 'fact'; const supersedes = [];
+            for (let i = 0; i < 6; i++) {
+                const t = fact.match(/^\[([^\]]+)\]\s*/);
+                if (!t) break;
+                const w = t[1].trim().toLowerCase();
+                if (['fact', 'event', 'relationship', 'preference'].includes(w)) type = w;
+                else if (/^supersedes?\s*[:#]?\s*\d+$/.test(w)) supersedes.push(parseInt(w.match(/\d+/)[0], 10));
+                fact = fact.slice(t[0].length).trimStart();
+            }
+            const tr = fact.match(/\(\s*triggers?\s*:\s*([^)]*)\)/i) || fact.match(/\(([^)]*)\)\s*$/);
+            let triggers = '';
+            if (tr) {
+                triggers = tr[1].split(',').map(s => s.trim().replace(/^triggers?\s*:/i, '').toLowerCase()).filter(Boolean).join(',');
+                fact = (fact.slice(0, tr.index) + fact.slice(tr.index + tr[0].length)).trim();
+            }
+            // Only merge lines act — a sweep never creates free memories.
+            const targets = supersedes.map(n => rows[n - 1]).filter(t => t && !retired.has(t.id));
+            if (!targets.length || fact.length <= 10) continue;
+            const mid = ins.run(fact, type).lastInsertRowid;
+            for (const w of triggers.split(',')) { const word = w.trim(); if (word) insTrig.run(mid, word); }
+            linkRoom.run(roomId, mid);
+            for (const t of targets) { sup.run(mid, t.id); retired.add(t.id); }
+            merged++;
+        }
+        if (mem.mem_activity && merged) console.log(`[mem] activity: llm sweep merged ${merged} group(s) in room ${roomId}`);
+    } catch (e) {
+        if (mem.mem_activity) console.log(`[mem] activity: llm sweep failed for room ${roomId} (${e.message})`);
     }
 }
 

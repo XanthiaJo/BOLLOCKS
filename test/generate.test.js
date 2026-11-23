@@ -577,4 +577,43 @@ describe('generation (mock LLM)', () => {
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
+
+    test('llm sweep merges duplicates on its own profile and cadence', async () => {
+        const ext = await mockLLM('- [event] A filler beat. (triggers: filler)');
+        const sw = await mockLLM('- [supersede 1] [supersede 2] Wren keeps biscuits in the blue tin. (triggers: biscuits, tin)');
+        try {
+            const extId = (await s.post('profiles', { name: 'SweepExt', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const swId = (await s.post('profiles', { name: 'SweepLLM', apiUrl: `${sw.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Swp', every: 1, profileId: extId, sweep: true, sweepEvery: 2, sweepProfileId: swId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Sweep room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            // Two phrasings of one fact, seeded as smart — entries 1) and 2)
+            // on the sweep's numbered list.
+            const e1 = (await s.post('memories', { room: mroom, content: 'Wren stashes biscuits in the blue tin.', type: 'fact', triggers: 'biscuits,tin' })).json.id;
+            const e2 = (await s.post('memories', { room: mroom, content: 'The blue tin is where Wren keeps her biscuits.', type: 'fact', triggers: 'tin,biscuits,wren' })).json.id;
+            for (const id of [e1, e2]) await s.post('memories/update', { id, origin: 'smart' });
+            // sweepEvery=2 — the first extraction does not call the sweep mock.
+            const swCalls = () => sw.requests.filter(r => r.url.endsWith('/chat/completions')).length;
+            await s.post('say', { room: mroom, text: 'tick 1' });
+            await until(() => ext.requests.filter(r => r.url.endsWith('/chat/completions')).length >= 1 || null, 'first extraction');
+            assert.equal(swCalls(), 0);
+            await s.post('say', { room: mroom, text: 'tick 2' });
+            const mems = await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                return m?.find(x => x.memories_id_pk === e1)?.superseded_by_memories_id_fk ? m : null;
+            }, 'sweep merge');
+            assert.equal(swCalls(), 1);
+            // The sweep prompt carries the numbered live list.
+            const swReq = JSON.parse(sw.requests.find(r => r.url.endsWith('/chat/completions')).body);
+            assert.match(swReq.messages[0].content, /deduplicate stored memories/);
+            assert.match(swReq.messages[1].content, /1\) \[fact\] Wren stashes biscuits/);
+            // Both seeds retire under the same merged head.
+            const e1m = mems.find(x => x.memories_id_pk === e1), e2m = mems.find(x => x.memories_id_pk === e2);
+            assert.equal(e1m.superseded_by_memories_id_fk, e2m.superseded_by_memories_id_fk);
+            const head = mems.find(x => x.memories_id_pk === e1m.superseded_by_memories_id_fk);
+            assert.match(head.content, /keeps biscuits in the blue tin/);
+            assert.equal(head.origin, 'smart');
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); await sw.close(); }
+    });
 });

@@ -177,7 +177,10 @@ CREATE TABLE IF NOT EXISTS mem_profiles (
     mem_state_budget INTEGER DEFAULT 400,
     mem_state_prompt TEXT DEFAULT '',
     mem_readonly INTEGER DEFAULT 0,
-    mem_prune_messages INTEGER DEFAULT 0
+    mem_prune_messages INTEGER DEFAULT 0,
+    mem_sweep INTEGER DEFAULT 0,
+    mem_sweep_every INTEGER DEFAULT 5,
+    sweep_api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk) ON DELETE SET NULL
 );
 CREATE TABLE IF NOT EXISTS prompt_profiles (
     prompt_profiles_id_pk INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -260,6 +263,12 @@ export function migrateSchema() {
         db.exec('ALTER TABLE memories ADD COLUMN user_sorted INTEGER DEFAULT 0');
     if (!colsOf('mem_profiles').includes('mem_prune_messages'))
         db.exec('ALTER TABLE mem_profiles ADD COLUMN mem_prune_messages INTEGER DEFAULT 0');
+    if (!colsOf('mem_profiles').includes('mem_sweep'))
+        db.exec('ALTER TABLE mem_profiles ADD COLUMN mem_sweep INTEGER DEFAULT 0');
+    if (!colsOf('mem_profiles').includes('mem_sweep_every'))
+        db.exec('ALTER TABLE mem_profiles ADD COLUMN mem_sweep_every INTEGER DEFAULT 5');
+    if (!colsOf('mem_profiles').includes('sweep_api_profiles_id_fk'))
+        db.exec('ALTER TABLE mem_profiles ADD COLUMN sweep_api_profiles_id_fk INTEGER REFERENCES api_profiles(api_profiles_id_pk)');
     if (Number(db.prepare('PRAGMA user_version').get().user_version) < 8)
         db.exec('PRAGMA user_version=8');
 }

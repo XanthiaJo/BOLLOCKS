@@ -21,6 +21,8 @@ const MEM_VALS = {
     mem_max_state: b => b.maxState ?? 30, mem_prune_messages: b => b.pruneMessages ?? 50,
     mem_state_budget: b => b.stateBudget ?? 400, mem_state_prompt: b => b.statePrompt || '',
     mem_readonly: b => b.readonly ? 1 : 0,
+    mem_sweep: b => b.sweep ? 1 : 0, mem_sweep_every: b => b.sweepEvery ?? 5,
+    sweep_api_profiles_id_fk: b => b.sweepProfileId || null,
 };
 const memArgs = b => MEM_PROFILE_FIELDS.map(f => MEM_VALS[f](b));
 
