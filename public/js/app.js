@@ -53,7 +53,7 @@ function addMsg(m, stick) {
     li.className = 'mes' + (m.kind === 'ai' ? ' ai' : m.kind === 'sys' ? ' sys' : '');
     li.innerHTML = `<div class="who">${m.cards_id_fk ? `<img class="mav" src="/api/avatar?id=${m.cards_id_fk}" onerror="this.remove()">` : ''}<span class="n"></span></div><div class="body"><span class="t"></span></div>` +
         `<button class="delm" title="Delete" onclick="delMsg(${m.id},this)">✕</button>` +
-        (m.kind === 'ai' ? `<button class="delm" title="Read aloud" onclick="ttsSpeakEl(this)">🔊</button>` : '');
+        (m.kind === 'ai' ? `<button class="spk" title="Read aloud" onclick="ttsSpeakEl(this)">🔊</button>` : '');
     li.querySelector('.n').textContent = m.name;
     if (m.send_date) {
         const d = new Date(m.send_date.replace(' ', 'T') + 'Z'); // stored UTC
