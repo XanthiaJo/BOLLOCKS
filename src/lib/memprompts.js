@@ -20,7 +20,15 @@ export const MEM_TRIGGERS_SUFFIX = ' For each memory also append its trigger key
 // single memory bullet; [arc] advances and [arc-close] resolves a thread.
 // The core teaching is event-vs-thread: a memory is history, a thread is an
 // unresolved situation that stays open until something settles it.
-export const MEM_ARCS_SUFFIX = ` Threads: a thread is NOT a memory — it is an open situation left pending until it resolves: a debt owed, a repair in progress, an investigation, a brewing conflict, a promise awaiting fulfilment — or a bit building toward a payoff (someone inching an object toward a desk's edge across several messages is one thread, not three events). If the excerpt opens, advances, or resolves one, additionally output "- [arc-open] Title — what is underway", "- [arc] Title — the new development", or "- [arc-close] Title — how it settled". Reuse an open thread's title exactly when updating or closing it. If a numbered memory describes an earlier step of a situation still developing in this excerpt, that is a thread — open or advance it instead of logging another isolated [event]. The test: an event is closed when it happens ("Buddy broke the wheel" is [event]); a thread needs a resolution ("the wheel must be replaced before inspection" is a thread). Transient states — injuries, sanctions, pending fixes, ongoing suspicions — belong to threads, never [fact]: arcs close; facts linger as stale truth.`;
+export const MEM_ARCS_SUFFIX = ` Threads: after the memory bullet, ALWAYS check the excerpt for a pending situation — any question, task, errand, obligation, mystery, brewing conflict, or promise raised but NOT settled within the excerpt is a thread. The ONE-bullet limit applies to memories only; arc lines are additional output written after it:
+- "- [arc-open] Title — what is underway" when a pending situation starts or is discovered
+- "- [arc] Title — the new development" when an already-open thread advances
+- "- [arc-close] Title — how it settles" when it resolves
+A thread is NOT a memory — memories record what happened; threads name what is still open. Reuse an open thread's title EXACTLY to advance or close it; never open a second thread for a situation already tracked. If a numbered memory describes an earlier step of a situation still developing in this excerpt, open or advance its thread rather than logging another isolated [event]. Ordinary topic talk is NOT a thread — a thread holds an outstanding question or obligation ("who took the fudge?" stays open until a culprit is named; "Buddy stole the fudge" is a done [event]). A bit building toward a payoff counts too — someone inching an object toward a desk's edge across several messages is ONE thread, not three events. Transient conditions — injuries, sanctions, pending fixes, suspicions — belong to threads, never [fact]: arcs close; facts linger as stale truth.
+Example input: "Karima: my boots have vanished and I need them for the outing.\\nSirRackington: Buddy has been guarding the boot rack all morning."
+Example output:
+- [event] Karima discovered her boots are missing.
+- [arc-open] The missing boots — Karima needs them for the outing; Buddy is guarding the rack`;
 
 // Periodic LLM dedupe pass — unlike the scripted trigger-overlap sweep it
 // can see through paraphrases. The model reviews the room's live memories
