@@ -58,8 +58,9 @@ export default [
     },
   },
   {
-    // layout.js defines the shared globals — allowed to declare them itself.
-    files: ["public/js/layout.js"],
+    // layout.js/tts.js define the shared globals — allowed to declare them
+    // themselves.
+    files: ["public/js/layout.js", "public/js/tts.js"],
     rules: {
       "no-redeclare": "off",
     },
