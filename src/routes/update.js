@@ -4,6 +4,7 @@
 // reports the dev tip against the running SHA). GitHub API base/repo are
 // overridable via env so tests can point them at a local mock.
 import { execFileSync, spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { send, readBody } from '../lib/util.js';
 import { isAdmin } from '../lib/access.js';
@@ -99,9 +100,25 @@ export default {
         if (!channel) return send(res, 400, { error: 'channel must be stable, beta or nightly' });
         if (!isAdmin(u)) return send(res, 403, { error: 'admin only' });
         const root = path.join(PUB, '..');
-        const git = (...args) => execFileSync('git', args, { cwd: root }).toString().trim();
         const branch = BRANCHES[channel];
         try {
+            // Managed/container deploy — no checkout to pull. Overlay the
+            // channel's tarball on the install root, stamp the resolved sha
+            // for version.js, then exit: the supervisor (docker restart
+            // policy, systemd, pm2) brings the new code up.
+            if (!fs.existsSync(path.join(root, '.git'))) {
+                const [c] = await gh(`commits?sha=${branch}&per_page=1`) || [];
+                if (!c) return send(res, 404, { error: `no ${channel} ref on origin` });
+                const sha = c.sha.slice(0, 7);
+                const t = await fetch(`${GH}/repos/${REPO}/tarball/${branch}`, { headers: { 'User-Agent': 'BOLLOCKS' } });
+                if (!t.ok) return send(res, 502, { error: `tarball fetch: HTTP ${t.status}` });
+                execFileSync('tar', ['-xzf', '-', '--strip-components=1', '-C', root], { input: Buffer.from(await t.arrayBuffer()) });
+                fs.writeFileSync(path.join(root, '.deploy-sha'), sha);
+                send(res, 200, { ok: true, branch, sha });
+                setTimeout(() => process.exit(0), 300);
+                return;
+            }
+            const git = (...args) => execFileSync('git', args, { cwd: root }).toString().trim();
             if (git('status', '--porcelain')) return send(res, 409, { error: 'working tree not clean — refusing to update' });
             git('fetch', 'origin', branch);
             git('checkout', '-B', branch, `origin/${branch}`);

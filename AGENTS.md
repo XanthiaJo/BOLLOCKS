@@ -145,6 +145,7 @@ Seeded dev users (fresh DB, `seed()`): `admin`, `alice`, `bob`, `carol` — all 
 - Use **Conventional Commits** where practical (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`, `test:`, `perf:`, `style:`; `!`/`BREAKING` for breaking changes). CI/release automation relies on commit conventions.
 - **Never push directly to `dev`, `beta`, or `master`.** All changes go on a feature branch and land via PR — even docs or one-line fixes. Release automation is fully local: `beta.yml`/`release.yml` drive `scripts/release.mjs` (`dev` → beta/release processes; see workflow files).
 - PRs: `pr-autofill.yml` refreshes an autofilled commit list above any manual PR description (without changing the PR title); `pr-checks.yml` runs lint and `npm test` on PR updates. Ensure both pass before opening/updating a PR.
+- **Issues: every filed issue needs an issue type and at least one label.** Types: `Bug`/`Feature`/`Task` (the coarse axis). Labels are the area axis — `memory`, `ui`, `db`, `llm`, `api`, `tests`, `docs`, `deploy` — plus the stock `duplicate`/`wontfix`/`invalid`/`question`/`documentation` workflow labels. `gh issue create` can't set a type: file with `gh issue create --label <area>` then set the type via `gh api graphql` `updateIssue` (repo type IDs are stable; look them up once with the `issueTypes` query).
 
 ## Validation
 

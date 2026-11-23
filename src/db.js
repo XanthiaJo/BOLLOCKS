@@ -248,6 +248,18 @@ export function activeProfile(userId) {
  *    if (!colsOf('t').includes('c')) db.exec('ALTER TABLE t ADD COLUMN c ...');
  *  One-time data fixes gate on PRAGMA user_version bumps. */
 export function migrateSchema() {
+    const colsOf = t => db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
+    // Columns added after the v0.2.0 live build — DBs still at that shape
+    // need them before code touches them.
+    const mcols = colsOf('memories');
+    if (!mcols.includes('last_fired_messages_id_fk'))
+        db.exec('ALTER TABLE memories ADD COLUMN last_fired_messages_id_fk INTEGER');
+    if (!mcols.includes('last_fired_at'))
+        db.exec('ALTER TABLE memories ADD COLUMN last_fired_at TEXT');
+    if (!mcols.includes('user_sorted'))
+        db.exec('ALTER TABLE memories ADD COLUMN user_sorted INTEGER DEFAULT 0');
+    if (!colsOf('mem_profiles').includes('mem_prune_messages'))
+        db.exec('ALTER TABLE mem_profiles ADD COLUMN mem_prune_messages INTEGER DEFAULT 0');
     if (Number(db.prepare('PRAGMA user_version').get().user_version) < 8)
         db.exec('PRAGMA user_version=8');
 }
