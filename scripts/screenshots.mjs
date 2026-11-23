@@ -20,7 +20,7 @@ const page = await ctx.newPage();
 const res = await page.request.post(BASE + '/api/login', { data: { handle: USER, password: PASS } });
 if (!res.ok()) throw new Error(`login failed: ${res.status()}`);
 const { token } = await res.json();
-await page.addInitScript(t => { localStorage.mp_token = t; }, token);
+await page.addInitScript(t => { globalThis.localStorage.mp_token = t; }, token);
 
 // The only public page — taken before the token could matter anyway.
 await page.goto(BASE + '/login.html');
