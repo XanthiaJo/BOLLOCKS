@@ -433,6 +433,47 @@ describe('generation (mock LLM)', () => {
         } finally { await ext.close(); }
     });
 
+    test('state pass fuzzy-chains a renamed subject key instead of tombstone+insert', async () => {
+        // The extractor paraphrased a subject between passes — "Buddy's ear"
+        // → "Buddy". Without the fuzzy fallback that's a retraction plus a
+        // fresh row for one unchanging subject; the fuzzy match chains it.
+        let stateCalls = 0;
+        const ext = await mockLLM(body => body.includes('keyed set')
+            ? (++stateCalls === 1
+                ? '{"Buddy\'s ear":"upright, tracking the door","blue tin":"on the counter"}'
+                : '{"Buddy":"by the door","blue tin":"on the counter"}')
+            : '- [event] A filler beat.');
+        try {
+            const profId = (await s.post('profiles', { name: 'Fuzzy', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Fuzzy', every: 1,
+                state: 1, stateEvery: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Fuzzy room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            const states = async () =>
+                ((await s.get(`memories?card=0&room=${mroom}`)).json.memories || []).filter(m => m.type === 'state');
+            await s.post('say', { room: mroom, text: 'scene one' });
+            const first = await until(async () => {
+                const st = await states();
+                return st.length === 2 ? st : null;
+            }, 'first snapshot');
+            const ear = first.find(m => m.state_key === "Buddy's ear");
+            await s.post('say', { room: mroom, text: 'scene two' });
+            const all = await until(async () => {
+                const st = await states();
+                const live = st.filter(m => !m.superseded_by_memories_id_fk);
+                return live.some(m => m.state_key === 'Buddy') ? st : null;
+            }, 'renamed snapshot');
+            const live = all.filter(m => !m.superseded_by_memories_id_fk);
+            // "Buddy" chains the old "Buddy's ear" row — an update, not a
+            // retraction: the old row points at the new head.
+            const newBuddy = live.find(m => m.state_key === 'Buddy');
+            const oldEar = all.find(m => m.memories_id_pk === ear.memories_id_pk);
+            assert.equal(oldEar.superseded_by_memories_id_fk, newBuddy.memories_id_pk);
+            assert.equal(live.length, 2); // Buddy + blue tin
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
+
     test('extraction [supersede N] retires the older smart memory', async () => {
         const ext = await mockLLM('- [supersede 1][fact] The blue tin is now empty.');
         try {

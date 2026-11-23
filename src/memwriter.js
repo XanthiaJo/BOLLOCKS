@@ -320,12 +320,27 @@ async function maybeUpdateState(roomId, mem, conn) {
             // ambiguity for injection or UI.
             const byKey = new Map(rows.map(r => [r.state_key?.toLowerCase(), r]));
             const seen = new Set();
+            // Fuzzy key fallback — small models sometimes rename a subject
+            // between passes ("Buddy's ear" → "Buddy"), which otherwise diffs
+            // as retract+insert and churns the audit chain. Map an unmatched
+            // new key onto an old row when one name contains the other
+            // word-wise AND exactly one unclaimed row qualifies — ambiguity
+            // means a genuinely new subject, so it gets its own row.
+            const norm = k => (k || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+            const fuzzy = nk => {
+                const pad = ` ${nk} `;
+                const cands = rows.filter(r => r.state_key && !seen.has(r.id)).filter(r => {
+                    const rk = ` ${norm(r.state_key)} `;
+                    return rk !== pad && (rk.includes(pad) || pad.includes(rk));
+                });
+                return cands.length === 1 ? cands[0] : undefined;
+            };
             const ins = db.prepare("INSERT INTO memories (content,type,origin,state_key) VALUES (?, 'state', 'smart', ?)");
             const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
             const sup = db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?');
             for (const [subject, val] of entries) {
                 const content = `${subject} — ${val}`;
-                const ex = byKey.get(subject.toLowerCase());
+                const ex = byKey.get(subject.toLowerCase()) ?? fuzzy(norm(subject));
                 if (!ex) { linkRoom.run(roomId, ins.run(content, subject).lastInsertRowid); continue; }
                 seen.add(ex.id);
                 if (ex.content === content) continue;
