@@ -2,7 +2,8 @@
 
 This document describes how the memories system in BOLLOCKS works, who can do
 what, and the intended refinements. It accompanies the code in `src/db.js`,
-`src/server.js`, `src/generate.js`, `public/memories.html`, and `public/app.js`.
+`src/server.js`, `src/generate.js` (injection), `src/memwriter.js` (extraction),
+`public/memories.html`, and `public/app.js`.
 
 ## Concepts
 
@@ -187,8 +188,12 @@ retellings are caught anyway: each new smart `event` is compared against
 the room's live events by IDF-weighted trigger overlap (`memdedupe.js`,
 shared rare words count, ubiquitous room vocabulary doesn't) and scores
 above `DEDUPE_MIN` chain the same way — `POST /api/memories/dedupe`
-re-runs that sweep pairwise for cleanup. When the scorer can't see a
-retelling (fully paraphrased triggers — [#141](https://github.com/XanthiaJo/BOLLOCKS/issues/141) tracks an LLM consolidation pass), drag one live card onto another
+re-runs that sweep pairwise for cleanup. Retellings the scorer can't see
+(fully paraphrased triggers) fall to the optional **LLM sweep**
+(`mem_sweep`/`mem_sweep_every` on the memory profile —
+[#141](https://github.com/XanthiaJo/BOLLOCKS/issues/141)): every N
+extraction runs the model reviews the live list and emits
+multi-`[supersede N]` merge lines. Or drag one live card onto another
 on the Memories page — `POST /api/memories/link` merges the two chains
 with the newest-`created` head staying live. The inverse works too:
 drag a dimmed history card out of a chain and `POST /api/memories/unlink`

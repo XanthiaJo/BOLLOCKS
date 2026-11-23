@@ -1,7 +1,7 @@
 // Connection routes: API profiles, memory profiles, /models proxy.
 import { db } from '../db.js';
 import { send, readBody } from '../lib/util.js';
-import { MEM_EXTRACT_PROMPT, MEM_STATE_PROMPT, MEM_PROFILE_FIELDS, PROMPT_BLOCKS } from '../generate.js';
+import { MEM_EXTRACT_PROMPT, MEM_STATE_PROMPT, MEM_PROFILE_FIELDS, PROMPT_BLOCKS } from '../lib/memprompts.js';
 
 // mem_* column → request value; MEM_PROFILE_FIELDS order drives the
 // generated INSERT/UPDATE column lists so they can never drift apart.
