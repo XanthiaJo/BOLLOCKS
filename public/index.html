@@ -131,12 +131,14 @@ button.gen{background:var(--ok)}
       <div id="cmdmenu" hidden></div>
       <textarea id="in" placeholder="Type a message — / for commands" autofocus rows="1" onkeydown="inKey(event)" style="resize:none;overflow:hidden;padding:10px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;flex:1;font:inherit" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
       <button onclick="say()">Send</button>
+      <button id="ttsbtn" onclick="ttsToggle(this)" title="Read AI replies aloud">🔇</button>
       <button class="gen" onclick="npcMenu()">NPC ▸</button>
       <div id="npcmenu" hidden></div>
     </div>
   </div>
 </div>
 <script src="js/layout.js"></script>
+<script src="js/tts.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
