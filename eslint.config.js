@@ -47,6 +47,8 @@ export default [
         fillFields: "readonly",
         trigList: "readonly",
         renderMprofPicker: "readonly",
+        // Defined in tts.js.
+        ttsAuto: "readonly",
       },
     },
     rules: {

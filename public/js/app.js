@@ -50,6 +50,7 @@ function addMsg(m, stick) {
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     const li = document.createElement('li');
     li.dataset.mid = m.id;
+    li.dataset.txt = m.text;
     li.className = 'mes' + (m.kind === 'ai' ? ' ai' : m.kind === 'sys' ? ' sys' : '');
     li.innerHTML = `<div class="who">${m.cards_id_fk ? `<img class="mav" src="/api/avatar?id=${m.cards_id_fk}" onerror="this.remove()">` : ''}<span class="n"></span></div><div class="body"><span class="t"></span></div>` +
         `<button class="delm" title="Delete" onclick="delMsg(${m.id},this)">✕</button>` +
