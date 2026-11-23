@@ -13,7 +13,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | File | Purpose | Key exports / sections |
 |---|---|---|
 | `server.js` | Thin HTTP shell: merges route tables, request gates, static file serving | `router` merge of `src/routes/*`; unauthenticated-API 401 gate; static-file gate |
-| `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona + admin user management), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats — `/roll` and `/ruling` slash commands resolve server-side in `say` and post as system messages; dice in `src/lib/dice.js`), `update` (sidebar update check) | |
+| `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona + admin user management), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats — `/roll` and `/ruling` slash commands resolve server-side in `say` and post as system messages; dice in `src/lib/dice.js`), `stt` (dictation: forwards audio to `BOLLOCKS_STT_URL`'s OpenAI-shaped `/v1/audio/transcriptions`, corrects member names; `GET` reports a reachability probe), `update` (sidebar update check) | |
 | `lib/util.js` | Request/response helpers | `send`, `readBody`, `cookieToken`, `auth(req)` |
 | `lib/access.js` | Permission helpers for route handlers | `roomOwnerOnly`, `roomMember`, `memoryShared`, `isAdmin`, `worldEntryOk` |
 | `lib/sse.js` | Server-Sent Events fan-out | `streams` map; `push(roomId, evt)` |
@@ -31,7 +31,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | File | Purpose |
 |---|---|
 | `login.html` | Login page — the ONLY file served without a session. Self-contained (inline CSS/JS); stores token in `localStorage.mp_token`, redirects to `/` |
-| `index.html` + `js/app.js` | Chat page: room list, messages, members sidebar, prompt-token inspector, SSE live updates |
+| `index.html` + `js/app.js` | Chat page: room list, messages, members sidebar, prompt-token inspector, SSE live updates. `js/tts.js` reads AI replies aloud via `speechSynthesis`; `js/stt.js` is the dictation mic (MediaRecorder → `/api/stt`, transcript into the composer; button hides when no STT backend) |
 | `characters.html` + `js/characters.js` | Card list + editor, avatar upload with in-browser crop |
 | `world.html` | Lorebooks — single page: sidebar picks a book then its entries (`?id=<book>` deep-links a book); main edits the selected thing (book rename/create/ST import, or entry keys/secondary/content/constant/enabled/order). Link a book to a room in chat settings |
 | `memories.html` + `js/memories.js` | Memory browser, Manual/Smart tabs (permanent vs extracted; a memory with no triggers = canon, always injected). Manual keeps the sidebar scope picker (room-shared or per-character). `stories.html` + `js/stories.js` | Story threads (arcs), Manual/Smart tabs by `room_arcs.origin` (opened by you vs by extraction). `memsettings.html` + `js/memsettings.js` | Memory profiles page (nav: "Memory profiles"): sidebar profile list → `class="panel settings"` accordion editor. `js/memprofiles.js` | Profile-editor code shared by both pages — it ends by calling the page's own `load()`. All styles live in `css/layout.css` |
