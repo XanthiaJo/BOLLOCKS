@@ -9,8 +9,14 @@ if (sttBtn) {
     fetch('/api/stt', { headers: { Authorization: 'Bearer ' + (localStorage.mp_token || '') } })
         .then(r => r.json())
         .then(d => {
-            if (d?.enabled && navigator.mediaDevices?.getUserMedia && window.MediaRecorder) sttBtn.style.display = '';
-            else sttBtn.remove();
+            if (!d?.enabled) return sttBtn.remove();
+            sttBtn.style.display = '';
+            // Mic capture needs a secure context (HTTPS/localhost) — over
+            // plain HTTP keep the button as a hint instead of vanishing.
+            if (!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder)) {
+                sttBtn.disabled = true;
+                sttBtn.title = 'Microphone needs HTTPS or localhost — this page is plain HTTP';
+            }
         })
         .catch(() => sttBtn.remove());
 }
