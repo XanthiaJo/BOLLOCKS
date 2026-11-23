@@ -670,6 +670,45 @@ describe('generation (mock LLM)', () => {
         } finally { await ext.close(); await sw.close(); }
     });
 
+    test('variant arc titles advance the open thread instead of duplicating', async () => {
+        let n = 0;
+        const replies = [
+            '- [event] Buddy glared at Karima. (triggers: glare)\n- [arc-open] Buddy vs Karima rivalry — the feud continues',
+            '- [event] Buddy lies by the hoop. (triggers: wreath)\n- [arc-open] The wreath project — the hoop waits to be filled',
+            '- [event] Buddy delivered fleece. (triggers: fleece)\n- [arc-open] Buddy\'s investment in the wreath — he sourced the green fleece',
+            '- [event] A truce. (triggers: truce)\n- [arc-open] Buddy and Karima make up — peace declared',
+        ];
+        const ext = await mockLLM(() => replies[Math.min(n++, replies.length - 1)]);
+        try {
+            const profId = (await s.post('profiles', { name: 'ArcVar', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'AV', every: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Arc variant room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            const buddy = (await s.post('cards', { name: 'Buddy' })).json.id;
+            const karima = (await s.post('cards', { name: 'Karima' })).json.id;
+            await s.post('members', { room: mroom, cardId: buddy });
+            await s.post('members', { room: mroom, cardId: karima });
+            let want = 0;
+            for (const text of ['they argued', 'hoop sighted', 'fleece fetched', 'made up']) {
+                want++;
+                await s.post('say', { room: mroom, text });
+                await until(() => ext.requests.length >= want || null, 'extraction');
+            }
+            const arcs = (await s.get(`arcs?room=${mroom}`)).json.arcs;
+            assert.equal(arcs.length, 3);
+            // Variant title matched the open wreath arc — same arc, new summary.
+            const wreath = arcs.find(a => a.title === 'The wreath project');
+            assert.match(wreath.summary, /green fleece/);
+            // Names never count as shared words: "make up" shares Buddy+Karima
+            // with the rivalry arc but nothing else — it opens its own arc
+            // and the rivalry's summary is untouched.
+            const rivalry = arcs.find(a => a.title === 'Buddy vs Karima rivalry');
+            assert.equal(rivalry.summary, 'the feud continues');
+            assert.ok(arcs.find(a => a.title === 'Buddy and Karima make up'));
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
+
     test('llm sweep proposes threads: arc-done folds members, arc-open opens', async () => {
         const ext = await mockLLM('- [event] A filler beat. (triggers: filler)');
         const sw = await mockLLM('- [arc-done 1, 2] The tin caper — Wren hid the tin and Blake found it\n'

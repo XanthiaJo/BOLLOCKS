@@ -10,6 +10,42 @@ import {
     MEM_SWEEP_PROMPT, MEM_SWEEP_ARCS_SUFFIX, MEM_STATE_PROMPT, memProfileFor,
 } from './lib/memprompts.js';
 
+// Title-variant matching for arc tags (#172): the extractor invents new
+// phrasings for a thread that's already open ("Buddy's investment in the
+// wreath" vs "The wreath project") and exact LOWER() matching can't catch
+// it, so the same situation spawns duplicate arcs. Match on content words
+// instead: stopwords and room member names never count (every second
+// thread is about Buddy — a shared name means nothing).
+const ARC_STOP = new Set(['the', 'a', 'an', 'in', 'of', 'on', 'at', 'to', 'for', 'and', 'or', 'vs', 's', 'his', 'her', 'its', 'my', 'your', 'with', 'is']);
+const arcNames = roomId => new Set(
+    db.prepare('SELECT c.name AS n FROM room_members rm JOIN cards c ON c.cards_id_pk=rm.cards_id_fk WHERE rm.rooms_id_fk=?')
+        .all(roomId).flatMap(r => r.n.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)));
+const arcWords = (title, names) => new Set(title.toLowerCase().replace(/['’]s\b/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w && !ARC_STOP.has(w) && !names.has(w)));
+
+/** Match a proposed arc title against the room's OPEN arcs: subset
+ *  containment, ≥2 shared content words, or one shared word unique across
+ *  the open titles. Exactly one hit → that arc; zero or ambiguous → null
+ *  (a missed merge leaves a dup arc; a wrong merge corrupts a thread). */
+function arcVariant(roomId, title) {
+    const names = arcNames(roomId);
+    const cand = arcWords(title, names);
+    if (!cand.size) return null;
+    const open = db.prepare("SELECT room_arcs_id_pk AS id, title FROM room_arcs WHERE rooms_id_fk=? AND status='open'")
+        .all(roomId).map(a => ({ ...a, w: arcWords(a.title, names) }));
+    let hit = null;
+    for (const a of open) {
+        const shared = [...cand].filter(w => a.w.has(w));
+        const subset = a.w.size > 0 && (shared.length === cand.size || shared.length === a.w.size);
+        const uniqueWord = shared.length === 1 && open.every(o => o.id === a.id || !o.w.has(shared[0]));
+        if (subset || shared.length >= 2 || uniqueWord) {
+            if (hit) return null;
+            hit = { id: a.id };
+        }
+    }
+    return hit;
+}
+
 /**
  * Smart memories: ask the model to distill an excerpt into bullet facts,
  * stored as shared room memories. Runs after every N messages per room.
@@ -99,6 +135,7 @@ export async function maybeSummarize(roomId) {
     const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
     const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
     const findArc = db.prepare("SELECT room_arcs_id_pk AS id FROM room_arcs WHERE rooms_id_fk=? AND status='open' AND LOWER(title)=LOWER(?)");
+    const findArcFuzzy = t => findArc.get(roomId, t) || arcVariant(roomId, t);
     const insArc = db.prepare("INSERT INTO room_arcs (rooms_id_fk,title,summary,opened_messages_id_fk,origin) VALUES (?,?,?,?,'smart')");
     // A closed thread revived by an [arc] beat re-anchors its span at the
     // current message — same rule as the reopen route, so a second close
@@ -130,7 +167,7 @@ export async function maybeSummarize(roomId) {
             const title = (m ? m[1] : fact).trim().replace(/[.\s]+$/, '');
             const summary = (m ? m[2] : '').trim();
             if (!title || (mem.mem_max_arcs ?? 10) <= 0) continue;
-            const ex = findArc.get(roomId, title);
+            const ex = findArcFuzzy(title);
             if (arc === 'arc-close') { if (ex) { closeArc.run(lastId, ex.id); closedArcs.push(ex.id); } }
             else if (ex) { if (summary) upArc.run(summary, lastId, ex.id); }
             else insArc.run(roomId, title, summary, lastId);
@@ -450,7 +487,9 @@ async function maybeLlmSweep(roomId, mem, fallbackConn) {
                     const anchorBefore = dates.length
                         ? (db.prepare('SELECT messages_id_pk AS id FROM messages WHERE rooms_id_fk=? AND send_date<=? ORDER BY messages_id_pk DESC LIMIT 1').get(roomId, dates[0])?.id ?? null)
                         : null;
-                    const ex = findArc.get(roomId, title);
+                    // A variant title only re-opens/advances — a done
+                    // proposal must name the arc exactly to resolve it.
+                    const ex = findArc.get(roomId, title) || (arcKind === 'open' ? arcVariant(roomId, title) : null);
                     if (arcKind === 'open') {
                         if (ex) { if (summary) upArc.run(summary, anchorBefore, ex.id); }
                         else insArc.run(roomId, title, summary, anchorBefore);
