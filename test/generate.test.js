@@ -245,6 +245,16 @@ describe('generation (mock LLM)', () => {
         await s.post('memories/delete', { id: trig });
     });
 
+    test('event memories inject with a created timestamp', async () => {
+        const ev = (await s.post('memories', { room, content: 'Wren found the flapjack tin empty.', type: 'event', triggers: 'flapjack' })).json.id;
+        await s.post('say', { room, text: 'where did the flapjack go' });
+        llm.requests.length = 0;
+        await s.post('generate', { room, card });
+        const sys = JSON.parse(llm.requests.at(-1).body).messages[0].content;
+        assert.match(sys, /- \(\d{4}-\d{2}-\d{2} \d{2}:\d{2}\) Wren found the flapjack tin empty\./);
+        await s.post('memories/delete', { id: ev });
+    });
+
     test('arcs: API lifecycle and open-thread injection', async () => {
         const arcId = (await s.post('arcs', { room, title: 'The stolen map', summary: 'Kira suspects the guild' })).json.id;
         const arcs = (await s.get(`arcs?room=${room}`)).json.arcs;
