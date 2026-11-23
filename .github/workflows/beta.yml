@@ -153,6 +153,30 @@ jobs:
             --notes-file .github/beta-notes.md --target "$SHA"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
+  # Downloadable installs (issue #170): a self-contained docker bundle
+  # (image tarball + compose + installer — works offline) and a source
+  # snapshot whose compose builds itself. Both land on the pre-release.
+  artifacts:
+    name: Build release artifacts
+    needs: tag-beta
+    if: needs.tag-beta.result == 'success' && needs.tag-beta.outputs.tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release upload
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag-beta.outputs.tag }}
+
+      - name: Build artifacts
+        run: bash scripts/make-artifacts.sh "${{ needs.tag-beta.outputs.tag }}" dist
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.tag-beta.outputs.tag }}
+        run: gh release upload "$TAG" dist/*.zip --clobber
+
   # After the pre-release exists, prepend a plain-English TL;DR to its notes.
   # Uses OpenRouter (OPENROUTER_API_KEY secret, OPENROUTER_MODEL var optional).
   # Fails soft — never blocks a release.
