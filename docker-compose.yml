@@ -12,9 +12,25 @@ services:
     environment:
       - PORT=8100
       - BOLLOCKS_SEED=0
+      - BOLLOCKS_STT_URL=http://whisper:8000
       - GIT_SHA=${GIT_SHA:-}
     volumes:
       - bollocks-data:/app/data
 
+  # Optional speech-to-text sidecar — opt in with
+  # `docker compose --profile stt up -d`. OpenAI-shaped
+  # /v1/audio/transcriptions, CPU-only. First use downloads the ~150MB
+  # model into the cache volume. Any compatible endpoint works instead —
+  # just repoint BOLLOCKS_STT_URL (hosted Whisper included).
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    restart: unless-stopped
+    profiles: [stt]
+    environment:
+      - WHISPER__MODEL=Systran/faster-whisper-base.en
+    volumes:
+      - whisper-cache:/root/.cache/huggingface
+
 volumes:
   bollocks-data:
+  whisper-cache:

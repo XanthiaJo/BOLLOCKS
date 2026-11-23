@@ -161,6 +161,30 @@ jobs:
             gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file "$NOTES_PATH" --target "$(git rev-parse HEAD)"
           fi
 
+  # Downloadable installs (issue #170): a self-contained docker bundle
+  # (image tarball + compose + installer — works offline) and a source
+  # snapshot whose compose builds itself. Both land on the GitHub release.
+  artifacts:
+    name: Build release artifacts
+    needs: [plan, release]
+    if: needs.plan.outputs.should_release == 'true' && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release upload
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.release_tag }}
+
+      - name: Build artifacts
+        run: bash scripts/make-artifacts.sh "${{ needs.plan.outputs.release_tag }}" dist
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.plan.outputs.release_tag }}
+        run: gh release upload "$TAG" dist/*.zip --clobber
+
   # After the release exists, prepend a plain-English TL;DR to its notes.
   # Uses OpenRouter (OPENROUTER_API_KEY secret, OPENROUTER_MODEL var optional).
   # Marker comment makes re-runs idempotent; fails soft — never blocks a release.

@@ -245,6 +245,16 @@ describe('generation (mock LLM)', () => {
         await s.post('memories/delete', { id: trig });
     });
 
+    test('event memories inject with a created timestamp', async () => {
+        const ev = (await s.post('memories', { room, content: 'Wren found the flapjack tin empty.', type: 'event', triggers: 'flapjack' })).json.id;
+        await s.post('say', { room, text: 'where did the flapjack go' });
+        llm.requests.length = 0;
+        await s.post('generate', { room, card });
+        const sys = JSON.parse(llm.requests.at(-1).body).messages[0].content;
+        assert.match(sys, /- \(\d{4}-\d{2}-\d{2} \d{2}:\d{2}\) Wren found the flapjack tin empty\./);
+        await s.post('memories/delete', { id: ev });
+    });
+
     test('arcs: API lifecycle and open-thread injection', async () => {
         const arcId = (await s.post('arcs', { room, title: 'The stolen map', summary: 'Kira suspects the guild' })).json.id;
         const arcs = (await s.get(`arcs?room=${room}`)).json.arcs;
@@ -341,6 +351,18 @@ describe('generation (mock LLM)', () => {
                 return m?.length ? m : null;
             }, 'smart memory');
             assert.equal(mems[0].type, 'event');
+            // The extraction prompt carries the thread instructions: the
+            // pending-situation check, the tag vocabulary, exact-title reuse
+            // and the worked example the 8b extractor leans on.
+            const extSys = () => JSON.parse(ext.requests.at(-1).body).messages[0].content;
+            assert.match(extSys(), /pending situation/);
+            assert.match(extSys(), /\[arc-open\]/);
+            assert.match(extSys(), /title EXACTLY/);
+            assert.match(extSys(), /missing boots/);
+            // A second pass injects open titles so the model can advance/close.
+            await s.post('say', { room: mroom, text: 'Wren still owes me.' });
+            await until(() => ext.requests.length >= 2 || null, 'second extraction');
+            assert.match(extSys(), /Currently open threads: The tea debt/);
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
@@ -419,6 +441,47 @@ describe('generation (mock LLM)', () => {
             const fire = all.find(m => m.state_key === 'hearth fire');
             assert.equal(fire.superseded_by_memories_id_fk, fire.memories_id_pk);
             assert.ok(live.every(m => !m.triggers)); // state is never trigger-gated
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
+
+    test('state pass fuzzy-chains a renamed subject key instead of tombstone+insert', async () => {
+        // The extractor paraphrased a subject between passes — "Buddy's ear"
+        // → "Buddy". Without the fuzzy fallback that's a retraction plus a
+        // fresh row for one unchanging subject; the fuzzy match chains it.
+        let stateCalls = 0;
+        const ext = await mockLLM(body => body.includes('keyed set')
+            ? (++stateCalls === 1
+                ? '{"Buddy\'s ear":"upright, tracking the door","blue tin":"on the counter"}'
+                : '{"Buddy":"by the door","blue tin":"on the counter"}')
+            : '- [event] A filler beat.');
+        try {
+            const profId = (await s.post('profiles', { name: 'Fuzzy', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Fuzzy', every: 1,
+                state: 1, stateEvery: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Fuzzy room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            const states = async () =>
+                ((await s.get(`memories?card=0&room=${mroom}`)).json.memories || []).filter(m => m.type === 'state');
+            await s.post('say', { room: mroom, text: 'scene one' });
+            const first = await until(async () => {
+                const st = await states();
+                return st.length === 2 ? st : null;
+            }, 'first snapshot');
+            const ear = first.find(m => m.state_key === "Buddy's ear");
+            await s.post('say', { room: mroom, text: 'scene two' });
+            const all = await until(async () => {
+                const st = await states();
+                const live = st.filter(m => !m.superseded_by_memories_id_fk);
+                return live.some(m => m.state_key === 'Buddy') ? st : null;
+            }, 'renamed snapshot');
+            const live = all.filter(m => !m.superseded_by_memories_id_fk);
+            // "Buddy" chains the old "Buddy's ear" row — an update, not a
+            // retraction: the old row points at the new head.
+            const newBuddy = live.find(m => m.state_key === 'Buddy');
+            const oldEar = all.find(m => m.memories_id_pk === ear.memories_id_pk);
+            assert.equal(oldEar.superseded_by_memories_id_fk, newBuddy.memories_id_pk);
+            assert.equal(live.length, 2); // Buddy + blue tin
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
@@ -566,5 +629,118 @@ describe('generation (mock LLM)', () => {
             assert.equal(old.superseded_by_memories_id_fk, null); // stays live
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
+    });
+
+    test('llm sweep merges duplicates on its own profile and cadence', async () => {
+        const ext = await mockLLM('- [event] A filler beat. (triggers: filler)');
+        const sw = await mockLLM('- [supersede 1] [supersede 2] Wren keeps biscuits in the blue tin. (triggers: biscuits, tin)');
+        try {
+            const extId = (await s.post('profiles', { name: 'SweepExt', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const swId = (await s.post('profiles', { name: 'SweepLLM', apiUrl: `${sw.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'Swp', every: 1, profileId: extId, sweep: true, sweepEvery: 2, sweepProfileId: swId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Sweep room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            // Two phrasings of one fact, seeded as smart — entries 1) and 2)
+            // on the sweep's numbered list.
+            const e1 = (await s.post('memories', { room: mroom, content: 'Wren stashes biscuits in the blue tin.', type: 'fact', triggers: 'biscuits,tin' })).json.id;
+            const e2 = (await s.post('memories', { room: mroom, content: 'The blue tin is where Wren keeps her biscuits.', type: 'fact', triggers: 'tin,biscuits,wren' })).json.id;
+            for (const id of [e1, e2]) await s.post('memories/update', { id, origin: 'smart' });
+            // sweepEvery=2 — the first extraction does not call the sweep mock.
+            const swCalls = () => sw.requests.filter(r => r.url.endsWith('/chat/completions')).length;
+            await s.post('say', { room: mroom, text: 'tick 1' });
+            await until(() => ext.requests.filter(r => r.url.endsWith('/chat/completions')).length >= 1 || null, 'first extraction');
+            assert.equal(swCalls(), 0);
+            await s.post('say', { room: mroom, text: 'tick 2' });
+            const mems = await until(async () => {
+                const m = (await s.get(`memories?card=0&room=${mroom}`)).json.memories;
+                return m?.find(x => x.memories_id_pk === e1)?.superseded_by_memories_id_fk ? m : null;
+            }, 'sweep merge');
+            assert.equal(swCalls(), 1);
+            // The sweep prompt carries the numbered live list.
+            const swReq = JSON.parse(sw.requests.find(r => r.url.endsWith('/chat/completions')).body);
+            assert.match(swReq.messages[0].content, /deduplicate stored memories/);
+            assert.match(swReq.messages[1].content, /1\) \[fact\] Wren stashes biscuits/);
+            // Both seeds retire under the same merged head.
+            const e1m = mems.find(x => x.memories_id_pk === e1), e2m = mems.find(x => x.memories_id_pk === e2);
+            assert.equal(e1m.superseded_by_memories_id_fk, e2m.superseded_by_memories_id_fk);
+            const head = mems.find(x => x.memories_id_pk === e1m.superseded_by_memories_id_fk);
+            assert.match(head.content, /keeps biscuits in the blue tin/);
+            assert.equal(head.origin, 'smart');
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); await sw.close(); }
+    });
+
+    test('variant arc titles advance the open thread instead of duplicating', async () => {
+        let n = 0;
+        const replies = [
+            '- [event] Buddy glared at Karima. (triggers: glare)\n- [arc-open] Buddy vs Karima rivalry — the feud continues',
+            '- [event] Buddy lies by the hoop. (triggers: wreath)\n- [arc-open] The wreath project — the hoop waits to be filled',
+            '- [event] Buddy delivered fleece. (triggers: fleece)\n- [arc-open] Buddy\'s investment in the wreath — he sourced the green fleece',
+            '- [event] A truce. (triggers: truce)\n- [arc-open] Buddy and Karima make up — peace declared',
+        ];
+        const ext = await mockLLM(() => replies[Math.min(n++, replies.length - 1)]);
+        try {
+            const profId = (await s.post('profiles', { name: 'ArcVar', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'AV', every: 1, profileId: profId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Arc variant room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            const buddy = (await s.post('cards', { name: 'Buddy' })).json.id;
+            const karima = (await s.post('cards', { name: 'Karima' })).json.id;
+            await s.post('members', { room: mroom, cardId: buddy });
+            await s.post('members', { room: mroom, cardId: karima });
+            let want = 0;
+            for (const text of ['they argued', 'hoop sighted', 'fleece fetched', 'made up']) {
+                want++;
+                await s.post('say', { room: mroom, text });
+                await until(() => ext.requests.length >= want || null, 'extraction');
+            }
+            const arcs = (await s.get(`arcs?room=${mroom}`)).json.arcs;
+            assert.equal(arcs.length, 3);
+            // Variant title matched the open wreath arc — same arc, new summary.
+            const wreath = arcs.find(a => a.title === 'The wreath project');
+            assert.match(wreath.summary, /green fleece/);
+            // Names never count as shared words: "make up" shares Buddy+Karima
+            // with the rivalry arc but nothing else — it opens its own arc
+            // and the rivalry's summary is untouched.
+            const rivalry = arcs.find(a => a.title === 'Buddy vs Karima rivalry');
+            assert.equal(rivalry.summary, 'the feud continues');
+            assert.ok(arcs.find(a => a.title === 'Buddy and Karima make up'));
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); }
+    });
+
+    test('llm sweep proposes threads: arc-done folds members, arc-open opens', async () => {
+        const ext = await mockLLM('- [event] A filler beat. (triggers: filler)');
+        const sw = await mockLLM('- [arc-done 1, 2] The tin caper — Wren hid the tin and Blake found it\n'
+            + '- [arc-open 3] The kitchen debt — Wren still owes a wash-up');
+        try {
+            const extId = (await s.post('profiles', { name: 'SwpArcExt', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const swId = (await s.post('profiles', { name: 'SwpArcLLM', apiUrl: `${sw.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'SwpArc', every: 1, profileId: extId, sweep: true, sweepEvery: 1, sweepProfileId: swId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Sweep arc room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            // Three seeded beats — 1)+2) the completed saga, 3) the still-open one.
+            const e1 = (await s.post('memories', { room: mroom, content: 'Wren hid the blue tin under the counter.', type: 'event', triggers: 'tin,hide' })).json.id;
+            const e2 = (await s.post('memories', { room: mroom, content: 'Blake found the blue tin behind the flour.', type: 'event', triggers: 'tin,found' })).json.id;
+            const e3 = (await s.post('memories', { room: mroom, content: 'Wren promised to wash up the dishes.', type: 'event', triggers: 'dishes,debt' })).json.id;
+            for (const id of [e1, e2, e3]) await s.post('memories/update', { id, origin: 'smart' });
+            await s.post('say', { room: mroom, text: 'tick' });
+            const arcs = await until(async () => {
+                const a = (await s.get(`arcs?room=${mroom}`)).json.arcs;
+                return a?.length === 2 ? a : null;
+            }, 'sweep arcs');
+            const done = arcs.find(a => a.title === 'The tin caper');
+            const open = arcs.find(a => a.title === 'The kitchen debt');
+            // Completed saga: resolved chapter with exactly the cited beats folded.
+            assert.equal(done.status, 'resolved');
+            assert.equal(done.origin, 'smart');
+            assert.equal(done.mems.length, 2);
+            assert.deepEqual(done.mems.map(m => m.id).sort(), [e1, e2].sort());
+            // Still-open situation: an open thread — its member stays live standalone.
+            assert.equal(open.status, 'open');
+            assert.equal(open.origin, 'smart');
+            assert.equal(open.mems.length, 0);
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); await sw.close(); }
     });
 });

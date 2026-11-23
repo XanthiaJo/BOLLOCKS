@@ -13,14 +13,17 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | File | Purpose | Key exports / sections |
 |---|---|---|
 | `server.js` | Thin HTTP shell: merges route tables, request gates, static file serving | `router` merge of `src/routes/*`; unauthenticated-API 401 gate; static-file gate |
-| `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona + admin user management), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats — `/roll` and `/ruling` slash commands resolve server-side in `say` and post as system messages; dice in `src/lib/dice.js`), `update` (sidebar update check) | |
+| `routes/` | Route tables by domain, each `export default { 'METHOD /path': handler }`: `auth` (login/logout/register), `users` (me/persona + admin user management), `memories`, `world` (lorebook), `cards`, `rooms` (rooms/members/backgrounds/room view), `profiles` (api+mem profiles, models), `chat` (stream/say/generate/messages/genstats — `/roll` and `/ruling` slash commands resolve server-side in `say` and post as system messages; dice in `src/lib/dice.js`), `stt` (dictation: forwards audio to `BOLLOCKS_STT_URL`'s OpenAI-shaped `/v1/audio/transcriptions`, corrects member names; `GET` reports a reachability probe), `update` (sidebar update check) | |
 | `lib/util.js` | Request/response helpers | `send`, `readBody`, `cookieToken`, `auth(req)` |
 | `lib/access.js` | Permission helpers for route handlers | `roomOwnerOnly`, `roomMember`, `memoryShared`, `isAdmin`, `worldEntryOk` |
 | `lib/sse.js` | Server-Sent Events fan-out | `streams` map; `push(roomId, evt)` |
 | `lib/files.js` | Filesystem locations | `PUB`, `CARDS_DIR`, `BG_DIR` (created on import) |
 | `lib/version.js` | Server version identity (package.json version + git/`GIT_SHA` commit) | `VERSION`, `SHA` |
 | `db.js` | SQLite (`node:sqlite` `DatabaseSync`) at `data/app.db`: schema, migrations, auth/session helpers, seed data | `db` (shared handle); `hash`/`verify` (scrypt); `createUser`/`login`/`userForToken`; `activeProfile(userId)`; `MSG_SQL` (canonical messages SELECT); `migrateSchema()`; `migrateProfiles()`; `seed()` |
-| `generate.js` | LLM integration + prompt assembly (server-side only; API keys never reach clients) | `generateReply(roomId, card)` — builds system prompt (card fields + world entries + memories + history), calls `{apiUrl}/chat/completions`; `maybeSummarize(roomId)` — smart-memory extraction; `memProfileFor(room)`; `genStats` (per-room last-request stats for the prompt inspector) |
+| `generate.js` | Reply generation + prompt assembly (server-side only; API keys never reach clients) | `generateReply(roomId, card)` — builds system prompt (card fields + world entries + memories + history), calls `{apiUrl}/chat/completions`; `genStats` (per-room last-request stats for the prompt inspector) |
+| `memwriter.js` | The memory-writer — background extraction passes after messages land | `maybeSummarize(roomId)` — smart-memory extraction (typed bullets, `[arc*]`/`[supersede]` tags, caps, dormancy, scripted sweep, optional LLM sweep); `maybeUpdateState` — scene-state snapshot; `maybeLlmSweep` — periodic LLM dedupe + retrospective thread proposals; `consolidateArc(roomId, arcId)` — thread close-out summary + memory folding |
+| `lib/llm.js` | Shared LLM plumbing | `llmFetch` (`/chat/completions` POST boilerplate), `tok` (chars/4 estimate), `logPrompt` (per-room request log, newest 50) |
+| `lib/memprompts.js` | Memory prompts + profile plumbing | `MEM_EXTRACT_PROMPT`, `MEM_TRIGGERS_SUFFIX`, `MEM_ARCS_SUFFIX`, `MEM_SWEEP_PROMPT`, `MEM_STATE_PROMPT`, `MEM_PROFILE_FIELDS`, `PROMPT_BLOCKS`, `memProfileFor(room)` |
 | `lib/pngcard.js` | SillyTavern character-card import | `extractCardJson(pngBuf)` (tEXt `chara` chunk); `normalizeCard(raw)` (ST v1/v2 → our columns) |
 
 ### `public/` — frontend, static files served by `server.js` (no bundler)
@@ -28,7 +31,7 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | File | Purpose |
 |---|---|
 | `login.html` | Login page — the ONLY file served without a session. Self-contained (inline CSS/JS); stores token in `localStorage.mp_token`, redirects to `/` |
-| `index.html` + `js/app.js` | Chat page: room list, messages, members sidebar, prompt-token inspector, SSE live updates |
+| `index.html` + `js/app.js` | Chat page: room list, messages, members sidebar, prompt-token inspector, SSE live updates. `js/tts.js` reads AI replies aloud via `speechSynthesis`; `js/stt.js` is the dictation mic (MediaRecorder → `/api/stt`, transcript into the composer; button hides when no STT backend) |
 | `characters.html` + `js/characters.js` | Card list + editor, avatar upload with in-browser crop |
 | `world.html` | Lorebooks — single page: sidebar picks a book then its entries (`?id=<book>` deep-links a book); main edits the selected thing (book rename/create/ST import, or entry keys/secondary/content/constant/enabled/order). Link a book to a room in chat settings |
 | `memories.html` + `js/memories.js` | Memory browser, Manual/Smart tabs (permanent vs extracted; a memory with no triggers = canon, always injected). Manual keeps the sidebar scope picker (room-shared or per-character). `stories.html` + `js/stories.js` | Story threads (arcs), Manual/Smart tabs by `room_arcs.origin` (opened by you vs by extraction). `memsettings.html` + `js/memsettings.js` | Memory profiles page (nav: "Memory profiles"): sidebar profile list → `class="panel settings"` accordion editor. `js/memprofiles.js` | Profile-editor code shared by both pages — it ends by calling the page's own `load()`. All styles live in `css/layout.css` |
@@ -71,15 +74,15 @@ Core tables:
 - `messages` — chat log per room (`cards_id_fk` NULL = system line); use `MSG_SQL` for the standard SELECT (adds `id`, `name`, `kind` ∈ say/ai/sys).
 - `world_books` → `book_entries` → `world_entries` → `world_entry_keys` (primary/secondary keyword rows); `room_books` links at most one book to a room.
 - `memories` (+`room_memories`, +`memory_cards`, +`memory_triggers`) — `origin='user'` permanent vs `origin='smart'` auto-extracted; `memory_triggers` rows keyword-gate injection (no rows = canon: always injected in its own early block, immune to refresh); `type` ∈ fact/event/relationship/preference; `room_arcs_id_fk` folds a memory under the arc it was extracted in (folded rows never inject standalone).
-- `room_arcs` — room-scoped story threads (`status` ∈ open/resolved/dropped, `origin` ∈ user/smart); written by `[arc*]` extraction tags or `POST /api/arcs*`, injected while open; on close `consolidateArc` summarizes the span into `summary` and folds the span's triggered smart memories under the arc — closed arcs inject an `Earlier events:` line when a title word or a folded memory's trigger hits.
+- `room_arcs` — room-scoped story threads (`status` ∈ open/resolved/dropped, `origin` ∈ user/smart); written by `[arc*]` extraction tags, LLM-sweep thread proposals, or `POST /api/arcs*`, injected while open; on close `consolidateArc` summarizes the span into `summary` and folds the span's triggered smart memories under the arc — closed arcs inject an `Earlier events:` line when a title word or a folded memory's trigger hits.
 - `prompt_logs` — per-room LLM request/response log (`kind` ∈ reply/extract; newest 50 per room) surfaced via `GET /api/promptlog`.
 - `api_profiles` — per-user OpenAI-compatible connections (`active` flag, `headers` JSON, `context_size`, `max_response`, `strip_prefix`, `key`).
-- `mem_profiles` — named memory-setting presets a room follows (`mem_*` columns; see `MEM_PROFILE_FIELDS` in `generate.js`).
+- `mem_profiles` — named memory-setting presets a room follows (`mem_*` columns; see `MEM_PROFILE_FIELDS` in `lib/memprompts.js`).
 - `prompt_profiles` — per-user injection/prompt-assembly presets (`active` flag applies to all of the user's generations; `prompt_order` JSON array of `PROMPT_BLOCKS` keys, NULL = built-in cache-optimal order; `include_time` injects a current-time/last-message-age block below `history`).
 
 **Schema changes** go in `migrateSchema()` in `db.js` AND in the top `CREATE TABLE` block: the CREATE block is the baseline for fresh installs, while guarded `ALTER TABLE ... ADD COLUMN` (checked via `PRAGMA table_info`) or table rebuilds bring existing DBs forward; one-time data fixes are gated by `PRAGMA user_version` bumps. Never add a column in only one of the two places.
 
-## Generation pipeline (generate.js)
+## Generation pipeline (generate.js + memwriter.js)
 
 - `generateReply(roomId, card)`: picks the connection (card's `api_profiles_id_fk`, else card-owner's active profile), applies `{{char}}`/`{{user}}` macros, injects keyword-triggered world entries + trigger-gated memories (budget-capped, chars/4 estimate), trims history to the smaller of room `max_context` / profile `context_size` (keeps greeting + tail), posts to `/chat/completions`, strips a leading `Name:` tag, records `genStats[roomId]`.
 - `maybeSummarize(roomId)`: if the room follows a memory profile (the link is the switch — the old `auto_mem` flag was dropped), every `mem_every` messages (or context-threshold hit) it asks the LLM to distill recent lines into typed bullet memories, enforces per-type and total caps, and can autotune the injection budget.
@@ -146,6 +149,7 @@ Seeded dev users (fresh DB, `seed()`): `admin`, `alice`, `bob`, `carol` — all 
 - **Never push directly to `dev`, `beta`, or `master`.** All changes go on a feature branch and land via PR — even docs or one-line fixes. Release automation is fully local: `beta.yml`/`release.yml` drive `scripts/release.mjs` (`dev` → beta/release processes; see workflow files).
 - PRs: `pr-autofill.yml` refreshes an autofilled commit list above any manual PR description (without changing the PR title); `pr-checks.yml` runs lint and `npm test` on PR updates. Ensure both pass before opening/updating a PR.
 - **Issues: every filed issue needs an issue type and at least one label.** Types: `Bug`/`Feature`/`Task` (the coarse axis). Labels are the area axis — `memory`, `ui`, `db`, `llm`, `api`, `tests`, `docs`, `deploy` — plus the stock `duplicate`/`wontfix`/`invalid`/`question`/`documentation` workflow labels. `gh issue create` can't set a type: file with `gh issue create --label <area>` then set the type via `gh api graphql` `updateIssue` (repo type IDs are stable; look them up once with the `issueTypes` query).
+- **Issues: default Priority is `Medium`** unless the issue says otherwise — it's a native issue field on the BOLLOCKS project (High/Medium/Low), set via `updateIssue`'s `issueFieldUpdates:[{fieldName:"Priority",operation:SET,value:"Medium"}]` (needs `gh auth` scope `read:project`/`project`).
 
 ## Validation
 

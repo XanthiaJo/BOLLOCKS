@@ -18,6 +18,7 @@ async function load(){
   memProfiles=mps?.profiles||[];defPrompt=mps?.defaultPrompt||'';defStatePrompt=mps?.defaultStatePrompt||'';
   const profOpts='<option value="0">— none (extraction off) —</option>'+(profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   $('set_profile').innerHTML=profOpts;
+  $('set_sweepprofile').innerHTML='<option value="0">— same as extraction —</option>'+(profiles||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
   $('plist').innerHTML=(memProfiles||[]).map(p=>
     rprofRow({name:esc(p.name),
       sel:p.mem_profiles_id_pk===selProf,
