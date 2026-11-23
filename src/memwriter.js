@@ -7,7 +7,7 @@ import { dedupeNew, dedupeRoom } from './lib/memdedupe.js';
 import { llmFetch, logPrompt, tok } from './lib/llm.js';
 import {
     MEM_EXTRACT_PROMPT, MEM_TRIGGERS_SUFFIX, MEM_ARCS_SUFFIX,
-    MEM_SWEEP_PROMPT, MEM_STATE_PROMPT, memProfileFor,
+    MEM_SWEEP_PROMPT, MEM_SWEEP_ARCS_SUFFIX, MEM_STATE_PROMPT, memProfileFor,
 } from './lib/memprompts.js';
 
 /**
@@ -377,16 +377,17 @@ async function maybeLlmSweep(roomId, mem, fallbackConn) {
     // The candidate list mirrors what extraction offers for [supersede N]:
     // live, smart, non-state, unfolded — plus user_sorted rows stay out so
     // hand-arranged chains are never rewritten by a sweep.
-    const rows = db.prepare(`SELECT m.memories_id_pk AS id, m.type, m.content FROM memories m
+    const rows = db.prepare(`SELECT m.memories_id_pk AS id, m.type, m.content, m.created FROM memories m
         JOIN room_memories rm ON rm.memories_id_fk=m.memories_id_pk
         WHERE rm.rooms_id_fk=? AND m.origin='smart' AND m.type!='state' AND m.room_arcs_id_fk IS NULL
           AND m.superseded_by_memories_id_fk IS NULL AND m.user_sorted IS NOT 1
         ORDER BY m.memories_id_pk LIMIT 100`).all(roomId);
     if (rows.length < 2) return;
+    const arcsOn = (mem.mem_max_arcs ?? 10) > 0;
     const reqBody = {
         model: conn.model || 'local',
         messages: [
-            { role: 'system', content: MEM_SWEEP_PROMPT },
+            { role: 'system', content: MEM_SWEEP_PROMPT + (arcsOn ? MEM_SWEEP_ARCS_SUFFIX : '') },
             { role: 'user', content: 'Live memories (numbered):\n' + rows.map((m, i) => `${i + 1}) [${m.type}] ${m.content}`).join('\n') },
         ],
         temperature: 0.2, max_tokens: mem.mem_unlimited ? -1 : (mem.mem_gen_budget || mem.mem_response_length || 2000),
@@ -401,17 +402,33 @@ async function maybeLlmSweep(roomId, mem, fallbackConn) {
         const insTrig = db.prepare('INSERT OR IGNORE INTO memory_triggers (memories_id_fk,word) VALUES (?,?)');
         const linkRoom = db.prepare('INSERT INTO room_memories (rooms_id_fk,memories_id_fk) VALUES (?,?)');
         const sup = db.prepare('UPDATE memories SET superseded_by_memories_id_fk=? WHERE memories_id_pk=?');
+        // Thread proposals: [arc-open N,M] names a still-pending situation;
+        // [arc-done N,M] names a completed one — it lands as a resolved
+        // chapter with the cited members folded under it.
+        const findArc = db.prepare('SELECT room_arcs_id_pk AS id FROM room_arcs WHERE rooms_id_fk=? AND LOWER(title)=LOWER(?)');
+        const upArc = db.prepare(`UPDATE room_arcs SET summary=?, status='open', updated=datetime('now'),
+            opened_messages_id_fk=CASE WHEN status<>'open' THEN ? ELSE opened_messages_id_fk END,
+            closed_messages_id_fk=CASE WHEN status<>'open' THEN NULL ELSE closed_messages_id_fk END
+            WHERE room_arcs_id_pk=?`);
+        const insArc = db.prepare("INSERT INTO room_arcs (rooms_id_fk,title,summary,opened_messages_id_fk,origin) VALUES (?,?,?,?,'smart')");
+        const insDoneArc = db.prepare("INSERT INTO room_arcs (rooms_id_fk,title,summary,opened_messages_id_fk,closed_messages_id_fk,status,origin) VALUES (?,?,?,?,?,'resolved','smart')");
+        const foldMem = db.prepare('UPDATE memories SET room_arcs_id_fk=? WHERE memories_id_pk=?');
         const retired = new Set();
         let merged = 0;
         for (const line of text.split('\n')) {
             let fact = line.replace(/^\s*[-*•]\s*/, '').trim();
             let type = 'fact'; const supersedes = [];
+            let arcKind = null, arcMembers = [];
             for (let i = 0; i < 6; i++) {
                 const t = fact.match(/^\[([^\]]+)\]\s*/);
                 if (!t) break;
                 const w = t[1].trim().toLowerCase();
                 if (['fact', 'event', 'relationship', 'preference'].includes(w)) type = w;
                 else if (/^supersedes?\s*[:#]?\s*\d+$/.test(w)) supersedes.push(parseInt(w.match(/\d+/)[0], 10));
+                else if (arcsOn) {
+                    const a = w.match(/^arc-(open|done)\s*([\d,\s]*)$/);
+                    if (a) { arcKind = a[1]; arcMembers = (a[2].match(/\d+/g) || []).map(Number); }
+                }
                 fact = fact.slice(t[0].length).trimStart();
             }
             const tr = fact.match(/\(\s*triggers?\s*:\s*([^)]*)\)/i) || fact.match(/\(([^)]*)\)\s*$/);
@@ -419,6 +436,34 @@ async function maybeLlmSweep(roomId, mem, fallbackConn) {
             if (tr) {
                 triggers = tr[1].split(',').map(s => s.trim().replace(/^triggers?\s*:/i, '').toLowerCase()).filter(Boolean).join(',');
                 fact = (fact.slice(0, tr.index) + fact.slice(tr.index + tr[0].length)).trim();
+            }
+            if (arcKind) {
+                const m = fact.match(/^(.*?)(?:\s+[—–]\s+|:\s+)(.*)$/s);
+                const title = (m ? m[1] : fact).trim().replace(/[.\s]+$/, '');
+                const summary = (m ? m[2] : '').trim();
+                const members = arcMembers.map(n => rows[n - 1]).filter(r => r && !retired.has(r.id));
+                if (title && members.length) {
+                    // Span anchors from the cited members' timestamps — a
+                    // retrospective thread should cover the beats it names,
+                    // not the sweep run that spotted them.
+                    const dates = members.map(r => r.created).filter(Boolean).sort();
+                    const anchorBefore = dates.length
+                        ? (db.prepare('SELECT messages_id_pk AS id FROM messages WHERE rooms_id_fk=? AND send_date<=? ORDER BY messages_id_pk DESC LIMIT 1').get(roomId, dates[0])?.id ?? null)
+                        : null;
+                    const ex = findArc.get(roomId, title);
+                    if (arcKind === 'open') {
+                        if (ex) { if (summary) upArc.run(summary, anchorBefore, ex.id); }
+                        else insArc.run(roomId, title, summary, anchorBefore);
+                    } else if (!ex) {
+                        // Resolved chapter: anchor the span to the cited
+                        // beats and fold exactly those members under it.
+                        const anchorAfter = db.prepare('SELECT messages_id_pk AS id FROM messages WHERE rooms_id_fk=? AND send_date>=? ORDER BY messages_id_pk LIMIT 1').get(roomId, dates.at(-1))?.id
+                            ?? db.prepare('SELECT MAX(messages_id_pk) AS id FROM messages WHERE rooms_id_fk=?').get(roomId).id;
+                        const aid = insDoneArc.run(roomId, title, summary, anchorBefore, anchorAfter).lastInsertRowid;
+                        for (const r of members) { foldMem.run(aid, r.id); retired.add(r.id); }
+                    }
+                }
+                continue;
             }
             // Only merge lines act — a sweep never creates free memories.
             const targets = supersedes.map(n => rows[n - 1]).filter(t => t && !retired.has(t.id));

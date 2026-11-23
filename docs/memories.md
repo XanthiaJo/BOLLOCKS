@@ -193,7 +193,15 @@ re-runs that sweep pairwise for cleanup. Retellings the scorer can't see
 (`mem_sweep`/`mem_sweep_every` on the memory profile —
 [#141](https://github.com/XanthiaJo/BOLLOCKS/issues/141)): every N
 extraction runs the model reviews the live list and emits
-multi-`[supersede N]` merge lines. Or drag one live card onto another
+multi-`[supersede N]` merge lines. With arc tracking on (`mem_max_arcs
+> 0`) the same pass also scans for **retrospective threads** — event
+clusters that form one situation, including stories that opened and
+closed inside a single extraction window (which forward extraction can
+never tag). The model names one with its cited member rows:
+`[arc-open N, M] Title — pending` opens a smart arc, while
+`[arc-done N, M] Title — settled` lands a resolved chapter with the
+cited members folded under it ([#157](https://github.com/XanthiaJo/BOLLOCKS/issues/157)).
+Or drag one live card onto another
 on the Memories page — `POST /api/memories/link` merges the two chains
 with the newest-`created` head staying live. The inverse works too:
 drag a dimmed history card out of a chain and `POST /api/memories/unlink`

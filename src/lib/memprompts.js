@@ -32,6 +32,16 @@ Find entries that say the SAME thing — one event retold, one fact restated, on
 Each [supersede] tag retires that numbered row — your line replaces all of them at once. Keep the most complete phrasing, name the subject in a full sentence, and always add trigger keywords in parentheses so the merged memory can resurface.
 Merge ONLY true duplicates — different facts or events about the same people, places, or objects are not duplicates and stay separate. When in doubt, leave both. If nothing duplicates, reply exactly "- none".`;
 
+// Optional suffix for the sweep prompt when the room tracks story threads
+// (mem_max_arcs > 0): retrospective arc detection — the case forward
+// extraction structurally misses, a situation that resolved inside a
+// single extraction window. Member numbers cite the listed memories.
+export const MEM_SWEEP_ARCS_SUFFIX = `
+Finally — story threads. When several numbered events are clearly beats of ONE situation (an errand, a dispute, a scheme unfolding across messages), name it with its member numbers:
+- [arc-open 3, 7] Title — what is still pending   (only when the situation remains unresolved)
+- [arc-done 3, 7] Title — how it settled          (when the situation completed)
+A sequence that merely shares a subject is not a thread — do not name one.`;
+
 // Scene-state snapshot prompt — a dedicated pass that answers "what is true
 // right now" (locations, held objects, ongoing conditions). The model emits
 // a keyed JSON set — one entry per subject — and the script owns the diff:

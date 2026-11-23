@@ -657,4 +657,39 @@ describe('generation (mock LLM)', () => {
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); await sw.close(); }
     });
+
+    test('llm sweep proposes threads: arc-done folds members, arc-open opens', async () => {
+        const ext = await mockLLM('- [event] A filler beat. (triggers: filler)');
+        const sw = await mockLLM('- [arc-done 1, 2] The tin caper — Wren hid the tin and Blake found it\n'
+            + '- [arc-open 3] The kitchen debt — Wren still owes a wash-up');
+        try {
+            const extId = (await s.post('profiles', { name: 'SwpArcExt', apiUrl: `${ext.url}/v1`, model: 'mock-7b' })).json.id;
+            const swId = (await s.post('profiles', { name: 'SwpArcLLM', apiUrl: `${sw.url}/v1`, model: 'mock-7b' })).json.id;
+            const mp = (await s.post('memprofiles', { name: 'SwpArc', every: 1, profileId: extId, sweep: true, sweepEvery: 1, sweepProfileId: swId })).json.id;
+            const mroom = (await s.post('rooms', { name: 'Sweep arc room' })).json.id;
+            await s.post('room/memsettings', { room: mroom, memProfile: mp });
+            // Three seeded beats — 1)+2) the completed saga, 3) the still-open one.
+            const e1 = (await s.post('memories', { room: mroom, content: 'Wren hid the blue tin under the counter.', type: 'event', triggers: 'tin,hide' })).json.id;
+            const e2 = (await s.post('memories', { room: mroom, content: 'Blake found the blue tin behind the flour.', type: 'event', triggers: 'tin,found' })).json.id;
+            const e3 = (await s.post('memories', { room: mroom, content: 'Wren promised to wash up the dishes.', type: 'event', triggers: 'dishes,debt' })).json.id;
+            for (const id of [e1, e2, e3]) await s.post('memories/update', { id, origin: 'smart' });
+            await s.post('say', { room: mroom, text: 'tick' });
+            const arcs = await until(async () => {
+                const a = (await s.get(`arcs?room=${mroom}`)).json.arcs;
+                return a?.length === 2 ? a : null;
+            }, 'sweep arcs');
+            const done = arcs.find(a => a.title === 'The tin caper');
+            const open = arcs.find(a => a.title === 'The kitchen debt');
+            // Completed saga: resolved chapter with exactly the cited beats folded.
+            assert.equal(done.status, 'resolved');
+            assert.equal(done.origin, 'smart');
+            assert.equal(done.mems.length, 2);
+            assert.deepEqual(done.mems.map(m => m.id).sort(), [e1, e2].sort());
+            // Still-open situation: an open thread — its member stays live standalone.
+            assert.equal(open.status, 'open');
+            assert.equal(open.origin, 'smart');
+            assert.equal(open.mems.length, 0);
+            await s.post('rooms/delete', { id: mroom });
+        } finally { await ext.close(); await sw.close(); }
+    });
 });
