@@ -10,7 +10,7 @@ function setTriggers(id, str) {
 import { db } from '../db.js';
 import { send, readBody } from '../lib/util.js';
 import { roomMember, memoryShared } from '../lib/access.js';
-import { consolidateArc } from '../generate.js';
+import { consolidateArc } from '../memwriter.js';
 import { dedupeRoom } from '../lib/memdedupe.js';
 
 const MEMROW = 'SELECT memories_id_pk,created,superseded_by_memories_id_fk FROM memories WHERE memories_id_pk=?';

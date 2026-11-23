@@ -4,7 +4,8 @@ import { send, readBody } from '../lib/util.js';
 import { roomMember, roomOwnerOnly } from '../lib/access.js';
 import { streams, push } from '../lib/sse.js';
 import { rollDice, formatRoll } from '../lib/dice.js';
-import { generateReply, genStats, maybeSummarize } from '../generate.js';
+import { generateReply, genStats } from '../generate.js';
+import { maybeSummarize } from '../memwriter.js';
 
 // Rooms with a reply chain currently generating — a say arriving mid-chain
 // doesn't start a second one; it's already in history, so the running

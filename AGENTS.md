@@ -20,7 +20,10 @@ BOLLOCKS (Bots' Own Lore Logic & Open Chat Konversation System) is a multiplayer
 | `lib/files.js` | Filesystem locations | `PUB`, `CARDS_DIR`, `BG_DIR` (created on import) |
 | `lib/version.js` | Server version identity (package.json version + git/`GIT_SHA` commit) | `VERSION`, `SHA` |
 | `db.js` | SQLite (`node:sqlite` `DatabaseSync`) at `data/app.db`: schema, migrations, auth/session helpers, seed data | `db` (shared handle); `hash`/`verify` (scrypt); `createUser`/`login`/`userForToken`; `activeProfile(userId)`; `MSG_SQL` (canonical messages SELECT); `migrateSchema()`; `migrateProfiles()`; `seed()` |
-| `generate.js` | LLM integration + prompt assembly (server-side only; API keys never reach clients) | `generateReply(roomId, card)` — builds system prompt (card fields + world entries + memories + history), calls `{apiUrl}/chat/completions`; `maybeSummarize(roomId)` — smart-memory extraction; `memProfileFor(room)`; `genStats` (per-room last-request stats for the prompt inspector) |
+| `generate.js` | Reply generation + prompt assembly (server-side only; API keys never reach clients) | `generateReply(roomId, card)` — builds system prompt (card fields + world entries + memories + history), calls `{apiUrl}/chat/completions`; `genStats` (per-room last-request stats for the prompt inspector) |
+| `memwriter.js` | The memory-writer — background extraction passes after messages land | `maybeSummarize(roomId)` — smart-memory extraction (typed bullets, `[arc*]`/`[supersede]` tags, caps, dormancy, scripted sweep, optional LLM sweep); `maybeUpdateState` — scene-state snapshot; `maybeLlmSweep` — periodic LLM dedupe + retrospective thread proposals; `consolidateArc(roomId, arcId)` — thread close-out summary + memory folding |
+| `lib/llm.js` | Shared LLM plumbing | `llmFetch` (`/chat/completions` POST boilerplate), `tok` (chars/4 estimate), `logPrompt` (per-room request log, newest 50) |
+| `lib/memprompts.js` | Memory prompts + profile plumbing | `MEM_EXTRACT_PROMPT`, `MEM_TRIGGERS_SUFFIX`, `MEM_ARCS_SUFFIX`, `MEM_SWEEP_PROMPT`, `MEM_STATE_PROMPT`, `MEM_PROFILE_FIELDS`, `PROMPT_BLOCKS`, `memProfileFor(room)` |
 | `lib/pngcard.js` | SillyTavern character-card import | `extractCardJson(pngBuf)` (tEXt `chara` chunk); `normalizeCard(raw)` (ST v1/v2 → our columns) |
 
 ### `public/` — frontend, static files served by `server.js` (no bundler)
@@ -71,15 +74,15 @@ Core tables:
 - `messages` — chat log per room (`cards_id_fk` NULL = system line); use `MSG_SQL` for the standard SELECT (adds `id`, `name`, `kind` ∈ say/ai/sys).
 - `world_books` → `book_entries` → `world_entries` → `world_entry_keys` (primary/secondary keyword rows); `room_books` links at most one book to a room.
 - `memories` (+`room_memories`, +`memory_cards`, +`memory_triggers`) — `origin='user'` permanent vs `origin='smart'` auto-extracted; `memory_triggers` rows keyword-gate injection (no rows = canon: always injected in its own early block, immune to refresh); `type` ∈ fact/event/relationship/preference; `room_arcs_id_fk` folds a memory under the arc it was extracted in (folded rows never inject standalone).
-- `room_arcs` — room-scoped story threads (`status` ∈ open/resolved/dropped, `origin` ∈ user/smart); written by `[arc*]` extraction tags or `POST /api/arcs*`, injected while open; on close `consolidateArc` summarizes the span into `summary` and folds the span's triggered smart memories under the arc — closed arcs inject an `Earlier events:` line when a title word or a folded memory's trigger hits.
+- `room_arcs` — room-scoped story threads (`status` ∈ open/resolved/dropped, `origin` ∈ user/smart); written by `[arc*]` extraction tags, LLM-sweep thread proposals, or `POST /api/arcs*`, injected while open; on close `consolidateArc` summarizes the span into `summary` and folds the span's triggered smart memories under the arc — closed arcs inject an `Earlier events:` line when a title word or a folded memory's trigger hits.
 - `prompt_logs` — per-room LLM request/response log (`kind` ∈ reply/extract; newest 50 per room) surfaced via `GET /api/promptlog`.
 - `api_profiles` — per-user OpenAI-compatible connections (`active` flag, `headers` JSON, `context_size`, `max_response`, `strip_prefix`, `key`).
-- `mem_profiles` — named memory-setting presets a room follows (`mem_*` columns; see `MEM_PROFILE_FIELDS` in `generate.js`).
+- `mem_profiles` — named memory-setting presets a room follows (`mem_*` columns; see `MEM_PROFILE_FIELDS` in `lib/memprompts.js`).
 - `prompt_profiles` — per-user injection/prompt-assembly presets (`active` flag applies to all of the user's generations; `prompt_order` JSON array of `PROMPT_BLOCKS` keys, NULL = built-in cache-optimal order; `include_time` injects a current-time/last-message-age block below `history`).
 
 **Schema changes** go in `migrateSchema()` in `db.js` AND in the top `CREATE TABLE` block: the CREATE block is the baseline for fresh installs, while guarded `ALTER TABLE ... ADD COLUMN` (checked via `PRAGMA table_info`) or table rebuilds bring existing DBs forward; one-time data fixes are gated by `PRAGMA user_version` bumps. Never add a column in only one of the two places.
 
-## Generation pipeline (generate.js)
+## Generation pipeline (generate.js + memwriter.js)
 
 - `generateReply(roomId, card)`: picks the connection (card's `api_profiles_id_fk`, else card-owner's active profile), applies `{{char}}`/`{{user}}` macros, injects keyword-triggered world entries + trigger-gated memories (budget-capped, chars/4 estimate), trims history to the smaller of room `max_context` / profile `context_size` (keeps greeting + tail), posts to `/chat/completions`, strips a leading `Name:` tag, records `genStats[roomId]`.
 - `maybeSummarize(roomId)`: if the room follows a memory profile (the link is the switch — the old `auto_mem` flag was dropped), every `mem_every` messages (or context-threshold hit) it asks the LLM to distill recent lines into typed bullet memories, enforces per-type and total caps, and can autotune the injection budget.
