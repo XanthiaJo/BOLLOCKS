@@ -51,11 +51,25 @@ services:
     environment:
       - PORT=8100
       - BOLLOCKS_SEED=0
+      - BOLLOCKS_STT_URL=http://whisper:8000
     volumes:
       - bollocks-data:/app/data
 
+  # Optional speech-to-text sidecar — `docker compose --profile stt up -d`.
+  # Its image pulls on first use (not bundled); the ~150MB model caches
+  # in the volume.
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    restart: unless-stopped
+    profiles: [stt]
+    environment:
+      - WHISPER__MODEL=Systran/faster-whisper-base.en
+    volumes:
+      - whisper-cache:/root/.cache/huggingface
+
 volumes:
   bollocks-data:
+  whisper-cache:
 EOF
 
 cat > "$work/bundle/install.sh" <<EOF

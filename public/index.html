@@ -18,6 +18,7 @@
 .mes:hover .delm,.mes:hover .spk{display:block}
 .mes .delm:hover{color:var(--err-hi)}
 .mes .spk:hover{color:var(--accent)}
+#micbtn.rec{color:var(--err-hi)}
 .mes .who{width:60px;flex:none;text-align:center}
 .mes .n{font-weight:600;color:var(--muted);font-size:.75em;display:block;margin-top:4px;word-break:break-word;line-height:1.1}
 .mes .when{display:block;font-size:.62em;color:var(--dim);margin-top:2px;line-height:1.2}
@@ -134,6 +135,7 @@ button.gen{background:var(--ok)}
       <textarea id="in" placeholder="Type a message — / for commands" autofocus rows="1" onkeydown="inKey(event)" style="resize:none;overflow:hidden;padding:10px;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;flex:1;font:inherit" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,140)+'px'"></textarea>
       <button onclick="say()">Send</button>
       <button id="ttsbtn" onclick="ttsToggle(this)" title="Read AI replies aloud">🔇</button>
+      <button id="micbtn" onclick="sttToggle(this)" title="Dictate to composer" style="display:none">🎤</button>
       <button class="gen" onclick="npcMenu()">NPC ▸</button>
       <div id="npcmenu" hidden></div>
     </div>
@@ -142,5 +144,6 @@ button.gen{background:var(--ok)}
 <script src="js/layout.js"></script>
 <script src="js/tts.js"></script>
 <script src="js/app.js"></script>
+<script src="js/stt.js"></script>
 </body>
 </html>

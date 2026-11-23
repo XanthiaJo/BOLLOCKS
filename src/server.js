@@ -13,6 +13,7 @@ import cardsRoutes from './routes/cards.js';
 import roomsRoutes from './routes/rooms.js';
 import profilesRoutes from './routes/profiles.js';
 import chatRoutes from './routes/chat.js';
+import sttRoutes from './routes/stt.js';
 import updateRoutes from './routes/update.js';
 
 const PORT = Number(process.env.PORT || 8100);
@@ -30,6 +31,7 @@ const router = {
     ...roomsRoutes,
     ...profilesRoutes,
     ...chatRoutes,
+    ...sttRoutes,
     ...updateRoutes,
     'GET /api/version': async (req, res) => send(res, 200, { version: VERSION, sha: SHA || null }),
 };
