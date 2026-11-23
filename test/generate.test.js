@@ -351,6 +351,18 @@ describe('generation (mock LLM)', () => {
                 return m?.length ? m : null;
             }, 'smart memory');
             assert.equal(mems[0].type, 'event');
+            // The extraction prompt carries the thread instructions: the
+            // pending-situation check, the tag vocabulary, exact-title reuse
+            // and the worked example the 8b extractor leans on.
+            const extSys = () => JSON.parse(ext.requests.at(-1).body).messages[0].content;
+            assert.match(extSys(), /pending situation/);
+            assert.match(extSys(), /\[arc-open\]/);
+            assert.match(extSys(), /title EXACTLY/);
+            assert.match(extSys(), /missing boots/);
+            // A second pass injects open titles so the model can advance/close.
+            await s.post('say', { room: mroom, text: 'Wren still owes me.' });
+            await until(() => ext.requests.length >= 2 || null, 'second extraction');
+            assert.match(extSys(), /Currently open threads: The tea debt/);
             await s.post('rooms/delete', { id: mroom });
         } finally { await ext.close(); }
     });
